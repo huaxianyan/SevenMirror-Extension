@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package notification.mirroring.v1;
+
+option go_package = "github.com/huaxianyan/SyncNotifications-Server/protocol/generated/notification/v1;notificationv1";
+
+// Envelope contains only the metadata required to authenticate, route, expire,
+// order, and acknowledge a message. payload is always end-to-end encrypted for
+// business messages. This schema is provisional until ADR-001/ADR-002 land.
+message Envelope {
+  uint32 protocol_version = 1;
+  bytes message_id = 2;
+  bytes workspace_id = 3;
+  bytes source_device_id = 4;
+  optional bytes target_device_id = 5;
+  repeated bytes recipient_device_ids = 6;
+  MessageType type = 7;
+  int64 created_at_unix_ms = 8;
+  optional int64 expires_at_unix_ms = 9;
+  optional uint64 sequence = 10;
+  optional bytes idempotency_key = 11;
+  bytes encrypted_payload = 12;
+}
+
+enum MessageType {
+  MESSAGE_TYPE_UNSPECIFIED = 0;
+  MESSAGE_TYPE_NOTIFICATION_UPSERT = 1;
+  MESSAGE_TYPE_NOTIFICATION_REMOVED = 2;
+  MESSAGE_TYPE_NOTIFICATION_DISMISS = 3;
+  MESSAGE_TYPE_ACTION_INVOKE = 4;
+  MESSAGE_TYPE_ACTION_RESULT = 5;
+  MESSAGE_TYPE_STATE_SNAPSHOT_REQUEST = 6;
+  MESSAGE_TYPE_STATE_SNAPSHOT = 7;
+  MESSAGE_TYPE_EVENT_ACK = 8;
+  MESSAGE_TYPE_DEVICE_STATUS = 9;
+  MESSAGE_TYPE_PROTOCOL_ERROR = 10;
+  MESSAGE_TYPE_PING = 11;
+  MESSAGE_TYPE_PONG = 12;
+}

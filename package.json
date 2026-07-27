@@ -1,0 +1,24 @@
+{
+  "name": "notification-mirroring-chrome-extension",
+  "version": "0.1.0-dev",
+  "private": true,
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/huaxianyan/SyncNotifications-Extension.git"
+  },
+  "scripts": {
+    "build": "tsc --noEmit && vite build",
+    "dev": "vite build --watch --mode development",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "protocol:verify": "node protocol/verify-schema.mjs"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.306",
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0",
+    "vitest": "^3.0.5"
+  }
+}
