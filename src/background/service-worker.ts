@@ -1,6 +1,15 @@
+import {
+  clearLifecycleTestNotification,
+  createLifecycleTestNotification,
+  getLifecycleSpikeStatus,
+  handleNotificationClosed,
+  recordWorkerStart,
+} from './lifecycle-spike';
 import { DEFAULT_CONNECTION_STATE } from '../shared/status';
 
 const CONNECTION_STATE_KEY = 'connectionState';
+
+void recordWorkerStart();
 
 chrome.runtime.onInstalled.addListener(async () => {
   const stored = await chrome.storage.local.get(CONNECTION_STATE_KEY);
@@ -9,12 +18,46 @@ chrome.runtime.onInstalled.addListener(async () => {
   }
 });
 
-chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
-  if (typeof message === 'object' && message !== null && 'type' in message && message.type === 'get-status') {
-    chrome.storage.local.get(CONNECTION_STATE_KEY).then((stored) => {
-      sendResponse({ state: stored[CONNECTION_STATE_KEY] ?? DEFAULT_CONNECTION_STATE });
-    });
-    return true;
-  }
-  return false;
+chrome.notifications.onClosed.addListener((notificationId, byUser) => {
+  void handleNotificationClosed(notificationId, byUser);
 });
+
+chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+  if (!isMessage(message)) {
+    return false;
+  }
+
+  switch (message.type) {
+    case 'get-status':
+      void Promise.all([
+        chrome.storage.local.get(CONNECTION_STATE_KEY),
+        getLifecycleSpikeStatus(),
+      ]).then(([stored, lifecycle]) => {
+        sendResponse({
+          state: stored[CONNECTION_STATE_KEY] ?? DEFAULT_CONNECTION_STATE,
+          lifecycle,
+        });
+      });
+      return true;
+
+    case 'create-lifecycle-test':
+      void createLifecycleTestNotification().then((notificationId) => {
+        sendResponse({ notificationId });
+      });
+      return true;
+
+    case 'clear-lifecycle-test':
+      void clearLifecycleTestNotification().then((cleared) => {
+        sendResponse({ cleared });
+      });
+      return true;
+
+    default:
+      return false;
+  }
+});
+
+function isMessage(value: unknown): value is { type: string } {
+  return typeof value === 'object' && value !== null && 'type' in value &&
+    typeof value.type === 'string';
+}
