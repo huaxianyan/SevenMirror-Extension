@@ -1,6 +1,6 @@
 # SPIKE-003 — Chrome MV3 notification lifecycle
 
-Status: in progress
+Status: core lifecycle behavior validated on Windows Chrome
 
 ## Safety boundary
 
@@ -29,10 +29,17 @@ This spike creates extension-local test notifications only. A `request-remote-di
 8. Let Chrome suspend the worker, then repeat creation/clear and verify the same policy.
 9. Close Chrome or let the OS remove a notification and confirm uncertain events never request remote deletion.
 
-## Exit evidence still required
+## Validation result
 
-- CI build and unit tests
-- Manual verification on Windows Chrome stable
-- Worker suspension test
-- Confirmation of actual `byUser` behavior for manual and API-triggered closes
+- Type check, unit tests and production build: passed
+- GitHub Actions: passed
+- Developer-mode load on Windows Chrome: passed
+- Manual close: `byUser = true`, decision `request-remote-dismiss`
+- Programmatic clear: marker consumed, decision `ignore-programmatic`
+- Observed behavior matched all expected results
+
+## Follow-up evidence
+
+- Long-duration automatic Worker suspension test
+- Browser exit/OS notification-center cleanup behavior
 - Decision on WebSocket keepalive versus alarm/pull fallback
