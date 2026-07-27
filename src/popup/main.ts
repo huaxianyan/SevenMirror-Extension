@@ -15,6 +15,8 @@ const closeAudit = document.querySelector<HTMLElement>('#close-audit');
 const openOptions = document.querySelector<HTMLButtonElement>('#open-options');
 const createTest = document.querySelector<HTMLButtonElement>('#create-test');
 const clearTest = document.querySelector<HTMLButtonElement>('#clear-test');
+const runE2eeTest = document.querySelector<HTMLButtonElement>('#run-e2ee-test');
+const e2eeResult = document.querySelector<HTMLElement>('#e2ee-result');
 
 async function renderStatus(): Promise<void> {
   const response = (await chrome.runtime.sendMessage({ type: 'get-status' })) as StatusResponse;
@@ -43,6 +45,29 @@ createTest?.addEventListener('click', async () => {
 clearTest?.addEventListener('click', async () => {
   await chrome.runtime.sendMessage({ type: 'clear-lifecycle-test' });
   await renderStatus();
+});
+runE2eeTest?.addEventListener('click', async () => {
+  if (!e2eeResult || !runE2eeTest) return;
+  runE2eeTest.disabled = true;
+  e2eeResult.textContent = 'Running…';
+  const response = (await chrome.runtime.sendMessage({
+    type: 'run-e2ee-persistence-test',
+  })) as {
+    result?: {
+      fingerprint: string;
+      privateKeyExtractable: boolean;
+      roundTripPassed: boolean;
+      runAtUnixMs: number;
+    };
+    error?: string;
+  };
+  e2eeResult.textContent = response.error ?? [
+    `Fingerprint: ${response.result?.fingerprint ?? 'missing'}`,
+    `Private key extractable: ${response.result?.privateKeyExtractable ?? 'unknown'}`,
+    `HPKE round trip: ${response.result?.roundTripPassed ?? false}`,
+    `Run at: ${new Date(response.result?.runAtUnixMs ?? Date.now()).toISOString()}`,
+  ].join('\n');
+  runE2eeTest.disabled = false;
 });
 
 void renderStatus();

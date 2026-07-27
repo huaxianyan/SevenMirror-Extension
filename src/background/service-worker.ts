@@ -6,6 +6,7 @@ import {
   recordWorkerStart,
 } from './lifecycle-spike';
 import { DEFAULT_CONNECTION_STATE } from '../shared/status';
+import { runE2eePersistenceSpike } from './e2ee-spike';
 
 const CONNECTION_STATE_KEY = 'connectionState';
 
@@ -50,6 +51,15 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
       void clearLifecycleTestNotification().then((cleared) => {
         sendResponse({ cleared });
       });
+      return true;
+
+    case 'run-e2ee-persistence-test':
+      void runE2eePersistenceSpike().then(
+        (result) => sendResponse({ result }),
+        (error: unknown) => sendResponse({
+          error: error instanceof Error ? error.message : 'Unknown E2EE test failure',
+        }),
+      );
       return true;
 
     default:
