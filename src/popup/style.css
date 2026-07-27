@@ -26,6 +26,30 @@ h1 {
   line-height: 1.4;
 }
 
+h2 {
+  font-size: 15px;
+}
+
 button {
   padding: 8px 12px;
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid #8885;
+  margin: 16px 0;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+pre {
+  background: #8882;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+  padding: 8px;
+  white-space: pre-wrap;
 }

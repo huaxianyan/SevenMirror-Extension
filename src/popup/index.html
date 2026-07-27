@@ -12,6 +12,16 @@
       <p id="status" role="status">Loading…</p>
       <p class="hint">Pairing and encrypted notification sync are not implemented yet.</p>
       <button id="open-options" type="button">Open settings</button>
+      <hr />
+      <section aria-labelledby="lifecycle-title">
+        <h2 id="lifecycle-title">Phase 0 lifecycle test</h2>
+        <div class="actions">
+          <button id="create-test" type="button">Create test notification</button>
+          <button id="clear-test" type="button">Clear programmatically</button>
+        </div>
+        <p id="worker-starts">Worker starts: loading…</p>
+        <pre id="close-audit">No close event recorded.</pre>
+      </section>
     </main>
     <script type="module" src="./main.ts"></script>
   </body>
