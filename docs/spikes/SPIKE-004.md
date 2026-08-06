@@ -44,6 +44,21 @@ The unchanged SHA-256 public-key fingerprint proves that IndexedDB restored the
 same non-extractable WebCrypto private identity rather than silently generating
 a replacement.
 
+Persistent replay-ledger validation completed on 2026-08-06:
+
+| Scenario | Replay decision | Public-key fingerprint | UTC time |
+| --- | --- | --- | --- |
+| First authenticated tuple | `accepted` | `79692691f6d994b5c9a5e838f15cd1fd7e9fced991cfcbd33e0497513ba5b76c` | `2026-08-06T07:52:25.681Z` |
+| Immediate repeat | `duplicate` | same | `2026-08-06T07:52:37.784Z` |
+| After full Chrome restart | `duplicate` | same | `2026-08-06T07:53:34.190Z` |
+
+Chrome did not expose a separately terminable Worker task during this run, so
+an explicit Worker-only termination was not performed. A full browser exit
+necessarily terminated the MV3 Worker and the subsequent `duplicate` decision
+proves that the replay record was restored from IndexedDB rather than Worker
+memory. All three runs also reported a non-extractable private key and a
+successful HPKE round trip.
+
 Vendored vector:
 
 ```text
