@@ -22,3 +22,8 @@ await verify(
   './test-vectors/routing-header-v1.json',
   './ROUTING_HEADER_VECTOR_SHA256',
 );
+await verify('./encrypted-envelope-v1.md', './ENCRYPTED_ENVELOPE_SPEC_SHA256');
+await verify(
+  './test-vectors/encrypted-envelope-v1.json',
+  './ENCRYPTED_ENVELOPE_VECTOR_SHA256',
+);

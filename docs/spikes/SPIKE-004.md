@@ -20,6 +20,8 @@ info = "SyncNotifications-E2EE-v1"
 
 `src/protocol/routing-header.ts` implements the fixed 160-byte big-endian Routing Header v1 codec. The exact encoded bytes are HPKE AAD; business message type and notification/action fields remain encrypted.
 
+`src/protocol/encrypted-envelope.ts` implements the bounded binary frame. `src/crypto/envelope-receiver.ts` validates recipient identity and expiry, authenticates HPKE with the original header bytes, and returns plaintext only after the replay tuple is atomically accepted.
+
 ## Evidence
 
 - Chrome opens the Android-produced fixture.
@@ -29,7 +31,9 @@ info = "SyncNotifications-E2EE-v1"
 - Non-extractable identity persistence/restore and authenticated HPKE use pass with IndexedDB unit coverage.
 - Persistent replay reconstruction, concurrent duplicate attempts, expiry, capacity, and identifier validation pass with IndexedDB unit coverage.
 - TypeScript matches the Go/Kotlin Routing Header v1 vector, rejects malformed fields, and proves that changing a routing byte breaks HPKE authentication.
-- Type checking, 20 Vitest tests, and production build pass.
+- TypeScript matches the Encrypted Envelope v1 vector and rejects truncation, trailing bytes, bad magic, invalid points, and invalid ciphertext lengths.
+- Receiver tests prove tampered HPKE ciphertext does not consume replay state, a valid frame is accepted once, and its repeat is rejected.
+- Type checking, 23 Vitest tests, and production build pass.
 - Popup exposes a browser-runtime persistence test; repeated runs retain the same fingerprint.
 
 ## Browser runtime evidence
@@ -67,10 +71,11 @@ Vendored vectors:
 ```text
 protocol/test-vectors/hpke-auth-p256-aes128gcm.json
 protocol/test-vectors/routing-header-v1.json
+protocol/test-vectors/encrypted-envelope-v1.json
 ```
 
 The authoritative copy and ADR-002 live in the server repository.
 
 ## Safety boundary
 
-`SerializedHpkeKeyPair`, fixed IKM, and deterministic `ekm` are spike/test facilities. Production code now uses a non-extractable WebCrypto identity key and a persistent replay ledger stored in separate IndexedDB databases. The Popup runtime test records a fixed authenticated tuple once and must report `duplicate` after Worker/browser restart. Real notification payloads must not use this spike until replay recording is integrated before side effects, outer encrypted-envelope framing and transport limits plus pairing/rotation/revocation integration are complete, and the design passes security review.
+`SerializedHpkeKeyPair`, fixed IKM, and deterministic `ekm` are spike/test facilities. Production code now uses a non-extractable WebCrypto identity key and a persistent replay ledger stored in separate IndexedDB databases. The Popup runtime test records a fixed authenticated tuple once and must report `duplicate` after Worker/browser restart. Real notification payloads must not use this spike until the receiver pipeline is integrated with actual payload parsing and notification side effects, WebSocket pre-allocation limits and pairing/rotation/revocation are complete, and the design passes security review.
