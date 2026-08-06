@@ -1,8 +1,11 @@
 import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
 import {
   ActionInvokeSchema,
+  ActionResultSchema,
+  ActionResultStatus,
   EncryptedPayloadSchema,
   type ActionInvoke,
+  type ActionResult,
   type EncryptedPayload,
 } from './generated/notification/v1/payload_pb';
 
@@ -11,6 +14,7 @@ export const ENCRYPTED_PAYLOAD_LIMITS = {
   maxPlaintextSize: 524_272,
   maxNotificationIdBytes: 512,
   maxReplyTextBytes: 4_000,
+  maxResultDetailBytes: 256,
   identifierSize: 16,
   maxNotificationRevision: 0x7fff_ffff_ffff_ffffn,
 } as const;
@@ -25,6 +29,18 @@ export function createActionInvokePayload(
     body: {
       case: 'actionInvoke',
       value: create(ActionInvokeSchema, action),
+    },
+  });
+}
+
+export function createActionResultPayload(
+  result: Omit<ActionResult, '$typeName'>,
+): EncryptedPayload {
+  return create(EncryptedPayloadSchema, {
+    schemaVersion: ENCRYPTED_PAYLOAD_LIMITS.schemaVersion,
+    body: {
+      case: 'actionResult',
+      value: create(ActionResultSchema, result),
     },
   });
 }
@@ -56,10 +72,16 @@ export function validateEncryptedPayloadV1(payload: EncryptedPayload): void {
   if (payload.schemaVersion !== ENCRYPTED_PAYLOAD_LIMITS.schemaVersion) {
     throw new Error('Unsupported encrypted payload schema version');
   }
-  if (payload.body.case !== 'actionInvoke') {
-    throw new Error('Exactly one supported encrypted payload body is required');
+  switch (payload.body.case) {
+    case 'actionInvoke':
+      validateAction(payload.body.value);
+      return;
+    case 'actionResult':
+      validateResult(payload.body.value);
+      return;
+    default:
+      throw new Error('Exactly one supported encrypted payload body is required');
   }
-  validateAction(payload.body.value);
 }
 
 function validateAction(action: ActionInvoke): void {
@@ -85,6 +107,26 @@ function validateAction(action: ActionInvoke): void {
     const replySize = encoder.encode(action.replyText).byteLength;
     if (replySize < 1 || replySize > ENCRYPTED_PAYLOAD_LIMITS.maxReplyTextBytes) {
       throw new Error('Reply text is out of range');
+    }
+  }
+}
+
+function validateResult(result: ActionResult): void {
+  if (result.$unknown?.length) {
+    throw new Error('Action result contains unknown fields');
+  }
+  if (result.idempotencyKey.byteLength !== ENCRYPTED_PAYLOAD_LIMITS.identifierSize ||
+      result.idempotencyKey.every((value) => value === 0)) {
+    throw new Error('Idempotency key must be a non-zero 16-byte value');
+  }
+  if (result.status < ActionResultStatus.SUCCEEDED ||
+      result.status > ActionResultStatus.OUTCOME_UNKNOWN) {
+    throw new Error('Action result status is unsupported');
+  }
+  if (result.detail !== undefined) {
+    const detailSize = encoder.encode(result.detail).byteLength;
+    if (detailSize < 1 || detailSize > ENCRYPTED_PAYLOAD_LIMITS.maxResultDetailBytes) {
+      throw new Error('Action result detail is out of range');
     }
   }
 }

@@ -2,15 +2,15 @@
 // @generated from file notification/v1/payload.proto (package notification.mirroring.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv1";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv1";
+import type { GenEnum, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv1";
+import { enumDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv1";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file notification/v1/payload.proto.
  */
 export const file_notification_v1_payload: GenFile = /*@__PURE__*/
-  fileDesc("Ch1ub3RpZmljYXRpb24vdjEvcGF5bG9hZC5wcm90bxIZbm90aWZpY2F0aW9uLm1pcnJvcmluZy52MSJ0ChBFbmNyeXB0ZWRQYXlsb2FkEhYKDnNjaGVtYV92ZXJzaW9uGAEgASgNEkAKDWFjdGlvbl9pbnZva2UYCiABKAsyJy5ub3RpZmljYXRpb24ubWlycm9yaW5nLnYxLkFjdGlvbkludm9rZUgAQgYKBGJvZHkimgEKDEFjdGlvbkludm9rZRIXCg9ub3RpZmljYXRpb25faWQYASABKAkSHQoVbm90aWZpY2F0aW9uX3JldmlzaW9uGAIgASgEEhEKCWFjdGlvbl9pZBgDIAEoDBIXCg9pZGVtcG90ZW5jeV9rZXkYBCABKAwSFwoKcmVwbHlfdGV4dBgFIAEoCUgAiAEBQg0KC19yZXBseV90ZXh0QqMBCi9kZXYubm90aWZpY2F0aW9ubWlycm9yaW5nLnByb3RvY29sLmdlbmVyYXRlZC52MUIMUGF5bG9hZFByb3RvUAFaYGdpdGh1Yi5jb20vaHVheGlhbnlhbi9TeW5jTm90aWZpY2F0aW9ucy1TZXJ2ZXIvcHJvdG9jb2wvZ2VuZXJhdGVkL25vdGlmaWNhdGlvbi92MTtub3RpZmljYXRpb252MWIGcHJvdG8z");
+  fileDesc("Ch1ub3RpZmljYXRpb24vdjEvcGF5bG9hZC5wcm90bxIZbm90aWZpY2F0aW9uLm1pcnJvcmluZy52MSK2AQoQRW5jcnlwdGVkUGF5bG9hZBIWCg5zY2hlbWFfdmVyc2lvbhgBIAEoDRJACg1hY3Rpb25faW52b2tlGAogASgLMicubm90aWZpY2F0aW9uLm1pcnJvcmluZy52MS5BY3Rpb25JbnZva2VIABJACg1hY3Rpb25fcmVzdWx0GAsgASgLMicubm90aWZpY2F0aW9uLm1pcnJvcmluZy52MS5BY3Rpb25SZXN1bHRIAEIGCgRib2R5IpoBCgxBY3Rpb25JbnZva2USFwoPbm90aWZpY2F0aW9uX2lkGAEgASgJEh0KFW5vdGlmaWNhdGlvbl9yZXZpc2lvbhgCIAEoBBIRCglhY3Rpb25faWQYAyABKAwSFwoPaWRlbXBvdGVuY3lfa2V5GAQgASgMEhcKCnJlcGx5X3RleHQYBSABKAlIAIgBAUINCgtfcmVwbHlfdGV4dCKGAQoMQWN0aW9uUmVzdWx0EhcKD2lkZW1wb3RlbmN5X2tleRgBIAEoDBI9CgZzdGF0dXMYAiABKA4yLS5ub3RpZmljYXRpb24ubWlycm9yaW5nLnYxLkFjdGlvblJlc3VsdFN0YXR1cxITCgZkZXRhaWwYAyABKAlIAIgBAUIJCgdfZGV0YWlsKsoDChJBY3Rpb25SZXN1bHRTdGF0dXMSJAogQUNUSU9OX1JFU1VMVF9TVEFUVVNfVU5TUEVDSUZJRUQQABIiCh5BQ1RJT05fUkVTVUxUX1NUQVRVU19TVUNDRUVERUQQARIvCitBQ1RJT05fUkVTVUxUX1NUQVRVU19OT1RJRklDQVRJT05fTk9UX0ZPVU5EEAISMwovQUNUSU9OX1JFU1VMVF9TVEFUVVNfU1RBTEVfTk9USUZJQ0FUSU9OX1ZFUlNJT04QAxIpCiVBQ1RJT05fUkVTVUxUX1NUQVRVU19BQ1RJT05fTk9UX0ZPVU5EEAQSJgoiQUNUSU9OX1JFU1VMVF9TVEFUVVNfVEVYVF9SRVFVSVJFRBAFEisKJ0FDVElPTl9SRVNVTFRfU1RBVFVTX1RFWFRfTk9UX1NVUFBPUlRFRBAGEjEKLUFDVElPTl9SRVNVTFRfU1RBVFVTX1BFTkRJTkdfSU5URU5UX0NBTkNFTExFRBAHEicKI0FDVElPTl9SRVNVTFRfU1RBVFVTX0lOVEVSTkFMX0VSUk9SEAgSKAokQUNUSU9OX1JFU1VMVF9TVEFUVVNfT1VUQ09NRV9VTktOT1dOEAlCowEKL2Rldi5ub3RpZmljYXRpb25taXJyb3JpbmcucHJvdG9jb2wuZ2VuZXJhdGVkLnYxQgxQYXlsb2FkUHJvdG9QAVpgZ2l0aHViLmNvbS9odWF4aWFueWFuL1N5bmNOb3RpZmljYXRpb25zLVNlcnZlci9wcm90b2NvbC9nZW5lcmF0ZWQvbm90aWZpY2F0aW9uL3YxO25vdGlmaWNhdGlvbnYxYgZwcm90bzM");
 
 /**
  * EncryptedPayload is serialized before HPKE sealing. Its type and every
@@ -33,6 +33,12 @@ export type EncryptedPayload = Message<"notification.mirroring.v1.EncryptedPaylo
      */
     value: ActionInvoke;
     case: "actionInvoke";
+  } | {
+    /**
+     * @generated from field: notification.mirroring.v1.ActionResult action_result = 11;
+     */
+    value: ActionResult;
+    case: "actionResult";
   } | { case: undefined; value?: undefined };
 };
 
@@ -82,4 +88,98 @@ export type ActionInvoke = Message<"notification.mirroring.v1.ActionInvoke"> & {
  */
 export const ActionInvokeSchema: GenMessage<ActionInvoke> = /*@__PURE__*/
   messageDesc(file_notification_v1_payload, 1);
+
+/**
+ * ActionResult reports the locally observed result without claiming that the
+ * source application's remote service completed its business operation.
+ *
+ * @generated from message notification.mirroring.v1.ActionResult
+ */
+export type ActionResult = Message<"notification.mirroring.v1.ActionResult"> & {
+  /**
+   * @generated from field: bytes idempotency_key = 1;
+   */
+  idempotencyKey: Uint8Array;
+
+  /**
+   * @generated from field: notification.mirroring.v1.ActionResultStatus status = 2;
+   */
+  status: ActionResultStatus;
+
+  /**
+   * @generated from field: optional string detail = 3;
+   */
+  detail?: string;
+};
+
+/**
+ * Describes the message notification.mirroring.v1.ActionResult.
+ * Use `create(ActionResultSchema)` to create a new message.
+ */
+export const ActionResultSchema: GenMessage<ActionResult> = /*@__PURE__*/
+  messageDesc(file_notification_v1_payload, 2);
+
+/**
+ * @generated from enum notification.mirroring.v1.ActionResultStatus
+ */
+export enum ActionResultStatus {
+  /**
+   * @generated from enum value: ACTION_RESULT_STATUS_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: ACTION_RESULT_STATUS_SUCCEEDED = 1;
+   */
+  SUCCEEDED = 1,
+
+  /**
+   * @generated from enum value: ACTION_RESULT_STATUS_NOTIFICATION_NOT_FOUND = 2;
+   */
+  NOTIFICATION_NOT_FOUND = 2,
+
+  /**
+   * @generated from enum value: ACTION_RESULT_STATUS_STALE_NOTIFICATION_VERSION = 3;
+   */
+  STALE_NOTIFICATION_VERSION = 3,
+
+  /**
+   * @generated from enum value: ACTION_RESULT_STATUS_ACTION_NOT_FOUND = 4;
+   */
+  ACTION_NOT_FOUND = 4,
+
+  /**
+   * @generated from enum value: ACTION_RESULT_STATUS_TEXT_REQUIRED = 5;
+   */
+  TEXT_REQUIRED = 5,
+
+  /**
+   * @generated from enum value: ACTION_RESULT_STATUS_TEXT_NOT_SUPPORTED = 6;
+   */
+  TEXT_NOT_SUPPORTED = 6,
+
+  /**
+   * @generated from enum value: ACTION_RESULT_STATUS_PENDING_INTENT_CANCELLED = 7;
+   */
+  PENDING_INTENT_CANCELLED = 7,
+
+  /**
+   * @generated from enum value: ACTION_RESULT_STATUS_INTERNAL_ERROR = 8;
+   */
+  INTERNAL_ERROR = 8,
+
+  /**
+   * The operation tuple was committed but a crash prevented a reliable local
+   * result from being stored. The operation MUST NOT be executed again.
+   *
+   * @generated from enum value: ACTION_RESULT_STATUS_OUTCOME_UNKNOWN = 9;
+   */
+  OUTCOME_UNKNOWN = 9,
+}
+
+/**
+ * Describes the enum notification.mirroring.v1.ActionResultStatus.
+ */
+export const ActionResultStatusSchema: GenEnum<ActionResultStatus> = /*@__PURE__*/
+  enumDesc(file_notification_v1_payload, 0);
 

@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import vector from '../../protocol/test-vectors/encrypted-payload-v1.json';
 import {
   createActionInvokePayload,
+  createActionResultPayload,
   decodeEncryptedPayloadV1,
   encodeEncryptedPayloadV1,
 } from './encrypted-payload';
+import { ActionResultStatus } from './generated/notification/v1/payload_pb';
 
 const fromHex = (value: string): Uint8Array =>
   Uint8Array.from(value.match(/.{2}/g) ?? [], (byte) => Number.parseInt(byte, 16));
@@ -26,6 +28,21 @@ describe('Encrypted Payload v1', () => {
     if (decoded.body.case === 'actionInvoke') {
       expect(decoded.body.value.notificationRevision).toBe(7n);
       expect(decoded.body.value.replyText).toBe('acknowledged');
+    }
+  });
+
+  it('round-trips a canonical action result', () => {
+    const encoded = encodeEncryptedPayloadV1(createActionResultPayload({
+      idempotencyKey: fromHex(vector.idempotencyKeyHex),
+      status: ActionResultStatus.STALE_NOTIFICATION_VERSION,
+      detail: 'revision changed',
+    }));
+    expect(encoded).toEqual(fromHex(vector.actionResultEncodedHex));
+    const decoded = decodeEncryptedPayloadV1(encoded);
+    expect(decoded.body.case).toBe('actionResult');
+    if (decoded.body.case === 'actionResult') {
+      expect(decoded.body.value.status).toBe(ActionResultStatus.STALE_NOTIFICATION_VERSION);
+      expect(decoded.body.value.detail).toBe('revision changed');
     }
   });
 

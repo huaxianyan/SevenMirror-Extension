@@ -12,7 +12,7 @@ Run `npm run protocol:verify` after updating the schema. Do not edit the vendore
 
 `routing-header-v1.md` and `test-vectors/routing-header-v1.json` are vendored copies of the provisional fixed-width HPKE AAD codec specification and canonical vector.
 
-`encrypted-payload-v1.md`, `vendor/notification/v1/payload.proto`, and their vector define the canonical encrypted `action.invoke` payload.
+`encrypted-payload-v1.md`, `vendor/notification/v1/payload.proto`, and their vector define canonical encrypted `action.invoke` and `action.result` payloads.
 
 `encrypted-envelope-v1.md` and its vector define the bounded binary frame carrying the exact AAD, P-256 encapsulated key, and ciphertext. The canonical envelope plaintext is the payload vector.
 

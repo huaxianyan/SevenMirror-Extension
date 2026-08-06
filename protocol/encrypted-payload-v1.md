@@ -15,7 +15,7 @@ Receivers MUST reject a plaintext unless all of the following hold:
 2. protobuf parsing succeeds;
 3. no unknown fields occur at any message level;
 4. `schema_version` is exactly `1`;
-5. exactly one supported `body` is present;
+5. exactly one supported `body` (`action_invoke` or `action_result`) is present;
 6. every message-specific semantic constraint below holds; and
 7. deterministic re-encoding produces exactly the received bytes.
 
@@ -45,3 +45,22 @@ record `idempotency_key` before invoking any local side effect. Replay Ledger
 acceptance happens before payload parsing; operation idempotency is a separate,
 longer-lived guard against a logically duplicated request with a new envelope
 message ID.
+
+## `action_result`
+
+An action result reports only what the source Android observed while invoking the
+local notification capability. `SUCCEEDED` means `PendingIntent.send()` returned
+without a local error; it does not claim that a third-party remote service
+completed the corresponding business operation.
+
+Constraints:
+
+- `idempotency_key`: the same non-zero 16-byte value from `action_invoke`;
+- `status`: one defined value other than `UNSPECIFIED`;
+- `detail`: absent by default; when present, valid UTF-8 and 1..256 encoded bytes.
+
+Android stores the canonical result bytes with the operation tuple before
+sending them. A duplicate request returns the stored result without invoking the
+notification action again. If the operation tuple exists without a stored result
+(for example, a process crash around the side effect), Android returns
+`OUTCOME_UNKNOWN` and MUST NOT retry the side effect automatically.
