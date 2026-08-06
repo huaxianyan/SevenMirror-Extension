@@ -22,6 +22,16 @@ export interface ActionEnvelopeContext {
   expiresAtUnixMs: number;
 }
 
+export interface PendingActionRegistrar {
+  register(
+    idempotencyKey: Uint8Array,
+    senderDeviceId: Uint8Array,
+    operationDigest: Uint8Array,
+    createdAtUnixMs: number,
+    expiresAtUnixMs: number,
+  ): Promise<'registered' | 'already-registered' | 'capacity-exceeded'>;
+}
+
 export interface ActionInvokeRequest {
   notificationId: string;
   notificationRevision: bigint;
@@ -30,7 +40,32 @@ export interface ActionInvokeRequest {
   replyText?: string;
 }
 
-/** Creates one recipient-specific action frame; all business semantics are encrypted. */
+export const PENDING_ACTION_RETENTION_MS = 30 * 24 * 60 * 60 * 1_000;
+
+/**
+ * Durably registers correlation state before producing a frame that may be sent.
+ * Retrying uses the same idempotency key and never replaces the pending record.
+ */
+export async function prepareActionInvokeEnvelope(
+  context: ActionEnvelopeContext,
+  request: ActionInvokeRequest,
+  pendingActions: PendingActionRegistrar,
+): Promise<Uint8Array> {
+  const canonicalRequest = encodeEncryptedPayloadV1(createActionInvokePayload(request));
+  const registration = await pendingActions.register(
+    request.idempotencyKey,
+    context.recipientDeviceId,
+    await sha256(canonicalRequest),
+    context.createdAtUnixMs,
+    context.createdAtUnixMs + PENDING_ACTION_RETENTION_MS,
+  );
+  if (registration === 'capacity-exceeded') {
+    throw new Error('Pending action capacity exceeded');
+  }
+  return createActionInvokeEnvelope(context, request);
+}
+
+/** Low-level codec helper; production callers should use prepareActionInvokeEnvelope. */
 export async function createActionInvokeEnvelope(
   context: ActionEnvelopeContext,
   request: ActionInvokeRequest,

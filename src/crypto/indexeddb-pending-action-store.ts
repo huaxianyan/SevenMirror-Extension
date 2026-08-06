@@ -1,0 +1,243 @@
+import { ActionResultStatus } from '../protocol/generated/notification/v1/payload_pb';
+
+export type PendingActionRegistration =
+  | 'registered'
+  | 'already-registered'
+  | 'capacity-exceeded';
+
+export type ActionResultReconciliation =
+  | 'completed'
+  | 'already-completed'
+  | 'not-found'
+  | 'sender-mismatch'
+  | 'conflict';
+
+export interface PendingActionRecord {
+  idempotencyKey: string;
+  senderDeviceId: string;
+  operationDigest: string;
+  createdAtUnixMs: number;
+  expiresAtUnixMs: number;
+  state: 'pending' | 'completed';
+  resultStatus?: ActionResultStatus;
+  resultDetail?: string;
+  completedAtUnixMs?: number;
+}
+
+const STORE_NAME = 'pending-action';
+const EXPIRY_INDEX = 'by-expiry';
+const DATABASE_VERSION = 1;
+const IDENTIFIER_BYTES = 16;
+const DIGEST_BYTES = 32;
+
+/** Persistent correlation state for action.invoke/action.result across MV3 restarts. */
+export class IndexedDbPendingActionStore {
+  private readonly databaseName: string;
+
+  constructor(
+    storeName = 'default',
+    private readonly maxEntries = 4096,
+  ) {
+    if (!/^[A-Za-z0-9_.-]{1,64}$/.test(storeName)) {
+      throw new Error('storeName must be 1-64 URL-safe characters');
+    }
+    if (!Number.isSafeInteger(maxEntries) || maxEntries < 1) {
+      throw new Error('maxEntries must be a positive safe integer');
+    }
+    this.databaseName = `syncnotifications-pending-actions-${storeName}`;
+  }
+
+  /** Must complete before the corresponding action.invoke can be transmitted. */
+  async register(
+    idempotencyKey: Uint8Array,
+    senderDeviceId: Uint8Array,
+    operationDigest: Uint8Array,
+    createdAtUnixMs: number,
+    expiresAtUnixMs: number,
+  ): Promise<PendingActionRegistration> {
+    validateIdentifier(idempotencyKey, 'idempotencyKey', true);
+    validateIdentifier(senderDeviceId, 'senderDeviceId', true);
+    validateDigest(operationDigest);
+    validateTimestamp(createdAtUnixMs, 'createdAtUnixMs');
+    validateTimestamp(expiresAtUnixMs, 'expiresAtUnixMs');
+    if (expiresAtUnixMs <= createdAtUnixMs) {
+      throw new Error('expiresAtUnixMs must be greater than createdAtUnixMs');
+    }
+
+    return this.withWriteTransaction(async (store) => {
+      await purgeExpired(store, createdAtUnixMs);
+      const key = toHex(idempotencyKey);
+      const sender = toHex(senderDeviceId);
+      const digest = toHex(operationDigest);
+      const existing = await requestResult<PendingActionRecord | undefined>(store.get(key));
+      if (existing !== undefined) {
+        if (existing.senderDeviceId !== sender || existing.operationDigest !== digest) {
+          throw new Error('Idempotency key is already bound to another operation');
+        }
+        return 'already-registered';
+      }
+      if (await requestResult<number>(store.count()) >= this.maxEntries) {
+        return 'capacity-exceeded';
+      }
+      await requestResult(store.add({
+        idempotencyKey: key,
+        senderDeviceId: sender,
+        operationDigest: digest,
+        createdAtUnixMs,
+        expiresAtUnixMs,
+        state: 'pending',
+      } satisfies PendingActionRecord));
+      return 'registered';
+    });
+  }
+
+  /** Atomically applies only an authenticated result from the expected Android device. */
+  async reconcile(
+    idempotencyKey: Uint8Array,
+    senderDeviceId: Uint8Array,
+    status: ActionResultStatus,
+    detail: string | undefined,
+    nowUnixMs: number,
+  ): Promise<ActionResultReconciliation> {
+    validateIdentifier(idempotencyKey, 'idempotencyKey', true);
+    validateIdentifier(senderDeviceId, 'senderDeviceId', true);
+    validateResult(status, detail);
+    validateTimestamp(nowUnixMs, 'nowUnixMs');
+
+    return this.withWriteTransaction(async (store) => {
+      await purgeExpired(store, nowUnixMs);
+      const key = toHex(idempotencyKey);
+      const existing = await requestResult<PendingActionRecord | undefined>(store.get(key));
+      if (existing === undefined) return 'not-found';
+      if (existing.senderDeviceId !== toHex(senderDeviceId)) return 'sender-mismatch';
+      if (existing.state === 'completed') {
+        return existing.resultStatus === status && existing.resultDetail === detail
+          ? 'already-completed'
+          : 'conflict';
+      }
+      await requestResult(store.put({
+        ...existing,
+        state: 'completed',
+        resultStatus: status,
+        resultDetail: detail,
+        completedAtUnixMs: nowUnixMs,
+      } satisfies PendingActionRecord));
+      return 'completed';
+    });
+  }
+
+  async get(idempotencyKey: Uint8Array): Promise<PendingActionRecord | undefined> {
+    validateIdentifier(idempotencyKey, 'idempotencyKey', true);
+    const database = await this.openDatabase();
+    try {
+      const transaction = database.transaction(STORE_NAME, 'readonly');
+      const completed = transactionCompleted(transaction);
+      const result = await requestResult<PendingActionRecord | undefined>(
+        transaction.objectStore(STORE_NAME).get(toHex(idempotencyKey)),
+      );
+      await completed;
+      return result;
+    } finally {
+      database.close();
+    }
+  }
+
+  async clear(): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.deleteDatabase(this.databaseName);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error ?? new Error('Unable to delete pending action store'));
+      request.onblocked = () => reject(new Error('Pending action store deletion was blocked'));
+    });
+  }
+
+  private async withWriteTransaction<T>(work: (store: IDBObjectStore) => Promise<T>): Promise<T> {
+    const database = await this.openDatabase();
+    try {
+      const transaction = database.transaction(STORE_NAME, 'readwrite');
+      const completed = transactionCompleted(transaction);
+      try {
+        const result = await work(transaction.objectStore(STORE_NAME));
+        await completed;
+        return result;
+      } catch (error: unknown) {
+        await completed.catch(() => undefined);
+        throw error;
+      }
+    } finally {
+      database.close();
+    }
+  }
+
+  private async openDatabase(): Promise<IDBDatabase> {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(this.databaseName, DATABASE_VERSION);
+      request.onupgradeneeded = () => {
+        const store = request.result.createObjectStore(STORE_NAME, { keyPath: 'idempotencyKey' });
+        store.createIndex(EXPIRY_INDEX, 'expiresAtUnixMs', { unique: false });
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error ?? new Error('Unable to open pending action store'));
+      request.onblocked = () => reject(new Error('Pending action store open was blocked'));
+    });
+  }
+}
+
+async function purgeExpired(store: IDBObjectStore, nowUnixMs: number): Promise<void> {
+  const keys = await requestResult<IDBValidKey[]>(
+    store.index(EXPIRY_INDEX).getAllKeys(IDBKeyRange.upperBound(nowUnixMs)),
+  );
+  await Promise.all(keys.map((key) => requestResult(store.delete(key))));
+}
+
+function validateResult(status: ActionResultStatus, detail: string | undefined): void {
+  if (status < ActionResultStatus.SUCCEEDED || status > ActionResultStatus.OUTCOME_UNKNOWN) {
+    throw new Error('Action result status is unsupported');
+  }
+  if (detail !== undefined) {
+    const size = new TextEncoder().encode(detail).byteLength;
+    if (size < 1 || size > 256) {
+      throw new Error('Action result detail is out of range');
+    }
+  }
+}
+
+function validateIdentifier(value: Uint8Array, name: string, nonZero: boolean): void {
+  if (!(value instanceof Uint8Array) || value.byteLength !== IDENTIFIER_BYTES) {
+    throw new Error(`${name} must be ${IDENTIFIER_BYTES} bytes`);
+  }
+  if (nonZero && value.every((byte) => byte === 0)) {
+    throw new Error(`${name} must not be zero`);
+  }
+}
+
+function validateDigest(value: Uint8Array): void {
+  if (!(value instanceof Uint8Array) || value.byteLength !== DIGEST_BYTES) {
+    throw new Error(`operationDigest must be ${DIGEST_BYTES} bytes`);
+  }
+}
+
+function validateTimestamp(value: number, name: string): void {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`${name} must be a non-negative safe integer`);
+  }
+}
+
+function toHex(value: Uint8Array): string {
+  return Array.from(value, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function requestResult<T>(request: IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed'));
+  });
+}
+
+function transactionCompleted(transaction: IDBTransaction): Promise<void> {
+  return new Promise((resolve, reject) => {
+    transaction.oncomplete = () => resolve();
+    transaction.onabort = () => reject(transaction.error ?? new Error('IndexedDB transaction aborted'));
+    transaction.onerror = () => reject(transaction.error ?? new Error('IndexedDB transaction failed'));
+  });
+}

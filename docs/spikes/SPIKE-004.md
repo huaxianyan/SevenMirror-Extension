@@ -22,7 +22,7 @@ info = "SyncNotifications-E2EE-v1"
 
 `src/protocol/encrypted-envelope.ts` implements the bounded binary frame. `src/crypto/envelope-receiver.ts` validates recipient identity and expiry, authenticates HPKE with the original header bytes, and returns plaintext only after the replay tuple is atomically accepted.
 
-`src/protocol/encrypted-payload.ts` strictly validates canonical protobuf `action.invoke` and `action.result` payloads. `src/crypto/action-envelope-sender.ts` constructs a per-recipient Routing Header, encrypts every action field, and emits the bounded Envelope v1 frame.
+`src/protocol/encrypted-payload.ts` strictly validates canonical protobuf `action.invoke` and `action.result` payloads. `src/crypto/action-envelope-sender.ts` durably registers pending correlation before constructing a per-recipient encrypted frame. `src/crypto/indexeddb-pending-action-store.ts` retains the idempotency-key/expected-Android/canonical-operation-digest binding across Worker restarts, preventing accidental reuse of one key for different action semantics. `src/crypto/action-result-receiver.ts` authenticates and atomically reconciles returned results.
 
 ## Evidence
 
@@ -36,7 +36,9 @@ info = "SyncNotifications-E2EE-v1"
 - TypeScript matches the Encrypted Envelope v1 vector and rejects truncation, trailing bytes, bad magic, invalid points, and invalid ciphertext lengths.
 - Receiver tests prove tampered HPKE ciphertext does not consume replay state, a valid frame is accepted once, and its repeat is rejected.
 - TypeScript matches the canonical protobuf action payload, rejects unknown/duplicate/non-canonical and invalid semantic fields, round-trips `action.result`, and round-trips a generated authenticated action envelope without exposing notification ID or reply bytes in the frame.
-- Type checking, 27 Vitest tests, and production build pass.
+- Pending-operation tests cover persistence across reconstruction, concurrent registration, expected-sender binding, capacity exhaustion, identical result recovery, and conflicting terminal results.
+- The action-result receive path performs HPKE/replay validation before persistent reconciliation; a new envelope carrying the same authenticated result is idempotent.
+- Type checking, 33 Vitest tests, and production build pass.
 - Popup exposes a browser-runtime persistence test; repeated runs retain the same fingerprint.
 
 ## Browser runtime evidence
@@ -82,4 +84,4 @@ The authoritative copy and ADR-002 live in the server repository.
 
 ## Safety boundary
 
-`SerializedHpkeKeyPair`, fixed IKM, and deterministic `ekm` are spike/test facilities. Production code now uses a non-extractable WebCrypto identity key and a persistent replay ledger stored in separate IndexedDB databases. The Popup runtime test records a fixed authenticated tuple once and must report `duplicate` after Worker/browser restart. Real notification payloads must not use this spike until cached Android `action.result` values are encrypted and reconciled with Chrome pending operations, the authenticated production WebSocket endpoint and pairing/rotation/revocation are complete, and the design passes security review.
+`SerializedHpkeKeyPair`, fixed IKM, and deterministic `ekm` are spike/test facilities. Production code now uses a non-extractable WebCrypto identity key plus persistent replay and pending-operation stores in separate IndexedDB databases. The Popup runtime test records a fixed authenticated tuple once and must report `duplicate` after Worker/browser restart. A transport timeout leaves an operation pending; only Android's authenticated `OUTCOME_UNKNOWN` result marks the side effect as uncertain, and neither state permits automatic execution under a new idempotency key. Real notification payloads must not use this spike until the result sender/receiver are connected to an authenticated production WebSocket endpoint, pairing/rotation/revocation are complete, and the design passes security review.
