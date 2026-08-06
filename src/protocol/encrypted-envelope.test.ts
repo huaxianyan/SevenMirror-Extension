@@ -14,6 +14,7 @@ import {
   decodeEncryptedEnvelopeV1,
   encodeEncryptedEnvelopeV1,
 } from './encrypted-envelope';
+import { decodeEncryptedPayloadV1 } from './encrypted-payload';
 import { encodeRoutingHeaderV1 } from './routing-header';
 
 const fromHex = (value: string): Uint8Array =>
@@ -38,8 +39,7 @@ describe('Encrypted Envelope v1', () => {
 
     const decoded = decodeEncryptedEnvelopeV1(encoded);
     expect(toHex(decoded.routingHeaderBytes)).toBe(envelopeVector.routingHeader);
-    await expect(
-      openAuthenticated(
+    const plaintext = await openAuthenticated(
         {
           publicKey: fromHex(hpkeVector.recipientPublicKey),
           privateKey: fromHex(hpkeVector.recipientPrivateKey),
@@ -50,8 +50,10 @@ describe('Encrypted Envelope v1', () => {
           ciphertext: decoded.ciphertext,
         },
         decoded.routingHeaderBytes,
-      ),
-    ).resolves.toEqual(fromHex(envelopeVector.plaintext));
+      );
+    expect(plaintext).toEqual(fromHex(envelopeVector.plaintext));
+    const payload = decodeEncryptedPayloadV1(plaintext);
+    expect(payload.body.case).toBe('actionInvoke');
   });
 
   it('rejects truncation, trailing bytes, bad magic, and invalid point encoding', () => {

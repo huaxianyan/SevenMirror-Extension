@@ -1,0 +1,11 @@
+{
+  "description": "Canonical EncryptedPayload v1 action.invoke vector; identifiers and reply are public test material only.",
+  "schemaVersion": 1,
+  "messageType": "action.invoke",
+  "notificationId": "test.notification/42",
+  "notificationRevision": "7",
+  "actionIdHex": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+  "idempotencyKeyHex": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+  "replyText": "acknowledged",
+  "encodedHex": "0801524a0a14746573742e6e6f74696669636174696f6e2f343210071a10a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a12210b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b22a0c61636b6e6f776c6564676564"
+}

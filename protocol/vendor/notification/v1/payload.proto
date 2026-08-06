@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package notification.mirroring.v1;
+
+option go_package = "github.com/huaxianyan/SyncNotifications-Server/protocol/generated/notification/v1;notificationv1";
+option java_package = "dev.notificationmirroring.protocol.generated.v1";
+option java_multiple_files = true;
+option java_outer_classname = "PayloadProto";
+
+// EncryptedPayload is serialized before HPKE sealing. Its type and every
+// business field are opaque to the relay.
+message EncryptedPayload {
+  uint32 schema_version = 1;
+
+  oneof body {
+    ActionInvoke action_invoke = 10;
+  }
+}
+
+// ActionInvoke asks the source Android device to invoke one action currently
+// exposed by a specific notification revision. pendingIntent is never sent.
+message ActionInvoke {
+  string notification_id = 1;
+  uint64 notification_revision = 2;
+  bytes action_id = 3;
+  bytes idempotency_key = 4;
+  optional string reply_text = 5;
+}

@@ -17,6 +17,12 @@ async function verify(assetPath, hashPath) {
 }
 
 await verify('./vendor/notification/v1/envelope.proto', './SCHEMA_SHA256');
+await verify('./vendor/notification/v1/payload.proto', './PAYLOAD_SCHEMA_SHA256');
+await verify('./encrypted-payload-v1.md', './PAYLOAD_SPEC_SHA256');
+await verify(
+  './test-vectors/encrypted-payload-v1.json',
+  './PAYLOAD_VECTOR_SHA256',
+);
 await verify('./routing-header-v1.md', './ROUTING_HEADER_SPEC_SHA256');
 await verify(
   './test-vectors/routing-header-v1.json',
