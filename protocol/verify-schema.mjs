@@ -1,12 +1,24 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 
-const schema = await readFile(new URL('./vendor/notification/v1/envelope.proto', import.meta.url));
-const expected = (await readFile(new URL('./SCHEMA_SHA256', import.meta.url), 'utf8')).trim();
-const actual = createHash('sha256').update(schema).digest('hex');
+async function verify(assetPath, hashPath) {
+  const asset = await readFile(new URL(assetPath, import.meta.url));
+  const expected = (await readFile(new URL(hashPath, import.meta.url), 'utf8')).trim();
+  const actual = createHash('sha256').update(asset).digest('hex');
 
-if (actual !== expected) {
-  console.error(`Vendored protocol hash mismatch: expected ${expected}, got ${actual}`);
-  process.exit(1);
+  if (actual !== expected) {
+    console.error(
+      `Vendored protocol hash mismatch for ${assetPath}: expected ${expected}, got ${actual}`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+  console.log(`Protocol asset verified: ${assetPath} ${actual}`);
 }
-console.log(`Protocol schema verified: ${actual}`);
+
+await verify('./vendor/notification/v1/envelope.proto', './SCHEMA_SHA256');
+await verify('./routing-header-v1.md', './ROUTING_HEADER_SPEC_SHA256');
+await verify(
+  './test-vectors/routing-header-v1.json',
+  './ROUTING_HEADER_VECTOR_SHA256',
+);
