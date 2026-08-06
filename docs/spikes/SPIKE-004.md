@@ -16,7 +16,7 @@ info = "SyncNotifications-E2EE-v1"
 
 `src/crypto/indexeddb-identity-store.ts` generates a non-extractable WebCrypto P-256 identity and persists its `CryptoKeyPair` through IndexedDB structured clone without exporting the private key.
 
-`src/crypto/replay-guard.ts` demonstrates bounded duplicate and expiry decisions. It is intentionally in-memory; production state must be atomic and persistent across MV3 worker restarts.
+`src/crypto/replay-guard.ts` retains the in-memory policy model. `src/crypto/indexeddb-replay-ledger.ts` implements the production persistence boundary with one atomic IndexedDB read/write transaction keyed by the 32-byte sender key ID and 16-byte message ID. It purges expired entries, serializes concurrent attempts, rejects duplicates after store reconstruction, and fails closed instead of evicting live entries at capacity.
 
 ## Evidence
 
@@ -25,7 +25,8 @@ info = "SyncNotifications-E2EE-v1"
 - Deterministic key, encapsulation, and ciphertext bytes match the canonical vector.
 - Sender substitution, AAD modification, and ciphertext modification fail.
 - Non-extractable identity persistence/restore and authenticated HPKE use pass with IndexedDB unit coverage.
-- Type checking, 13 Vitest tests, and production build pass.
+- Persistent replay reconstruction, concurrent duplicate attempts, expiry, capacity, and identifier validation pass with IndexedDB unit coverage.
+- Type checking, 17 Vitest tests, and production build pass.
 - Popup exposes a browser-runtime persistence test; repeated runs retain the same fingerprint.
 
 ## Browser runtime evidence
@@ -53,4 +54,4 @@ The authoritative copy and ADR-002 live in the server repository.
 
 ## Safety boundary
 
-`SerializedHpkeKeyPair`, fixed IKM, and deterministic `ekm` are spike/test facilities. Production code now uses a non-extractable WebCrypto identity key stored as a `CryptoKey` in IndexedDB. Its fingerprint survives Worker termination and full browser restart. Real notification payloads must not use this spike until the persistent replay ledger, final envelope codec, pairing/rotation/revocation integration, and security review are complete.
+`SerializedHpkeKeyPair`, fixed IKM, and deterministic `ekm` are spike/test facilities. Production code now uses a non-extractable WebCrypto identity key and a persistent replay ledger stored in separate IndexedDB databases. The Popup runtime test records a fixed authenticated tuple once and must report `duplicate` after Worker/browser restart. Real notification payloads must not use this spike until replay recording is integrated before side effects, the final envelope codec and pairing/rotation/revocation integration are complete, and the design passes security review.

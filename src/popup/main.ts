@@ -57,6 +57,7 @@ runE2eeTest?.addEventListener('click', async () => {
       fingerprint: string;
       privateKeyExtractable: boolean;
       roundTripPassed: boolean;
+      replayDecision: 'accepted' | 'duplicate' | 'expired' | 'capacity-exceeded';
       runAtUnixMs: number;
     };
     error?: string;
@@ -65,6 +66,7 @@ runE2eeTest?.addEventListener('click', async () => {
     `Fingerprint: ${response.result?.fingerprint ?? 'missing'}`,
     `Private key extractable: ${response.result?.privateKeyExtractable ?? 'unknown'}`,
     `HPKE round trip: ${response.result?.roundTripPassed ?? false}`,
+    `Replay ledger: ${response.result?.replayDecision ?? 'missing'}`,
     `Run at: ${new Date(response.result?.runAtUnixMs ?? Date.now()).toISOString()}`,
   ].join('\n');
   runE2eeTest.disabled = false;

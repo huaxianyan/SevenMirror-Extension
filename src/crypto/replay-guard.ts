@@ -1,4 +1,8 @@
-export type ReplayDecision = 'accepted' | 'duplicate' | 'expired';
+export type ReplayDecision =
+  | 'accepted'
+  | 'duplicate'
+  | 'expired'
+  | 'capacity-exceeded';
 
 export interface ReplayToken {
   senderKeyId: string;
@@ -31,10 +35,8 @@ export class ReplayGuard {
       return 'duplicate';
     }
 
-    while (this.seen.size >= this.maxEntries) {
-      const oldest = this.seen.keys().next().value as string | undefined;
-      if (oldest === undefined) break;
-      this.seen.delete(oldest);
+    if (this.seen.size >= this.maxEntries) {
+      return 'capacity-exceeded';
     }
     this.seen.set(key, token.expiresAtUnixMs);
     return 'accepted';

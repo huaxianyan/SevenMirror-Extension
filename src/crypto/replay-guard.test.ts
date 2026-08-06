@@ -38,6 +38,6 @@ describe('ReplayGuard', () => {
         { senderKeyId: 'sender', messageId: 'two', expiresAtUnixMs: now + 20 },
         now,
       ),
-    ).toBe('accepted');
+    ).toBe('capacity-exceeded');
   });
 });
