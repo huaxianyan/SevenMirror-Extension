@@ -1,6 +1,6 @@
 # SPIKE-004: Authenticated HPKE interoperability
 
-Status: cryptographic core and IndexedDB persistence unit path validated; real Chrome restart test pending
+Status: cryptographic core and real Chrome IndexedDB persistence validated
 
 ## Implementation
 
@@ -26,7 +26,22 @@ info = "SyncNotifications-E2EE-v1"
 - Sender substitution, AAD modification, and ciphertext modification fail.
 - Non-extractable identity persistence/restore and authenticated HPKE use pass with IndexedDB unit coverage.
 - Type checking, 13 Vitest tests, and production build pass.
-- Popup exposes a browser-runtime persistence test; repeated runs must retain the same fingerprint.
+- Popup exposes a browser-runtime persistence test; repeated runs retain the same fingerprint.
+
+## Browser runtime evidence
+
+Manual validation completed on 2026-08-06 using the unpacked production build
+on Windows Chrome (exact browser version was not captured):
+
+| Scenario | Public-key fingerprint | Private extractable | HPKE round trip | UTC time |
+| --- | --- | --- | --- | --- |
+| Initial run | `79692691f6d994b5c9a5e838f15cd1fd7e9fced991cfcbd33e0497513ba5b76c` | `false` | `true` | `2026-08-06T06:41:39.515Z` |
+| After MV3 Worker termination | same | `false` | `true` | `2026-08-06T06:45:31.243Z` |
+| After full Chrome restart | same | `false` | `true` | `2026-08-06T06:46:07.868Z` |
+
+The unchanged SHA-256 public-key fingerprint proves that IndexedDB restored the
+same non-extractable WebCrypto private identity rather than silently generating
+a replacement.
 
 Vendored vector:
 
@@ -38,4 +53,4 @@ The authoritative copy and ADR-002 live in the server repository.
 
 ## Safety boundary
 
-`SerializedHpkeKeyPair`, fixed IKM, and deterministic `ekm` are spike/test facilities. Production code now uses a non-extractable WebCrypto identity key stored as a `CryptoKey` in IndexedDB. Real Chrome must still prove that the fingerprint survives Worker termination and full browser restart. Real notification payloads must not use this spike until that gate and the final envelope codec are complete.
+`SerializedHpkeKeyPair`, fixed IKM, and deterministic `ekm` are spike/test facilities. Production code now uses a non-extractable WebCrypto identity key stored as a `CryptoKey` in IndexedDB. Its fingerprint survives Worker termination and full browser restart. Real notification payloads must not use this spike until the persistent replay ledger, final envelope codec, pairing/rotation/revocation integration, and security review are complete.
