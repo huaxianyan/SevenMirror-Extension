@@ -4,7 +4,7 @@ Manifest V3 extension for private, end-to-end encrypted Android notification mir
 
 Repository: <https://github.com/huaxianyan/SyncNotifications-Extension>
 
-> Status: foundation scaffold. Pairing, WebSocket and notification mirroring are not implemented yet.
+> Status: cryptographic, replay, pending-operation, strict registration, credential persistence, and authenticated WebSocket transport cores are implemented but not wired to production pairing UI or notification synchronization.
 
 ## Requirements
 
@@ -24,10 +24,14 @@ Load `dist/` as an unpacked extension from `chrome://extensions` after building.
 
 ## Current functionality
 
-- MV3 service worker scaffold
-- Popup and options page scaffold
-- Explicit local connection state
-- Provisional vendored protocol schema with SHA-256 verification
+- MV3 service worker, Popup, and Options scaffolds
+- Authenticated HPKE identity with non-extractable WebCrypto private key persistence
+- Persistent replay and pending-action reconciliation ledgers
+- Canonical encrypted action sender/result receiver
+- Strict code-gated registration client and extension-origin-only transport credential store
+- Device Auth Frame v1 and first-message authenticated WebSocket boundary
+- Optional host permissions for explicit future pairing grants
+- Provisional vendored protocol assets with SHA-256 verification
 
 ## Protocol
 
@@ -41,7 +45,9 @@ The current `0.1.0-dev` schema is unreleased and provisional.
 
 ## Security status
 
-No server address, credential, notification body or cryptographic key is handled yet. E2EE must be implemented before real notification synchronization is enabled. Sensitive state must never use Chrome Sync.
+The transport core accepts only HTTPS origins outside loopback, never puts credentials in URLs or `chrome.storage.sync`, rejects silent credential replacement, and refuses to send the first authentication frame if the WebSocket endpoint changes. The bearer credential must remain available as bytes for the browser WebSocket API, so extension-origin IndexedDB and a minimal in-memory lifetime are the practical Chrome boundary; the HPKE private identity remains non-extractable.
+
+Pairing UI, explicit optional-host permission requests, trusted-device E2EE approval, credential revocation/rotation, reconnect/offline convergence, and independent security review are still missing. No real notification content may use this transport yet.
 
 ## License
 

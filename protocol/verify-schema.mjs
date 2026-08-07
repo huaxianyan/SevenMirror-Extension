@@ -33,3 +33,8 @@ await verify(
   './test-vectors/encrypted-envelope-v1.json',
   './ENCRYPTED_ENVELOPE_VECTOR_SHA256',
 );
+await verify('./device-auth-frame-v1.md', './DEVICE_AUTH_SPEC_SHA256');
+await verify(
+  './test-vectors/device-auth-frame-v1.json',
+  './DEVICE_AUTH_VECTOR_SHA256',
+);

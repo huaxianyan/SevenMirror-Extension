@@ -24,6 +24,8 @@ info = "SyncNotifications-E2EE-v1"
 
 `src/protocol/encrypted-payload.ts` strictly validates canonical protobuf `action.invoke` and `action.result` payloads. `src/crypto/action-envelope-sender.ts` durably registers pending correlation before constructing a per-recipient encrypted frame. `src/crypto/indexeddb-pending-action-store.ts` retains the idempotency-key/expected-Android/canonical-operation-digest binding across Worker restarts, preventing accidental reuse of one key for different action semantics. `src/crypto/action-result-receiver.ts` authenticates and atomically reconciles returned results.
 
+`src/transport` now matches the Go `SNA1` vector, performs bounded strict code-gated registration without credentials or referrers, stores the raw WebSocket credential only in extension-origin IndexedDB, refuses silent replacement, and sends `SNA1` as the first binary message. HTTPS is mandatory outside loopback, redirect/endpoint changes fail closed before credential disclosure, and diagnostics expose only fixed content-free state events. Host access is optional and must be explicitly granted during future pairing UI.
+
 ## Evidence
 
 - Chrome opens the Android-produced fixture.
@@ -38,7 +40,8 @@ info = "SyncNotifications-E2EE-v1"
 - TypeScript matches the canonical protobuf action payload, rejects unknown/duplicate/non-canonical and invalid semantic fields, round-trips `action.result`, and round-trips a generated authenticated action envelope without exposing notification ID or reply bytes in the frame.
 - Pending-operation tests cover persistence across reconstruction, concurrent registration, expected-sender binding, capacity exhaustion, identical result recovery, and conflicting terminal results.
 - The action-result receive path performs HPKE/replay validation before persistent reconciliation; a new envelope carrying the same authenticated result is idempotent.
-- Type checking, 33 Vitest tests, and production build pass.
+- Registration, credential reconstruction/replacement refusal, secure-origin validation, response bounds, `SNA1` codec, first-message ordering, and endpoint-change credential non-disclosure are covered.
+- Type checking, 43 Vitest tests, and production build pass.
 - Popup exposes a browser-runtime persistence test; repeated runs retain the same fingerprint.
 
 ## Browser runtime evidence
