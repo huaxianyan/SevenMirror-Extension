@@ -1,0 +1,56 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  max-width: 42rem;
+  margin: 3rem auto;
+  padding: 0 1.5rem;
+}
+
+.boundary {
+  line-height: 1.5;
+  padding: 0.9rem;
+  border: 1px solid currentColor;
+  border-radius: 0.5rem;
+}
+
+form {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+label {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 600;
+}
+
+input,
+button {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.7rem;
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+#registration-status {
+  min-height: 1.5rem;
+  line-height: 1.5;
+}

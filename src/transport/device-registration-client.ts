@@ -41,7 +41,7 @@ export async function registerChromeDevice(
 
   const response = await fetcher(`${serverOrigin}/v1/devices/register`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({
       pairing_code: request.pairingCode,
       device_type: 'chrome',

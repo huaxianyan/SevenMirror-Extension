@@ -24,7 +24,9 @@ info = "SyncNotifications-E2EE-v1"
 
 `src/protocol/encrypted-payload.ts` strictly validates canonical protobuf `action.invoke` and `action.result` payloads. `src/crypto/action-envelope-sender.ts` durably registers pending correlation before constructing a per-recipient encrypted frame. `src/crypto/indexeddb-pending-action-store.ts` retains the idempotency-key/expected-Android/canonical-operation-digest binding across Worker restarts, preventing accidental reuse of one key for different action semantics. `src/crypto/action-result-receiver.ts` authenticates and atomically reconciles returned results.
 
-`src/transport` now matches the Go `SNA1` vector, performs bounded strict code-gated registration without credentials or referrers, stores the raw WebSocket credential only in extension-origin IndexedDB, refuses silent replacement, and sends `SNA1` as the first binary message. HTTPS is mandatory outside loopback, redirect/endpoint changes fail closed before credential disclosure, and diagnostics expose only fixed content-free state events. Host access is optional and must be explicitly granted during future pairing UI.
+`src/transport` now matches the Go `SNA1`/`SNO1` vector, performs bounded strict code-gated registration without credentials or referrers, stores the raw WebSocket credential only in extension-origin IndexedDB, refuses silent replacement, and sends `SNA1` as the first binary message. It consumes and validates fixed `SNO1` within five seconds before emitting the content-free `authenticated` diagnostic, so socket-open/local-enqueue is never presented as server acceptance. HTTPS is mandatory outside loopback, redirect/endpoint changes fail closed before credential disclosure, and diagnostics expose only fixed content-free state events.
+
+The Options page now requests optional access only to the selected canonical server origin, creates/restores the non-extractable HPKE identity, consumes an administrator-issued code, and starts the Worker transport runtime after durable registration. Worker startup restores the credential only when its full SHA-256 identity key ID matches the existing HPKE public key; it never creates a replacement identity for partial state. The runtime reports `online` only after `SNO1`, clears its loaded raw token copy after constructing the first frame, and closes rather than silently dropping inbound encrypted frames until the E2EE dispatcher is connected.
 
 ## Evidence
 
@@ -41,7 +43,7 @@ info = "SyncNotifications-E2EE-v1"
 - Pending-operation tests cover persistence across reconstruction, concurrent registration, expected-sender binding, capacity exhaustion, identical result recovery, and conflicting terminal results.
 - The action-result receive path performs HPKE/replay validation before persistent reconciliation; a new envelope carrying the same authenticated result is idempotent.
 - Registration, credential reconstruction/replacement refusal, secure-origin validation, response bounds, `SNA1` codec, first-message ordering, and endpoint-change credential non-disclosure are covered.
-- Type checking, 43 Vitest tests, and production build pass.
+- Type checking, 48 Vitest tests, and production build pass.
 - Popup exposes a browser-runtime persistence test; repeated runs retain the same fingerprint.
 
 ## Browser runtime evidence

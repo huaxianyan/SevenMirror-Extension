@@ -4,7 +4,7 @@ Manifest V3 extension for private, end-to-end encrypted Android notification mir
 
 Repository: <https://github.com/huaxianyan/SyncNotifications-Extension>
 
-> Status: cryptographic, replay, pending-operation, strict registration, credential persistence, and authenticated WebSocket transport cores are implemented but not wired to production pairing UI or notification synchronization.
+> Status: cryptographic, replay, pending-operation, code-gated registration UI, credential persistence, and authenticated WebSocket lifecycle are implemented. Trusted-device approval and notification synchronization remain disabled.
 
 ## Requirements
 
@@ -24,13 +24,14 @@ Load `dist/` as an unpacked extension from `chrome://extensions` after building.
 
 ## Current functionality
 
-- MV3 service worker, Popup, and Options scaffolds
+- MV3 service worker, Popup, and a code-gated registration Options page
 - Authenticated HPKE identity with non-extractable WebCrypto private key persistence
 - Persistent replay and pending-action reconciliation ledgers
 - Canonical encrypted action sender/result receiver
 - Strict code-gated registration client and extension-origin-only transport credential store
-- Device Auth Frame v1 and first-message authenticated WebSocket boundary
-- Optional host permissions for explicit future pairing grants
+- Device Auth Frame v1, mandatory `SNO1` server confirmation, and bounded authentication acknowledgement timeout
+- Explicit optional-host permission grant during registration
+- Worker-start connection restoration with HPKE identity/transport credential binding verification
 - Provisional vendored protocol assets with SHA-256 verification
 
 ## Protocol
@@ -47,7 +48,9 @@ The current `0.1.0-dev` schema is unreleased and provisional.
 
 The transport core accepts only HTTPS origins outside loopback, never puts credentials in URLs or `chrome.storage.sync`, rejects silent credential replacement, and refuses to send the first authentication frame if the WebSocket endpoint changes. The bearer credential must remain available as bytes for the browser WebSocket API, so extension-origin IndexedDB and a minimal in-memory lifetime are the practical Chrome boundary; the HPKE private identity remains non-extractable.
 
-Pairing UI, explicit optional-host permission requests, trusted-device E2EE approval, credential revocation/rotation, reconnect/offline convergence, and independent security review are still missing. No real notification content may use this transport yet.
+The Options page can consume an administrator-issued Chrome pairing code, request only the selected server's optional host access, persist the returned credential, and start a connection. `online` is reported only after `SNO1`; a socket open or local `SNA1` enqueue is not sufficient. Missing/replaced HPKE identity state fails closed, and inbound encrypted frames currently close the connection because the E2EE dispatcher is intentionally not wired yet.
+
+Trusted-device E2EE approval, server-side revoke/credential rotation, bounded reconnect/backoff, offline convergence, and independent security review are still missing. No real notification content may use this transport yet.
 
 ## License
 

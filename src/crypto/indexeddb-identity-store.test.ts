@@ -15,11 +15,13 @@ describe('IndexedDbIdentityStore', () => {
     const senderStore = new IndexedDbIdentityStore(`sender-${suffix}`);
     const recipientStore = new IndexedDbIdentityStore(`recipient-${suffix}`);
 
+    expect(await senderStore.loadExisting()).toBeUndefined();
     const sender = await senderStore.loadOrCreate();
     const senderReloaded = await senderStore.loadOrCreate();
     const recipient = await recipientStore.loadOrCreate();
     const recipientReloaded = await recipientStore.loadOrCreate();
 
+    expect(await senderStore.loadExisting()).toBeDefined();
     expect(sender.privateKey.extractable).toBe(false);
     expect(recipient.privateKey.extractable).toBe(false);
     expect(await serializeIdentityPublicKey(senderReloaded)).toEqual(

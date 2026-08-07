@@ -7,10 +7,20 @@ import {
 } from './lifecycle-spike';
 import { DEFAULT_CONNECTION_STATE } from '../shared/status';
 import { runE2eePersistenceSpike } from './e2ee-spike';
+import { IndexedDbIdentityStore } from '../crypto/indexeddb-identity-store';
+import { IndexedDbTransportCredentialStore } from '../transport/indexeddb-transport-credential-store';
+import { TransportRuntime } from '../transport/transport-runtime';
 
 const CONNECTION_STATE_KEY = 'connectionState';
+const transportRuntime = new TransportRuntime(
+  new IndexedDbTransportCredentialStore(),
+  new IndexedDbIdentityStore(),
+  async (state) => chrome.storage.local.set({ [CONNECTION_STATE_KEY]: state }),
+  undefined, // Fail closed on inbound envelopes until the E2EE dispatcher is wired.
+);
 
 void recordWorkerStart();
+void transportRuntime.connect().catch(() => undefined);
 
 chrome.runtime.onInstalled.addListener(async () => {
   const stored = await chrome.storage.local.get(CONNECTION_STATE_KEY);
@@ -51,6 +61,13 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
       void clearLifecycleTestNotification().then((cleared) => {
         sendResponse({ cleared });
       });
+      return true;
+
+    case 'transport-connect':
+      void transportRuntime.connect().then(
+        () => sendResponse({ started: true }),
+        () => sendResponse({ started: false }),
+      );
       return true;
 
     case 'run-e2ee-persistence-test':

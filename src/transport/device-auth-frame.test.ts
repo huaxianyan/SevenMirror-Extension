@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   decodeDeviceAuthFrameV1,
   encodeDeviceAuthFrameV1,
+  encodeTransportAuthenticationSuccessV1,
+  isTransportAuthenticationSuccessV1,
 } from './device-auth-frame';
 
 interface Vector {
@@ -10,6 +12,7 @@ interface Vector {
   deviceId: string;
   authToken: string;
   frameHex: string;
+  successAckHex: string;
 }
 
 const vector = JSON.parse(readFileSync(
@@ -25,6 +28,8 @@ describe('Device Auth Frame v1', () => {
       authToken: fromHex(vector.authToken),
     });
     expect(toHex(encoded)).toBe(vector.frameHex);
+    expect(toHex(encodeTransportAuthenticationSuccessV1())).toBe(vector.successAckHex);
+    expect(isTransportAuthenticationSuccessV1(fromHex(vector.successAckHex))).toBe(true);
     expect(decodeDeviceAuthFrameV1(encoded)).toEqual({
       workspaceId: fromHex(vector.workspaceId),
       deviceId: fromHex(vector.deviceId),

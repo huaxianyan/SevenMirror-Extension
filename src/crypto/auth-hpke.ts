@@ -55,6 +55,11 @@ export async function serializeIdentityPublicKey(identity: HpkeIdentity): Promis
   return new Uint8Array(await suite.kem.serializePublicKey(identity.publicKey));
 }
 
+export async function deriveIdentityKeyId(publicKey: Uint8Array): Promise<Uint8Array> {
+  const digestInput = Uint8Array.from(publicKey).buffer;
+  return new Uint8Array(await crypto.subtle.digest('SHA-256', digestInput));
+}
+
 export async function sealAuthenticated(
   recipientPublicKey: Uint8Array,
   sender: SerializedHpkeKeyPair,

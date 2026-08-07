@@ -2,6 +2,21 @@ export const DEVICE_AUTH_FRAME_SIZE = 68;
 export const DEVICE_AUTH_TOKEN_SIZE = 32;
 const ID_SIZE = 16;
 const MAGIC = Uint8Array.of(0x53, 0x4e, 0x41, 0x31); // SNA1
+const SUCCESS_ACK = Uint8Array.of(0x53, 0x4e, 0x4f, 0x31); // SNO1
+
+export function encodeTransportAuthenticationSuccessV1(): Uint8Array {
+  return SUCCESS_ACK.slice();
+}
+
+export function isTransportAuthenticationSuccessV1(value: unknown): boolean {
+  const bytes = value instanceof ArrayBuffer
+    ? new Uint8Array(value)
+    : ArrayBuffer.isView(value)
+      ? new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
+      : undefined;
+  return bytes?.byteLength === SUCCESS_ACK.byteLength &&
+    SUCCESS_ACK.every((byte, index) => bytes[index] === byte);
+}
 
 export interface DeviceTransportCredential {
   workspaceId: Uint8Array;

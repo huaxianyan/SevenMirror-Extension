@@ -27,7 +27,16 @@ violation response. The server does not disclose whether the workspace,
 device, or credential was wrong. It clears its temporary token buffer after
 the authentication attempt.
 
-After successful authentication, every subsequent client data message MUST be
+After successful authentication and relay registration, the server MUST send
+exactly one 4-byte WebSocket binary acknowledgement with ASCII magic/version
+`SNO1`. It MUST be the first server data message. Clients MUST receive it within
+five seconds after sending `SNA1` or close the connection. The client MUST NOT report the
+transport as authenticated or send application frames before validating this
+acknowledgement. Any text, malformed, duplicate, or out-of-order acknowledgement
+fails closed. Authentication failures continue to return only the generic close
+response and MUST NOT send `SNO1`.
+
+After `SNO1`, every subsequent client data message and server delivery MUST be
 one bounded Encrypted Envelope v1 binary frame. The authenticated workspace and
 device are bound to the clear Routing Header before ciphertext routing.
 

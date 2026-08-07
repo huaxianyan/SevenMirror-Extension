@@ -4,11 +4,35 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Notification Mirroring Settings</title>
+    <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
     <main>
-      <h1>Notification Mirroring Settings</h1>
-      <p>Private server pairing will be implemented after the E2EE ADR is accepted.</p>
+      <h1>Notification Mirroring</h1>
+      <p class="boundary">
+        Registration grants access to a private instance. It does not trust other devices for E2EE.
+        Real notification synchronization remains disabled until device approval is implemented.
+      </p>
+      <form id="registration-form" autocomplete="off">
+        <label>
+          Server origin
+          <input id="server-origin" name="server-origin" type="url"
+                 placeholder="https://notify.example" required spellcheck="false" />
+        </label>
+        <label>
+          One-time pairing code
+          <input id="pairing-code" name="pairing-code" type="password"
+                 minlength="32" maxlength="32" required autocomplete="new-password" />
+        </label>
+        <label>
+          Device name
+          <input id="device-name" name="device-name" type="text"
+                 value="Chrome" maxlength="100" required />
+        </label>
+        <button id="register" type="submit">Register this Chrome profile</button>
+      </form>
+      <p id="registration-status" role="status" aria-live="polite">Checking registration state…</p>
     </main>
+    <script type="module" src="./main.ts"></script>
   </body>
 </html>

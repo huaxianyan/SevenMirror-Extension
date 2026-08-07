@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { StoredTransportCredential } from './indexeddb-transport-credential-store';
 import { openAuthenticatedWebSocket } from './authenticated-websocket';
+import { encodeTransportAuthenticationSuccessV1 } from './device-auth-frame';
 
 class FakeSocket extends EventTarget {
   binaryType: BinaryType = 'blob';
@@ -42,6 +43,48 @@ describe('authenticated WebSocket', () => {
     expect(new TextDecoder().decode(fake.sent[0]?.slice(0, 4))).toBe('SNA1');
     expect(fake.sent[0]?.slice(36)).toEqual(credential.authToken);
     expect(events).toEqual(['socket-open', 'auth-frame-sent']);
+
+    let acknowledgementReachedApplication = false;
+    fake.addEventListener('message', () => { acknowledgementReachedApplication = true; });
+    fake.dispatchEvent(new MessageEvent('message', {
+      data: encodeTransportAuthenticationSuccessV1().buffer,
+    }));
+    expect(events).toEqual(['socket-open', 'auth-frame-sent', 'authenticated']);
+    expect(acknowledgementReachedApplication).toBe(false);
+  });
+
+  it('rejects a malformed authentication acknowledgement', () => {
+    const fake = new FakeSocket();
+    const events: string[] = [];
+    openAuthenticatedWebSocket(
+      credential,
+      (event) => events.push(event),
+      () => fake as unknown as WebSocket,
+    );
+    fake.dispatchEvent(new Event('open'));
+    fake.dispatchEvent(new MessageEvent('message', { data: Uint8Array.of(1, 2, 3, 4).buffer }));
+
+    expect(fake.closed).toBe(true);
+    expect(events).toEqual(['socket-open', 'auth-frame-sent', 'socket-error']);
+  });
+
+  it('closes when SNO1 is not received within five seconds', () => {
+    vi.useFakeTimers();
+    try {
+      const fake = new FakeSocket();
+      const events: string[] = [];
+      openAuthenticatedWebSocket(
+        credential,
+        (event) => events.push(event),
+        () => fake as unknown as WebSocket,
+      );
+      fake.dispatchEvent(new Event('open'));
+      vi.advanceTimersByTime(5_000);
+      expect(fake.closed).toBe(true);
+      expect(events).toEqual(['socket-open', 'auth-frame-sent', 'socket-error']);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('does not disclose the credential after an endpoint change', () => {
