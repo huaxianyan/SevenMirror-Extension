@@ -28,6 +28,8 @@ info = "SyncNotifications-E2EE-v1"
 
 The Options page now requests optional access only to the selected canonical server origin, creates/restores the non-extractable HPKE identity, consumes an administrator-issued code, and starts the Worker transport runtime after durable registration. Worker startup restores the credential only when its full SHA-256 identity key ID matches the existing HPKE public key; it never creates a replacement identity for partial state. The runtime reports `online` only after `SNO1`, clears its loaded raw token copy after constructing the first frame, and closes rather than silently dropping inbound encrypted frames until the E2EE dispatcher is connected.
 
+Network/socket termination now schedules one jittered exponential reconnect sequence bounded from 1 to 60 seconds. Duplicate `error`/`close` events for a connection generation cannot create duplicate retries, successful `SNO1` authentication resets the sequence, explicit lifecycle requests cancel stale timers, and persistent identity-binding failures do not retry. The production Worker backs the scheduler with a named `chrome.alarms` one-shot so a pending retry can wake an MV3 Worker after suspension; generation checks make an obsolete in-memory callback harmless.
+
 ## Evidence
 
 - Chrome opens the Android-produced fixture.

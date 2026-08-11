@@ -4,7 +4,7 @@
   "description": "Private end-to-end encrypted Android notification mirroring.",
   "version": "0.1.0",
   "minimum_chrome_version": "116",
-  "permissions": ["notifications", "storage"],
+  "permissions": ["alarms", "notifications", "storage"],
   "host_permissions": [],
   "optional_host_permissions": [
     "https://*/*",

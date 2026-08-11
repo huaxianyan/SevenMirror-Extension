@@ -72,6 +72,134 @@ describe('TransportRuntime', () => {
     expect(states).toEqual(['offline']);
   });
 
+  it('reconnects once for duplicate terminal events and resets backoff after authentication', async () => {
+    const identity = await generateNonExtractableIdentity();
+    const credential = await credentialFor(identity);
+    const states: ConnectionState[] = [];
+    const sockets: FakeSocket[] = [];
+    const observers: Array<(event: TransportDiagnosticEvent) => void> = [];
+    const scheduler = new FakeScheduler();
+    const runtime = new TransportRuntime(
+      { load: async () => copyCredential(credential) },
+      { loadExisting: async () => identity },
+      async (state) => { states.push(state); },
+      undefined,
+      (_loaded, observe) => {
+        const socket = new FakeSocket();
+        sockets.push(socket);
+        observers.push(observe);
+        return socket as unknown as WebSocket;
+      },
+      scheduler.options(),
+    );
+
+    await runtime.connect();
+    observers[0]?.('socket-error');
+    observers[0]?.('socket-closed');
+    await flushPromises();
+    expect(states).toEqual(['connecting', 'offline']);
+    expect(scheduler.activeDelays()).toEqual([1_000]);
+
+    scheduler.runNext();
+    await waitFor(() => sockets.length === 2);
+    expect(states).toEqual(['connecting', 'offline', 'connecting']);
+    observers[1]?.('authenticated');
+    await flushPromises();
+    observers[1]?.('socket-closed');
+    await flushPromises();
+    expect(states.at(-2)).toBe('online');
+    expect(states.at(-1)).toBe('offline');
+    expect(scheduler.activeDelays()).toEqual([1_000]);
+  });
+
+  it('accepts a durable scheduler wake and ignores its stale in-memory callback', async () => {
+    const identity = await generateNonExtractableIdentity();
+    const credential = await credentialFor(identity);
+    const scheduler = new FakeScheduler();
+    const observers: Array<(event: TransportDiagnosticEvent) => void> = [];
+    let sockets = 0;
+    const runtime = new TransportRuntime(
+      { load: async () => copyCredential(credential) },
+      { loadExisting: async () => identity },
+      async () => undefined,
+      undefined,
+      (_loaded, observe) => {
+        sockets += 1;
+        observers.push(observe);
+        return new FakeSocket() as unknown as WebSocket;
+      },
+      scheduler.options(),
+    );
+
+    await runtime.connect();
+    observers[0]?.('socket-closed');
+    await flushPromises();
+    expect(scheduler.activeDelays()).toEqual([1_000]);
+
+    await runtime.retryScheduledConnection();
+    expect(sockets).toBe(2);
+    scheduler.runNext();
+    await flushPromises();
+    expect(sockets).toBe(2);
+  });
+
+  it('bounds exponential retries and cancels them on explicit disconnect', async () => {
+    const identity = await generateNonExtractableIdentity();
+    const credential = await credentialFor(identity);
+    const scheduler = new FakeScheduler();
+    let attempts = 0;
+    const runtime = new TransportRuntime(
+      { load: async () => copyCredential(credential) },
+      { loadExisting: async () => identity },
+      async () => undefined,
+      undefined,
+      () => {
+        attempts += 1;
+        throw new Error('synthetic network failure');
+      },
+      scheduler.options({ maximumDelayMs: 2_500 }),
+    );
+
+    await expect(runtime.connect()).rejects.toThrow('synthetic network failure');
+    expect(attempts).toBe(1);
+    expect(scheduler.activeDelays()).toEqual([1_000]);
+
+    scheduler.runNext();
+    await waitFor(() => attempts === 2);
+    expect(scheduler.activeDelays()).toEqual([2_000]);
+    scheduler.runNext();
+    await waitFor(() => attempts === 3);
+    expect(scheduler.activeDelays()).toEqual([2_500]);
+
+    await runtime.disconnect();
+    expect(scheduler.activeDelays()).toEqual([]);
+    scheduler.runAll();
+    await flushPromises();
+    expect(attempts).toBe(3);
+  });
+
+  it('does not retry a persistent identity security failure', async () => {
+    const credential: StoredTransportCredential = {
+      serverOrigin: 'https://notify.example',
+      workspaceId: new Uint8Array(16).fill(1),
+      deviceId: new Uint8Array(16).fill(2),
+      authToken: new Uint8Array(32).fill(3),
+      identityKeyId: new Uint8Array(32).fill(4),
+    };
+    const scheduler = new FakeScheduler();
+    const runtime = new TransportRuntime(
+      { load: async () => copyCredential(credential) },
+      { loadExisting: async () => undefined },
+      async () => undefined,
+      undefined,
+      () => { throw new Error('must not open'); },
+      scheduler.options(),
+    );
+
+    await expect(runtime.connect()).rejects.toThrow('without its bound E2EE identity');
+    expect(scheduler.activeDelays()).toEqual([]);
+  });
+
   it('reports not configured without opening a socket', async () => {
     const states: ConnectionState[] = [];
     const runtime = new TransportRuntime(
@@ -95,6 +223,61 @@ async function credentialFor(identity: HpkeIdentity): Promise<StoredTransportCre
     authToken: new Uint8Array(32).fill(3),
     identityKeyId: await deriveIdentityKeyId(publicKey),
   };
+}
+
+class FakeScheduler {
+  private tasks: Array<{ callback: () => void; delay: number; cancelled: boolean }> = [];
+
+  options(overrides: { maximumDelayMs?: number } = {}) {
+    return {
+      initialDelayMs: 1_000,
+      maximumDelayMs: overrides.maximumDelayMs ?? 60_000,
+      multiplier: 2,
+      jitterRatio: 0,
+      random: () => 0.5,
+      setTimer: (callback: () => void, delay: number) => {
+        this.tasks.push({ callback, delay, cancelled: false });
+        return (this.tasks.length - 1) as unknown as ReturnType<typeof setTimeout>;
+      },
+      clearTimer: (handle: ReturnType<typeof setTimeout>) => {
+        const task = this.tasks[handle as unknown as number];
+        if (task !== undefined) task.cancelled = true;
+      },
+    };
+  }
+
+  activeDelays(): number[] {
+    return this.tasks.filter((task) => !task.cancelled).map((task) => task.delay);
+  }
+
+  runNext(): void {
+    const task = this.tasks.find((candidate) => !candidate.cancelled);
+    if (task === undefined) throw new Error('No active scheduled task');
+    task.cancelled = true;
+    task.callback();
+  }
+
+  runAll(): void {
+    for (const task of this.tasks) {
+      if (!task.cancelled) {
+        task.cancelled = true;
+        task.callback();
+      }
+    }
+  }
+}
+
+async function flushPromises(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  throw new Error('Condition was not reached');
 }
 
 function copyCredential(value: StoredTransportCredential): StoredTransportCredential {

@@ -50,7 +50,9 @@ The transport core accepts only HTTPS origins outside loopback, never puts crede
 
 The Options page can consume an administrator-issued Chrome pairing code, request only the selected server's optional host access, persist the returned credential, and start a connection. `online` is reported only after `SNO1`; a socket open or local `SNA1` enqueue is not sufficient. Missing/replaced HPKE identity state fails closed, and inbound encrypted frames currently close the connection because the E2EE dispatcher is intentionally not wired yet.
 
-Trusted-device E2EE approval, server-side revoke/credential rotation, bounded reconnect/backoff, offline convergence, and independent security review are still missing. No real notification content may use this transport yet.
+The Worker retries network/socket failures with jittered exponential backoff from 1 second up to 60 seconds. A single connection generation suppresses duplicate error/close retries, successful `SNO1` authentication resets the sequence, explicit connect/disconnect cancels pending work, and `chrome.alarms` preserves scheduled wakeups across MV3 Worker suspension. Persistent local identity failures are never retried as network failures.
+
+Trusted-device E2EE approval, server-side revoke/credential rotation, inbound E2EE dispatch, offline convergence, and independent security review are still missing. No real notification content may use this transport yet.
 
 ## License
 

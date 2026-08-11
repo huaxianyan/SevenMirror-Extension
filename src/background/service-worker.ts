@@ -12,11 +12,25 @@ import { IndexedDbTransportCredentialStore } from '../transport/indexeddb-transp
 import { TransportRuntime } from '../transport/transport-runtime';
 
 const CONNECTION_STATE_KEY = 'connectionState';
+const TRANSPORT_RECONNECT_ALARM = 'transport-reconnect-v1';
 const transportRuntime = new TransportRuntime(
   new IndexedDbTransportCredentialStore(),
   new IndexedDbIdentityStore(),
   async (state) => chrome.storage.local.set({ [CONNECTION_STATE_KEY]: state }),
   undefined, // Fail closed on inbound envelopes until the E2EE dispatcher is wired.
+  undefined,
+  {
+    // Alarms survive MV3 worker suspension; worker startup remains an immediate recovery path.
+    setTimer: (_callback, delayMs) => {
+      void chrome.alarms.create(TRANSPORT_RECONNECT_ALARM, {
+        when: Date.now() + Math.max(1_000, delayMs),
+      });
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    },
+    clearTimer: () => {
+      void chrome.alarms.clear(TRANSPORT_RECONNECT_ALARM);
+    },
+  },
 );
 
 void recordWorkerStart();
@@ -26,6 +40,12 @@ chrome.runtime.onInstalled.addListener(async () => {
   const stored = await chrome.storage.local.get(CONNECTION_STATE_KEY);
   if (stored[CONNECTION_STATE_KEY] === undefined) {
     await chrome.storage.local.set({ [CONNECTION_STATE_KEY]: DEFAULT_CONNECTION_STATE });
+  }
+});
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === TRANSPORT_RECONNECT_ALARM) {
+    void transportRuntime.retryScheduledConnection().catch(() => undefined);
   }
 });
 
