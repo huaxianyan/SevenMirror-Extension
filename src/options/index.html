@@ -11,7 +11,7 @@
       <h1>Notification Mirroring</h1>
       <p class="boundary">
         Registration grants access to a private instance. It does not trust other devices for E2EE.
-        Real notification synchronization remains disabled until device approval is implemented.
+        Real notification synchronization remains disabled until trusted-device approval and relay validation are complete.
       </p>
       <form id="registration-form" autocomplete="off">
         <label>
@@ -32,6 +32,41 @@
         <button id="register" type="submit">Register this Chrome profile</button>
       </form>
       <p id="registration-status" role="status" aria-live="polite">Checking registration state…</p>
+
+      <section id="trust-pairing" hidden>
+        <h2>Trusted E2EE device</h2>
+        <p class="boundary">
+          Synthetic testing only. Exchange the QR payload out of band and compare the complete
+          safety code on both devices. Importing a payload alone never approves a peer.
+        </p>
+        <div id="pairing-actions">
+          <button id="create-trust-offer" type="button">Create trust offer</button>
+          <label>
+            Scanned or copied QR payload
+            <textarea id="trust-payload-input" rows="5" maxlength="512"
+                      placeholder="sntrust1:…" spellcheck="false"></textarea>
+          </label>
+          <button id="import-trust-payload" type="button">Import pairing payload</button>
+        </div>
+        <div id="pairing-output" hidden>
+          <label>
+            Payload to transfer to the other device
+            <textarea id="trust-payload-output" rows="5" readonly spellcheck="false"></textarea>
+          </label>
+          <button id="copy-trust-payload" type="button">Copy payload</button>
+        </div>
+        <div id="safety-confirmation" hidden>
+          <p>Safety code</p>
+          <output id="trust-safety-code"></output>
+          <label class="confirmation">
+            <input id="trust-code-confirmed" type="checkbox" />
+            I compared the complete code on both devices and it matches
+          </label>
+          <button id="approve-trust-peer" type="button" disabled>Approve this peer</button>
+        </div>
+        <button id="cancel-trust-pairing" type="button" hidden>Reject and cancel pairing</button>
+        <p id="trust-pairing-status" role="status" aria-live="polite"></p>
+      </section>
     </main>
     <script type="module" src="./main.ts"></script>
   </body>

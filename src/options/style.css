@@ -33,6 +33,7 @@ label {
 }
 
 input,
+textarea,
 button {
   box-sizing: border-box;
   width: 100%;
@@ -50,7 +51,46 @@ button:disabled {
   opacity: 0.65;
 }
 
-#registration-status {
+section {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid currentColor;
+}
+
+#pairing-actions,
+#pairing-output,
+#safety-confirmation {
+  display: grid;
+  gap: 0.8rem;
+  margin-top: 1rem;
+}
+
+#trust-safety-code {
+  display: block;
+  padding: 0.8rem;
+  border: 2px solid currentColor;
+  border-radius: 0.5rem;
+  font: 700 1.5rem ui-monospace, monospace;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
+.confirmation {
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  font-weight: 500;
+}
+
+.confirmation input {
+  width: auto;
+}
+
+#cancel-trust-pairing {
+  margin-top: 1rem;
+}
+
+#registration-status,
+#trust-pairing-status {
   min-height: 1.5rem;
   line-height: 1.5;
 }
