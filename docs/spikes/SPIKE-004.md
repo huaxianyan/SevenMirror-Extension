@@ -89,6 +89,18 @@ to `16` while the authenticated connection recovered and stayed `Online`.
 This is manual observation evidence, separate from the 48 automated tests; no
 real notification content was transmitted.
 
+Bounded reconnect validation completed on 2026-08-11 with the latest unpacked
+production build, the same dedicated loopback registry, and no business frames.
+The user observed the restored connection reach `Online`, then observed
+`Offline` after the server stopped. The server remained unavailable for an
+additional measured 35 seconds to cover MV3 Worker suspension before becoming
+ready again. Without clicking connect/retry, reloading the extension, or opening
+Options, the user then observed automatic recovery to `Online` within the
+60-second maximum backoff window. This manual UI conclusion is recorded
+separately from the 57 automated tests covering generation deduplication,
+bounded delay, alarm wake handling, approved sender dispatch, replay, and
+pending-result reconciliation.
+
 Vendored vectors:
 
 ```text
@@ -102,4 +114,4 @@ The authoritative copy and ADR-002 live in the server repository.
 
 ## Safety boundary
 
-`SerializedHpkeKeyPair`, fixed IKM, and deterministic `ekm` are spike/test facilities. Production code now uses a non-extractable WebCrypto identity key plus persistent replay and pending-operation stores in separate IndexedDB databases. The Popup runtime test records a fixed authenticated tuple once and must report `duplicate` after Worker/browser restart. A transport timeout leaves an operation pending; only Android's authenticated `OUTCOME_UNKNOWN` result marks the side effect as uncertain, and neither state permits automatic execution under a new idempotency key. Real notification payloads must not use this spike until the result sender/receiver are connected to an authenticated production WebSocket endpoint, pairing/rotation/revocation are complete, and the design passes security review.
+`SerializedHpkeKeyPair`, fixed IKM, and deterministic `ekm` are spike/test facilities. Production code now uses a non-extractable WebCrypto identity key plus persistent replay, trusted-peer-pin, and pending-operation stores in separate IndexedDB databases. The Popup runtime test records a fixed authenticated tuple once and must report `duplicate` after Worker/browser restart. A transport timeout leaves an operation pending; only Android's authenticated `OUTCOME_UNKNOWN` result marks the side effect as uncertain, and neither state permits automatic execution under a new idempotency key. Real notification payloads must not use this spike until approved-device provisioning exists, Chrome `action.invoke` and Android `action.result` are wired to authenticated WebSockets with retry, pairing/rotation/revocation are complete, and the design passes security review.
