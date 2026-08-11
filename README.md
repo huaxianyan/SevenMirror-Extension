@@ -48,11 +48,13 @@ The current `0.1.0-dev` schema is unreleased and provisional.
 
 The transport core accepts only HTTPS origins outside loopback, never puts credentials in URLs or `chrome.storage.sync`, rejects silent credential replacement, and refuses to send the first authentication frame if the WebSocket endpoint changes. The bearer credential must remain available as bytes for the browser WebSocket API, so extension-origin IndexedDB and a minimal in-memory lifetime are the practical Chrome boundary; the HPKE private identity remains non-extractable.
 
-The Options page can consume an administrator-issued Chrome pairing code, request only the selected server's optional host access, persist the returned credential, and start a connection. `online` is reported only after `SNO1`; a socket open or local `SNA1` enqueue is not sufficient. Missing/replaced HPKE identity state fails closed, and inbound encrypted frames currently close the connection because the E2EE dispatcher is intentionally not wired yet.
+The Options page can consume an administrator-issued Chrome pairing code, request only the selected server's optional host access, persist the returned credential, and start a connection. `online` is reported only after `SNO1`; a socket open or local `SNA1` enqueue is not sufficient. Missing/replaced HPKE identity state fails closed.
+
+Authenticated inbound binary frames now enter a serialized `action.result` dispatcher. It strictly decodes `SNE1`, checks the credential workspace/recipient route, resolves the exact sender device/key ID only from a local immutable approved-peer pin, performs Auth HPKE opening, consumes the persistent replay tuple, validates canonical payload bytes, and reconciles the pending action atomically. Unapproved senders and every decoding/authentication/reconciliation failure close the socket without logging payload or identity data. No approval UI exists yet, so server directory data can never populate the pin store implicitly.
 
 The Worker retries network/socket failures with jittered exponential backoff from 1 second up to 60 seconds. A single connection generation suppresses duplicate error/close retries, successful `SNO1` authentication resets the sequence, explicit connect/disconnect cancels pending work, and `chrome.alarms` preserves scheduled wakeups across MV3 Worker suspension. Persistent local identity failures are never retried as network failures.
 
-Trusted-device E2EE approval, server-side revoke/credential rotation, inbound E2EE dispatch, offline convergence, and independent security review are still missing. No real notification content may use this transport yet.
+Trusted-device E2EE approval UI/protocol, server-side revoke/credential rotation, outbound action/result WebSocket wiring, offline convergence, and independent security review are still missing. No real notification content may use this transport yet.
 
 ## License
 

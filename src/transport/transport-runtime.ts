@@ -69,7 +69,7 @@ export class TransportRuntime {
     private readonly credentialStore: CredentialStore,
     private readonly identityStore: IdentityStore,
     private readonly writeState: StateWriter,
-    private readonly onEnvelope: ((frame: ArrayBuffer) => void) | undefined,
+    private readonly onEnvelope: ((frame: ArrayBuffer) => Promise<void>) | undefined,
     private readonly openSocket: SocketOpener = openAuthenticatedWebSocket,
     reconnectOptions: TransportReconnectOptions = {},
   ) {
@@ -158,17 +158,29 @@ export class TransportRuntime {
       socket.close(1000, 'superseded connection');
       return;
     }
+    let acceptingFrames = true;
+    let inboundQueue = Promise.resolve();
     socket.addEventListener('message', (event) => {
-      if (generation !== this.generation) return;
+      if (generation !== this.generation || !acceptingFrames) return;
       if (!(event.data instanceof ArrayBuffer)) {
+        acceptingFrames = false;
         socket.close(1008, 'relay messages must be binary');
         return;
       }
       if (this.onEnvelope === undefined) {
+        acceptingFrames = false;
         socket.close(1008, 'encrypted envelope handler unavailable');
         return;
       }
-      this.onEnvelope(event.data.slice(0));
+      const frame = event.data.slice(0);
+      inboundQueue = inboundQueue.then(async () => {
+        if (generation !== this.generation || !acceptingFrames) return;
+        await this.onEnvelope?.(frame);
+      }).catch(() => {
+        if (generation !== this.generation) return;
+        acceptingFrames = false;
+        socket.close(1008, 'encrypted envelope rejected');
+      });
     });
     this.socket = socket;
   }

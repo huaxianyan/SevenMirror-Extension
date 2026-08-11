@@ -8,16 +8,29 @@ import {
 import { DEFAULT_CONNECTION_STATE } from '../shared/status';
 import { runE2eePersistenceSpike } from './e2ee-spike';
 import { IndexedDbIdentityStore } from '../crypto/indexeddb-identity-store';
+import { IndexedDbPendingActionStore } from '../crypto/indexeddb-pending-action-store';
+import { IndexedDbReplayLedger } from '../crypto/indexeddb-replay-ledger';
+import { IndexedDbTrustedPeerStore } from '../crypto/indexeddb-trusted-peer-store';
+import { ActionResultDispatcher } from '../crypto/action-result-dispatcher';
 import { IndexedDbTransportCredentialStore } from '../transport/indexeddb-transport-credential-store';
 import { TransportRuntime } from '../transport/transport-runtime';
 
 const CONNECTION_STATE_KEY = 'connectionState';
 const TRANSPORT_RECONNECT_ALARM = 'transport-reconnect-v1';
+const credentialStore = new IndexedDbTransportCredentialStore();
+const identityStore = new IndexedDbIdentityStore();
+const actionResultDispatcher = new ActionResultDispatcher(
+  credentialStore,
+  identityStore,
+  new IndexedDbTrustedPeerStore(),
+  new IndexedDbReplayLedger('action-results'),
+  new IndexedDbPendingActionStore(),
+);
 const transportRuntime = new TransportRuntime(
-  new IndexedDbTransportCredentialStore(),
-  new IndexedDbIdentityStore(),
+  credentialStore,
+  identityStore,
   async (state) => chrome.storage.local.set({ [CONNECTION_STATE_KEY]: state }),
-  undefined, // Fail closed on inbound envelopes until the E2EE dispatcher is wired.
+  async (frame) => { await actionResultDispatcher.receive(frame); },
   undefined,
   {
     // Alarms survive MV3 worker suspension; worker startup remains an immediate recovery path.

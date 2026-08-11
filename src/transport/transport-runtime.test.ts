@@ -12,7 +12,13 @@ import { TransportRuntime } from './transport-runtime';
 
 class FakeSocket extends EventTarget {
   closed = false;
-  close(): void { this.closed = true; }
+  closeCode?: number;
+  closeReason?: string;
+  close(code?: number, reason?: string): void {
+    this.closed = true;
+    this.closeCode = code;
+    this.closeReason = reason;
+  }
 }
 
 describe('TransportRuntime', () => {
@@ -198,6 +204,28 @@ describe('TransportRuntime', () => {
 
     await expect(runtime.connect()).rejects.toThrow('without its bound E2EE identity');
     expect(scheduler.activeDelays()).toEqual([]);
+  });
+
+  it('closes fail-closed when the asynchronous envelope dispatcher rejects a frame', async () => {
+    const identity = await generateNonExtractableIdentity();
+    const credential = await credentialFor(identity);
+    const socket = new FakeSocket();
+    let rejectFrame: ((error: Error) => void) | undefined;
+    const runtime = new TransportRuntime(
+      { load: async () => copyCredential(credential) },
+      { loadExisting: async () => identity },
+      async () => undefined,
+      async () => new Promise<void>((_resolve, reject) => { rejectFrame = reject; }),
+      () => socket as unknown as WebSocket,
+    );
+
+    await runtime.connect();
+    socket.dispatchEvent(new MessageEvent('message', { data: new ArrayBuffer(32) }));
+    await flushPromises();
+    rejectFrame?.(new Error('synthetic rejected envelope'));
+    await waitFor(() => socket.closed);
+    expect(socket.closeCode).toBe(1008);
+    expect(socket.closeReason).toBe('encrypted envelope rejected');
   });
 
   it('reports not configured without opening a socket', async () => {
