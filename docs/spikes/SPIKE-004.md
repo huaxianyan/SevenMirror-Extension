@@ -76,6 +76,15 @@ proves that the replay record was restored from IndexedDB rather than Worker
 memory. All three runs also reported a non-extractable private key and a
 successful HPKE round trip.
 
+Authenticated transport runtime validation completed on 2026-08-07 with the
+unpacked production build, the loopback test server, a dedicated SQLite test
+registry, and synthetic registration data only. The user explicitly concluded
+the test passed: registration reached `Online`, the Popup remained `Online`, and
+a full Chrome restart increased the persisted `Worker starts observed` counter
+to `16` while the authenticated connection recovered and stayed `Online`.
+This is manual observation evidence, separate from the 48 automated tests; no
+real notification content was transmitted.
+
 Vendored vectors:
 
 ```text
