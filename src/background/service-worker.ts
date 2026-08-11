@@ -123,7 +123,7 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
     case 'queue-action-invoke':
       void queueActionInvoke(message).then(
         (result) => sendResponse(result),
-        () => sendResponse({ accepted: false }),
+        () => sendResponse({ queued: false, accepted: false }),
       );
       return true;
 
@@ -158,6 +158,7 @@ async function drainActionInvokes(): Promise<void> {
 }
 
 async function queueActionInvoke(message: Record<string, unknown>): Promise<{
+  queued: boolean;
   accepted: boolean;
   idempotencyKey: string;
 }> {
@@ -197,10 +198,10 @@ async function queueActionInvoke(message: Record<string, unknown>): Promise<{
         when: Date.now() + Math.max(1_000, result.nextWakeDelayMs),
       });
     }
-    return { accepted: result.accepted, idempotencyKey: toHex(idempotencyKey) };
+    return { queued: true, accepted: result.accepted, idempotencyKey: toHex(idempotencyKey) };
   } catch {
     // Preserve the generated business key for callers even when persistence/send fails.
-    return { accepted: false, idempotencyKey: toHex(idempotencyKey) };
+    return { queued: false, accepted: false, idempotencyKey: toHex(idempotencyKey) };
   }
 }
 
