@@ -48,7 +48,7 @@ Network/socket termination now schedules one jittered exponential reconnect sequ
 - Action-invoke outbox tests prove persistence occurs before send, pre-`SNO1` transport send refusal, fresh persistent sequences for retries, exact idempotency-key recovery after reconstruction, runtime Auth HPKE opening by the pinned recipient identity, and pin removal preventing subsequent encryption.
 - The action-result receive path performs HPKE/replay validation before persistent reconciliation; a new envelope carrying the same authenticated result is idempotent.
 - Registration, credential reconstruction/replacement refusal, secure-origin validation, response bounds, `SNA1` codec, first-message ordering, and endpoint-change credential non-disclosure are covered.
-- Type checking, 61 Vitest tests across 21 files, protocol verification, and the production build pass.
+- Type checking, 61 Vitest tests across 21 files, protocol verification, and the production build pass. GitHub Actions run `31476979472` independently passes all four gates for commit `f1163b8`.
 - Popup exposes a browser-runtime persistence test; repeated runs retain the same fingerprint.
 
 ## Browser runtime evidence
