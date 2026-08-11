@@ -28,6 +28,8 @@ describe('action envelope sender', () => {
     const recipientPublicKey = await serializeIdentityPublicKey(recipient);
     const events: string[] = [];
     let registeredDigest: Uint8Array | undefined;
+    let registeredPayload: Uint8Array | undefined;
+    let registeredRecipientKey: Uint8Array | undefined;
     const frame = await prepareActionInvokeEnvelope({
       workspaceId: new Uint8Array(16).fill(1),
       senderDeviceId: new Uint8Array(16).fill(2),
@@ -44,14 +46,18 @@ describe('action envelope sender', () => {
       actionId: new Uint8Array(16).fill(0xa1),
       idempotencyKey: new Uint8Array(16).fill(0xb2),
     }, {
-      async register(_key, _device, operationDigest) {
+      async register(_key, _device, operationDigest, _created, _expires, payload, recipientKey) {
         events.push('registered');
         registeredDigest = operationDigest;
+        registeredPayload = payload;
+        registeredRecipientKey = recipientKey;
         return 'registered';
       },
     });
     expect(events).toEqual(['registered']);
     expect(registeredDigest).toHaveLength(32);
+    expect(registeredPayload).toBeInstanceOf(Uint8Array);
+    expect(registeredRecipientKey).toHaveLength(32);
     expect(frame.byteLength).toBeGreaterThan(0);
   });
 

@@ -8,6 +8,8 @@ import {
 import { DEFAULT_CONNECTION_STATE } from '../shared/status';
 import { runE2eePersistenceSpike } from './e2ee-spike';
 import { IndexedDbIdentityStore } from '../crypto/indexeddb-identity-store';
+import { ActionInvokeOutbox } from '../crypto/action-invoke-outbox';
+import { IndexedDbOutboundSequenceStore } from '../crypto/indexeddb-outbound-sequence-store';
 import { IndexedDbPendingActionStore } from '../crypto/indexeddb-pending-action-store';
 import { IndexedDbReplayLedger } from '../crypto/indexeddb-replay-ledger';
 import { IndexedDbTrustedPeerStore } from '../crypto/indexeddb-trusted-peer-store';
@@ -17,16 +19,28 @@ import { TransportRuntime } from '../transport/transport-runtime';
 
 const CONNECTION_STATE_KEY = 'connectionState';
 const TRANSPORT_RECONNECT_ALARM = 'transport-reconnect-v1';
+const ACTION_INVOKE_RETRY_ALARM = 'action-invoke-retry-v1';
 const credentialStore = new IndexedDbTransportCredentialStore();
 const identityStore = new IndexedDbIdentityStore();
+const trustedPeerStore = new IndexedDbTrustedPeerStore();
+const pendingActionStore = new IndexedDbPendingActionStore();
 const actionResultDispatcher = new ActionResultDispatcher(
   credentialStore,
   identityStore,
-  new IndexedDbTrustedPeerStore(),
+  trustedPeerStore,
   new IndexedDbReplayLedger('action-results'),
-  new IndexedDbPendingActionStore(),
+  pendingActionStore,
 );
-const transportRuntime = new TransportRuntime(
+let transportRuntime: TransportRuntime;
+const actionInvokeOutbox = new ActionInvokeOutbox(
+  credentialStore,
+  identityStore,
+  trustedPeerStore,
+  pendingActionStore,
+  new IndexedDbOutboundSequenceStore(),
+  (frame) => transportRuntime.sendEnvelope(frame),
+);
+transportRuntime = new TransportRuntime(
   credentialStore,
   identityStore,
   async (state) => chrome.storage.local.set({ [CONNECTION_STATE_KEY]: state }),
@@ -43,6 +57,7 @@ const transportRuntime = new TransportRuntime(
     clearTimer: () => {
       void chrome.alarms.clear(TRANSPORT_RECONNECT_ALARM);
     },
+    onAuthenticated: () => { void drainActionInvokes(); },
   },
 );
 
@@ -59,6 +74,8 @@ chrome.runtime.onInstalled.addListener(async () => {
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === TRANSPORT_RECONNECT_ALARM) {
     void transportRuntime.retryScheduledConnection().catch(() => undefined);
+  } else if (alarm.name === ACTION_INVOKE_RETRY_ALARM) {
+    void drainActionInvokes();
   }
 });
 
@@ -103,6 +120,13 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
       );
       return true;
 
+    case 'queue-action-invoke':
+      void queueActionInvoke(message).then(
+        (result) => sendResponse(result),
+        () => sendResponse({ accepted: false }),
+      );
+      return true;
+
     case 'run-e2ee-persistence-test':
       void runE2eePersistenceSpike().then(
         (result) => sendResponse({ result }),
@@ -117,7 +141,92 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
   }
 });
 
-function isMessage(value: unknown): value is { type: string } {
+async function drainActionInvokes(): Promise<void> {
+  try {
+    const result = await actionInvokeOutbox.drainDue();
+    const delayMs = result.nextWakeDelayMs ??
+      (result.attemptedEntries > result.acceptedSends ? 1_000 : undefined);
+    if (delayMs !== undefined) {
+      await chrome.alarms.create(ACTION_INVOKE_RETRY_ALARM, {
+        when: Date.now() + Math.max(1_000, delayMs),
+      });
+    }
+  } catch {
+    // Corrupt local delivery state or encryption failure is not a network outage.
+    await transportRuntime.failClosed();
+  }
+}
+
+async function queueActionInvoke(message: Record<string, unknown>): Promise<{
+  accepted: boolean;
+  idempotencyKey: string;
+}> {
+  const targetDeviceId = parseHex(message.targetDeviceId, 16, 'targetDeviceId');
+  const targetKeyId = parseHex(message.targetKeyId, 32, 'targetKeyId');
+  const actionId = parseHex(message.actionId, 16, 'actionId');
+  const idempotencyKey = message.idempotencyKey === undefined
+    ? randomIdentifier()
+    : parseHex(message.idempotencyKey, 16, 'idempotencyKey');
+  if (typeof message.notificationId !== 'string' || message.notificationId.length < 1 ||
+      new TextEncoder().encode(message.notificationId).byteLength > 512) {
+    throw new Error('notificationId is invalid');
+  }
+  if (typeof message.notificationRevision !== 'string' ||
+      !/^[1-9][0-9]*$/.test(message.notificationRevision)) {
+    throw new Error('notificationRevision is invalid');
+  }
+  const notificationRevision = BigInt(message.notificationRevision);
+  const replyText = message.replyText;
+  if (replyText !== undefined && (typeof replyText !== 'string' || replyText.length < 1 ||
+      new TextEncoder().encode(replyText).byteLength > 4_096)) {
+    throw new Error('replyText is invalid');
+  }
+  try {
+    const result = await actionInvokeOutbox.queueAndSend(
+      { deviceId: targetDeviceId, keyId: targetKeyId },
+      {
+        notificationId: message.notificationId,
+        notificationRevision,
+        actionId,
+        idempotencyKey,
+        ...(typeof replyText === 'string' ? { replyText } : {}),
+      },
+    );
+    if (result.nextWakeDelayMs !== undefined) {
+      await chrome.alarms.create(ACTION_INVOKE_RETRY_ALARM, {
+        when: Date.now() + Math.max(1_000, result.nextWakeDelayMs),
+      });
+    }
+    return { accepted: result.accepted, idempotencyKey: toHex(idempotencyKey) };
+  } catch {
+    // Preserve the generated business key for callers even when persistence/send fails.
+    return { accepted: false, idempotencyKey: toHex(idempotencyKey) };
+  }
+}
+
+function randomIdentifier(): Uint8Array {
+  const value = new Uint8Array(16);
+  do {
+    crypto.getRandomValues(value);
+  } while (value.every((byte) => byte === 0));
+  return value;
+}
+
+function parseHex(value: unknown, bytes: number, name: string): Uint8Array {
+  if (typeof value !== 'string' || value.length !== bytes * 2 || !/^[0-9a-f]+$/.test(value)) {
+    throw new Error(`${name} must be canonical lowercase hex`);
+  }
+  const result = Uint8Array.from({ length: bytes }, (_, index) =>
+    Number.parseInt(value.slice(index * 2, index * 2 + 2), 16));
+  if (result.every((byte) => byte === 0)) throw new Error(`${name} must not be zero`);
+  return result;
+}
+
+function toHex(value: Uint8Array): string {
+  return Array.from(value, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function isMessage(value: unknown): value is Record<string, unknown> & { type: string } {
   return typeof value === 'object' && value !== null && 'type' in value &&
     typeof value.type === 'string';
 }

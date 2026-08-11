@@ -6,6 +6,7 @@ import {
 import { encodeEncryptedEnvelopeV1 } from '../protocol/encrypted-envelope';
 import {
   createActionInvokePayload,
+  decodeEncryptedPayloadV1,
   encodeEncryptedPayloadV1,
 } from '../protocol/encrypted-payload';
 import { encodeRoutingHeaderV1 } from '../protocol/routing-header';
@@ -29,6 +30,8 @@ export interface PendingActionRegistrar {
     operationDigest: Uint8Array,
     createdAtUnixMs: number,
     expiresAtUnixMs: number,
+    canonicalInvokePayload?: Uint8Array,
+    recipientKeyId?: Uint8Array,
   ): Promise<'registered' | 'already-registered' | 'capacity-exceeded'>;
 }
 
@@ -58,11 +61,13 @@ export async function prepareActionInvokeEnvelope(
     await sha256(canonicalRequest),
     context.createdAtUnixMs,
     context.createdAtUnixMs + PENDING_ACTION_RETENTION_MS,
+    canonicalRequest,
+    await sha256(context.recipientPublicKey),
   );
   if (registration === 'capacity-exceeded') {
     throw new Error('Pending action capacity exceeded');
   }
-  return createActionInvokeEnvelope(context, request);
+  return createActionInvokeEnvelopeFromPayload(context, canonicalRequest);
 }
 
 /** Low-level codec helper; production callers should use prepareActionInvokeEnvelope. */
@@ -70,6 +75,16 @@ export async function createActionInvokeEnvelope(
   context: ActionEnvelopeContext,
   request: ActionInvokeRequest,
 ): Promise<Uint8Array> {
+  const canonicalPayload = encodeEncryptedPayloadV1(createActionInvokePayload(request));
+  return createActionInvokeEnvelopeFromPayload(context, canonicalPayload);
+}
+
+/** Encrypts an already persisted canonical action.invoke payload for a fresh delivery attempt. */
+export async function createActionInvokeEnvelopeFromPayload(
+  context: ActionEnvelopeContext,
+  canonicalPayload: Uint8Array,
+): Promise<Uint8Array> {
+  const decoded = createActionInvokePayloadFromCanonical(canonicalPayload);
   const senderPublicKey = await serializeIdentityPublicKey(context.senderIdentity);
   const routingHeader = encodeRoutingHeaderV1({
     workspaceId: context.workspaceId,
@@ -82,11 +97,10 @@ export async function createActionInvokeEnvelope(
     createdAtUnixMs: context.createdAtUnixMs,
     expiresAtUnixMs: context.expiresAtUnixMs,
   });
-  const plaintext = encodeEncryptedPayloadV1(createActionInvokePayload(request));
   const encrypted = await sealWithIdentity(
     context.recipientPublicKey,
     context.senderIdentity,
-    plaintext,
+    decoded,
     routingHeader,
   );
   return encodeEncryptedEnvelopeV1({
@@ -94,6 +108,35 @@ export async function createActionInvokeEnvelope(
     encapsulatedKey: encrypted.encapsulatedKey,
     ciphertext: encrypted.ciphertext,
   });
+}
+
+function createActionInvokePayloadFromCanonical(value: Uint8Array): Uint8Array {
+  const decoded = decodeEncryptedPayloadV1(value);
+  if (decoded.body.case !== 'actionInvoke') {
+    throw new Error('Expected canonical action.invoke payload');
+  }
+  const canonical = encodeEncryptedPayloadV1(decoded);
+  if (!bytesEqual(canonical, value)) {
+    throw new Error('Stored action.invoke payload is not canonical');
+  }
+  return canonical;
+}
+
+export async function actionInvokeOperationDigest(request: ActionInvokeRequest): Promise<{
+  canonicalPayload: Uint8Array;
+  digest: Uint8Array;
+}> {
+  const canonicalPayload = encodeEncryptedPayloadV1(createActionInvokePayload(request));
+  return { canonicalPayload, digest: await sha256(canonicalPayload) };
+}
+
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.byteLength !== right.byteLength) return false;
+  let difference = 0;
+  for (let index = 0; index < left.byteLength; index += 1) {
+    difference |= left[index]! ^ right[index]!;
+  }
+  return difference === 0;
 }
 
 async function sha256(value: Uint8Array): Promise<Uint8Array> {

@@ -4,7 +4,7 @@ Manifest V3 extension for private, end-to-end encrypted Android notification mir
 
 Repository: <https://github.com/huaxianyan/SyncNotifications-Extension>
 
-> Status: cryptographic, replay, pending-operation, code-gated registration UI, credential persistence, and authenticated WebSocket lifecycle are implemented. Trusted-device approval and notification synchronization remain disabled.
+> Status: cryptographic, replay, durable action invoke/result reconciliation, code-gated registration UI, credential persistence, and authenticated WebSocket lifecycle are implemented. Trusted-device approval and notification synchronization remain disabled.
 
 ## Requirements
 
@@ -26,8 +26,8 @@ Load `dist/` as an unpacked extension from `chrome://extensions` after building.
 
 - MV3 service worker, Popup, and a code-gated registration Options page
 - Authenticated HPKE identity with non-extractable WebCrypto private key persistence
-- Persistent replay and pending-action reconciliation ledgers
-- Canonical encrypted action sender/result receiver
+- Persistent replay, durable action-invoke delivery, and pending-result reconciliation ledgers
+- Canonical encrypted action sender/result receiver with persistent per-recipient sequence allocation
 - Strict code-gated registration client and extension-origin-only transport credential store
 - Device Auth Frame v1, mandatory `SNO1` server confirmation, and bounded authentication acknowledgement timeout
 - Explicit optional-host permission grant during registration
@@ -50,11 +50,13 @@ The transport core accepts only HTTPS origins outside loopback, never puts crede
 
 The Options page can consume an administrator-issued Chrome pairing code, request only the selected server's optional host access, persist the returned credential, and start a connection. `online` is reported only after `SNO1`; a socket open or local `SNA1` enqueue is not sufficient. Missing/replaced HPKE identity state fails closed.
 
-Authenticated inbound binary frames now enter a serialized `action.result` dispatcher. It strictly decodes `SNE1`, checks the credential workspace/recipient route, resolves the exact sender device/key ID only from a local immutable approved-peer pin, performs Auth HPKE opening, consumes the persistent replay tuple, validates canonical payload bytes, and reconciles the pending action atomically. Unapproved senders and every decoding/authentication/reconciliation failure close the socket without logging payload or identity data. No approval UI exists yet, so server directory data can never populate the pin store implicitly.
+Authenticated inbound binary frames enter a serialized `action.result` dispatcher. It strictly decodes `SNE1`, checks the credential workspace/recipient route, resolves the exact sender device/key ID only from a local immutable approved-peer pin, performs Auth HPKE opening, consumes the persistent replay tuple, validates canonical payload bytes, and reconciles the pending action atomically. Unapproved senders and every decoding/authentication/reconciliation failure close the socket without logging payload or identity data.
 
-The Worker retries network/socket failures with jittered exponential backoff from 1 second up to 60 seconds. A single connection generation suppresses duplicate error/close retries, successful `SNO1` authentication resets the sequence, explicit connect/disconnect cancels pending work, and `chrome.alarms` preserves scheduled wakeups across MV3 Worker suspension. Persistent local identity failures are never retried as network failures.
+Outbound `action.invoke` now persists the exact canonical invoke payload, Android device/key binding, operation digest, idempotency key, retry state, and per-recipient sequence before/around authenticated WebSocket delivery. Only a `SNO1`-authenticated connection generation can send. Fresh delivery attempts use new envelope message IDs/sequences but retain the same business idempotency key and exact operation bytes. Named `chrome.alarms` wake bounded 1/2/4/8-second retries across MV3 Worker suspension; a terminal authenticated result stops delivery, and removing the approved peer stops subsequent encryption. Local `WebSocket.send` acceptance is not treated as Android execution or result acknowledgement.
 
-Trusted-device E2EE approval UI/protocol, server-side revoke/credential rotation, outbound action/result WebSocket wiring, offline convergence, and independent security review are still missing. No real notification content may use this transport yet.
+The Worker retries network/socket failures with jittered exponential backoff from 1 second up to 60 seconds. A single connection generation suppresses duplicate error/close retries, successful `SNO1` authentication resets the sequence, explicit connect/disconnect cancels pending work, and `chrome.alarms` preserves scheduled wakeups across MV3 Worker suspension. Persistent local identity or encrypted-delivery failures stop fail-closed rather than being retried as network failures.
+
+No approval UI exists yet, so server directory data can never populate the pin store implicitly. Trusted-device E2EE approval UI/protocol, server-side revoke/credential rotation, end-to-end result ACK/cursor semantics, full synthetic relay validation, offline convergence, and independent security review are still missing. No real notification content may use this transport yet.
 
 ## License
 

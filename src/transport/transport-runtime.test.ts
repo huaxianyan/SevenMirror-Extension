@@ -12,8 +12,13 @@ import { TransportRuntime } from './transport-runtime';
 
 class FakeSocket extends EventTarget {
   closed = false;
+  readyState = 1;
+  sent: Uint8Array[] = [];
   closeCode?: number;
   closeReason?: string;
+  send(data: Uint8Array): void {
+    this.sent.push(data.slice());
+  }
   close(code?: number, reason?: string): void {
     this.closed = true;
     this.closeCode = code;
@@ -47,9 +52,18 @@ describe('TransportRuntime', () => {
     expect(loadedCredential?.authToken.every((byte) => byte === 0)).toBe(true);
     observer?.('auth-frame-sent');
     expect(states).toEqual(['connecting']);
+    expect(runtime.sendEnvelope(new Uint8Array([1]))).toBe(false);
     observer?.('authenticated');
     await Promise.resolve();
     expect(states).toEqual(['connecting', 'online']);
+    const frame = new Uint8Array([1, 2, 3]);
+    expect(runtime.sendEnvelope(frame)).toBe(true);
+    frame.fill(0);
+    expect(socket.sent).toEqual([new Uint8Array([1, 2, 3])]);
+    await runtime.failClosed();
+    expect(runtime.sendEnvelope(new Uint8Array([4]))).toBe(false);
+    expect(socket.closeCode).toBe(1008);
+    expect(states.at(-1)).toBe('offline');
   });
 
   it('fails closed without creating a replacement for a missing identity', async () => {

@@ -1,5 +1,6 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
+import { actionInvokeOperationDigest } from './action-envelope-sender';
 import { ActionResultStatus } from '../protocol/generated/notification/v1/payload_pb';
 import { IndexedDbPendingActionStore } from './indexeddb-pending-action-store';
 
@@ -73,6 +74,59 @@ describe('IndexedDbPendingActionStore', () => {
       expect(await store.reconcile(
         otherKey, sender, ActionResultStatus.SUCCEEDED, undefined, now + 1,
       )).toBe('not-found');
+    } finally {
+      await store.clear();
+    }
+  });
+
+  it('persists canonical invoke delivery retries and reactivates exact bytes', async () => {
+    const store = new IndexedDbPendingActionStore(uniqueName());
+    const recipientKeyId = new Uint8Array(32).fill(7);
+    const operation = await actionInvokeOperationDigest({
+      notificationId: 'synthetic.notification/42',
+      notificationRevision: 1n,
+      actionId: new Uint8Array(16).fill(5),
+      idempotencyKey: key,
+    });
+    try {
+      expect(await store.register(
+        key,
+        sender,
+        operation.digest,
+        now,
+        now + 60_000,
+        operation.canonicalPayload,
+        recipientKeyId,
+      )).toBe('registered');
+      const first = (await store.dueInvokes(now)).at(0);
+      expect(first?.canonicalInvokePayload).toEqual(operation.canonicalPayload);
+      expect(first?.attemptCount).toBe(0);
+      await store.recordInvokeSendAttempt(key, now + 1_000, 2);
+      expect(await store.dueInvokes(now + 999)).toEqual([]);
+      await store.recordInvokeSendAttempt(key, now + 2_000, 2);
+      expect(await store.dueInvokes(now + 2_000)).toEqual([]);
+
+      expect(await store.register(
+        key,
+        sender,
+        operation.digest,
+        now + 2_001,
+        now + 60_000,
+        operation.canonicalPayload,
+        recipientKeyId,
+      )).toBe('already-registered');
+      expect((await store.dueInvokes(now + 2_001)).at(0)?.attemptCount).toBe(0);
+      await store.reconcile(key, sender, ActionResultStatus.SUCCEEDED, undefined, now + 2_002);
+      expect(await store.dueInvokes(now + 2_002)).toEqual([]);
+      await expect(store.register(
+        key,
+        sender,
+        operation.digest,
+        now + 2_003,
+        now + 60_000,
+        operation.canonicalPayload,
+        recipientKeyId,
+      )).rejects.toThrow('terminal result');
     } finally {
       await store.clear();
     }

@@ -34,6 +34,7 @@ export interface TransportReconnectOptions {
   random?: () => number;
   setTimer?: (callback: () => void, delayMs: number) => TimerHandle;
   clearTimer?: (handle: TimerHandle) => void;
+  onAuthenticated?: () => void;
 }
 
 interface ReconnectPolicy {
@@ -63,6 +64,8 @@ export class TransportRuntime {
   private socket?: WebSocket;
   private reconnectTimer?: TimerHandle;
   private reconnectAttempt = 0;
+  private authenticatedGeneration?: number;
+  private readonly onAuthenticated: () => void;
   private readonly reconnectPolicy: ReconnectPolicy;
 
   constructor(
@@ -73,9 +76,11 @@ export class TransportRuntime {
     private readonly openSocket: SocketOpener = openAuthenticatedWebSocket,
     reconnectOptions: TransportReconnectOptions = {},
   ) {
+    this.onAuthenticated = reconnectOptions.onAuthenticated ?? (() => undefined);
+    const { onAuthenticated: _onAuthenticated, ...policyOptions } = reconnectOptions;
     this.reconnectPolicy = validateReconnectPolicy({
       ...DEFAULT_RECONNECT_POLICY,
-      ...reconnectOptions,
+      ...policyOptions,
     });
   }
 
@@ -93,11 +98,36 @@ export class TransportRuntime {
     await this.startConnection();
   }
 
+  /** Sends only after this connection generation has authenticated SNO1. */
+  sendEnvelope(frame: Uint8Array): boolean {
+    const socket = this.socket;
+    if (socket === undefined || this.authenticatedGeneration !== this.generation ||
+        socket.readyState !== 1) return false;
+    try {
+      socket.send(frame);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Stops without network retry after a local encrypted-message security failure. */
+  async failClosed(): Promise<void> {
+    this.cancelReconnect();
+    ++this.generation;
+    this.terminalGeneration = undefined;
+    this.authenticatedGeneration = undefined;
+    this.socket?.close(1008, 'encrypted message processing failed');
+    this.socket = undefined;
+    await this.writeState('offline');
+  }
+
   async disconnect(): Promise<void> {
     this.cancelReconnect();
     this.reconnectAttempt = 0;
     ++this.generation;
     this.terminalGeneration = undefined;
+    this.authenticatedGeneration = undefined;
     this.socket?.close(1000, 'local disconnect');
     this.socket = undefined;
     await this.writeState('offline');
@@ -106,6 +136,7 @@ export class TransportRuntime {
   private async startConnection(): Promise<void> {
     const generation = ++this.generation;
     this.terminalGeneration = undefined;
+    this.authenticatedGeneration = undefined;
     this.socket?.close(1000, 'replaced by new connection');
     this.socket = undefined;
 
@@ -140,7 +171,9 @@ export class TransportRuntime {
         if (generation !== this.generation) return;
         if (event === 'authenticated') {
           this.reconnectAttempt = 0;
+          this.authenticatedGeneration = generation;
           void this.writeState('online');
+          this.onAuthenticated();
         } else if (event === 'socket-error' || event === 'socket-closed') {
           this.handleSocketTermination(generation, socket);
         }
@@ -200,6 +233,7 @@ export class TransportRuntime {
   private handleSocketTermination(generation: number, socket: WebSocket): void {
     if (generation !== this.generation || this.terminalGeneration === generation) return;
     this.terminalGeneration = generation;
+    this.authenticatedGeneration = undefined;
     if (this.socket === socket) this.socket = undefined;
     void this.writeState('offline');
     this.scheduleReconnect(generation);
