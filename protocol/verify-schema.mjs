@@ -38,3 +38,8 @@ await verify(
   './test-vectors/device-auth-frame-v1.json',
   './DEVICE_AUTH_VECTOR_SHA256',
 );
+await verify('./trusted-device-pairing-v1.md', './TRUST_PAIRING_SPEC_SHA256');
+await verify(
+  './test-vectors/trusted-device-pairing-v1.json',
+  './TRUST_PAIRING_VECTOR_SHA256',
+);
