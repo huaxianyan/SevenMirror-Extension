@@ -24,6 +24,8 @@ info = "SyncNotifications-E2EE-v1"
 
 `src/protocol/encrypted-payload.ts` strictly validates canonical protobuf `action.invoke` and `action.result` payloads. `src/crypto/action-envelope-sender.ts` durably registers pending correlation and exact canonical invoke bytes before constructing a per-recipient encrypted frame. `src/crypto/indexeddb-pending-action-store.ts` retains the idempotency-key/expected-Android/key-ID/canonical-operation-digest and delivery retry state across Worker restarts, preventing accidental reuse of one key for different action semantics. `src/crypto/indexeddb-outbound-sequence-store.ts` atomically allocates positive per-recipient routing sequences. `src/crypto/action-invoke-outbox.ts` sends only to a still-approved Android pin over a `SNO1`-authenticated socket, recreates each retry with a fresh envelope message ID/sequence but the same canonical operation and business idempotency key, and preserves unsent work across Worker reconstruction. `src/crypto/action-result-receiver.ts` authenticates and atomically reconciles returned results, which immediately excludes completed operations from outbound delivery.
 
+`src/protocol/trusted-device-pairing.ts` implements the server-independent canonical offer/approval records and `sntrust1:` QR representation used by the forthcoming approval UI. It validates the complete P-256 point on-curve, non-zero identifiers/nonces, safe bounded timestamps, exact offer hash, distinct device/key pairs, canonical base64url, and the transcript-derived 60-bit safety code. Decoding or scanning does not write `IndexedDbTrustedPeerStore`; explicit confirmation remains a separate required step.
+
 `src/transport` now matches the Go `SNA1`/`SNO1` vector, performs bounded strict code-gated registration without credentials or referrers, stores the raw WebSocket credential only in extension-origin IndexedDB, refuses silent replacement, and sends `SNA1` as the first binary message. It consumes and validates fixed `SNO1` within five seconds before emitting the content-free `authenticated` diagnostic, so socket-open/local-enqueue is never presented as server acceptance. HTTPS is mandatory outside loopback, redirect/endpoint changes fail closed before credential disclosure, and diagnostics expose only fixed content-free state events.
 
 The Options page now requests optional access only to the selected canonical server origin, creates/restores the non-extractable HPKE identity, consumes an administrator-issued code, and starts the Worker transport runtime after durable registration. Worker startup restores the credential only when its full SHA-256 identity key ID matches the existing HPKE public key; it never creates a replacement identity for partial state. The runtime reports `online` only after `SNO1` and clears its loaded raw token copy after constructing the first frame.
@@ -44,11 +46,12 @@ Network/socket termination now schedules one jittered exponential reconnect sequ
 - TypeScript matches the Encrypted Envelope v1 vector and rejects truncation, trailing bytes, bad magic, invalid points, and invalid ciphertext lengths.
 - Receiver tests prove tampered HPKE ciphertext does not consume replay state, a valid frame is accepted once, and its repeat is rejected.
 - TypeScript matches the canonical protobuf action payload, rejects unknown/duplicate/non-canonical and invalid semantic fields, round-trips `action.result`, and round-trips a generated authenticated action envelope without exposing notification ID or reply bytes in the frame.
+- TypeScript matches Go/Kotlin's fixed Trusted Device Pairing v1 offer, approval, QR, and `4AFH-Q91K-PGVG` safety-code vector. Exact transcript mutation, wrong offer hash, invalid P-256 point, expired record, padded QR, and whitespace fail closed; no test path creates an approved-peer pin by scanning alone.
 - Pending-operation tests cover persistence across reconstruction, concurrent registration, expected-sender binding, capacity exhaustion, identical result recovery, conflicting terminal results, exact canonical invoke persistence, bounded retry/dormancy, reactivation, and terminal-result delivery suppression.
 - Action-invoke outbox tests prove persistence occurs before send, pre-`SNO1` transport send refusal, fresh persistent sequences for retries, exact idempotency-key recovery after reconstruction, runtime Auth HPKE opening by the pinned recipient identity, and pin removal preventing subsequent encryption.
 - The action-result receive path performs HPKE/replay validation before persistent reconciliation; a new envelope carrying the same authenticated result is idempotent.
 - Registration, credential reconstruction/replacement refusal, secure-origin validation, response bounds, `SNA1` codec, first-message ordering, and endpoint-change credential non-disclosure are covered.
-- Type checking, 61 Vitest tests across 21 files, protocol verification, and the production build pass. GitHub Actions run `31476979472` independently passes all four gates for commit `f1163b8`.
+- Type checking, 64 Vitest tests across 22 files, protocol verification, and the production build pass locally. The prior action-delivery baseline remains GitHub Actions run `31477453579` for commit `03e8b9d`; the pairing-transcript commit requires its own CI evidence before this line can claim independent CI validation.
 - Popup exposes a browser-runtime persistence test; repeated runs retain the same fingerprint.
 
 ## Browser runtime evidence
@@ -109,6 +112,7 @@ protocol/test-vectors/hpke-auth-p256-aes128gcm.json
 protocol/test-vectors/routing-header-v1.json
 protocol/test-vectors/encrypted-payload-v1.json
 protocol/test-vectors/encrypted-envelope-v1.json
+protocol/test-vectors/trusted-device-pairing-v1.json
 ```
 
 The authoritative copy and ADR-002 live in the server repository.
