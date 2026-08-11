@@ -34,6 +34,20 @@ describe('IndexedDbTrustedPeerStore', () => {
     }
   });
 
+  it('fails closed if a persisted key binding is corrupt', async () => {
+    const databaseName = uniqueName();
+    const store = new IndexedDbTrustedPeerStore(databaseName);
+    const publicKey = await serializeIdentityPublicKey(await generateNonExtractableIdentity());
+    try {
+      await store.pinApproved(workspaceId, deviceId, publicKey);
+      await corruptStoredKeyId(databaseName);
+      await expect(store.findApproved(workspaceId, deviceId, new Uint8Array(32).fill(9)))
+        .rejects.toThrow('key binding is corrupt');
+    } finally {
+      await store.clear();
+    }
+  });
+
   it('rejects malformed P-256 points before persistence', async () => {
     const store = new IndexedDbTrustedPeerStore(uniqueName());
     const invalid = new Uint8Array(65);
@@ -47,6 +61,35 @@ describe('IndexedDbTrustedPeerStore', () => {
     }
   });
 });
+
+async function corruptStoredKeyId(databaseName: string): Promise<void> {
+  const database = await new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open(databaseName, 1);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  try {
+    const transaction = database.transaction('approved-peer', 'readwrite');
+    const store = transaction.objectStore('approved-peer');
+    const tuple = `${toHex(workspaceId)}:${toHex(deviceId)}`;
+    const record = await new Promise<Record<string, unknown>>((resolve, reject) => {
+      const request = store.get(tuple);
+      request.onsuccess = () => resolve(request.result as Record<string, unknown>);
+      request.onerror = () => reject(request.error);
+    });
+    await new Promise<void>((resolve, reject) => {
+      const request = store.put({ ...record, keyId: new Uint8Array(32).fill(9) });
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  } finally {
+    database.close();
+  }
+}
+
+function toHex(value: Uint8Array): string {
+  return Array.from(value, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
 
 function uniqueName(): string {
   return `trusted-peers-${Date.now()}-${Math.random().toString(16).slice(2)}`;

@@ -74,6 +74,10 @@ export class IndexedDbTrustedPeerStore {
       await completed;
       if (record === undefined) return undefined;
       validateRecord(record);
+      await validatePublicKeyPoint(record.publicKey);
+      if (!bytesEqual(record.keyId, await sha256(record.publicKey))) {
+        throw new Error('Approved peer record key binding is corrupt');
+      }
       if (!bytesEqual(record.keyId, keyId)) return undefined;
       return record.publicKey.slice();
     } finally {
