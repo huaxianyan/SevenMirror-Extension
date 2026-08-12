@@ -68,6 +68,22 @@
         <button id="cancel-trust-pairing" type="button" hidden>Reject and cancel pairing</button>
         <p id="trust-pairing-status" role="status" aria-live="polite"></p>
       </section>
+
+      <section id="synthetic-relay-test" hidden>
+        <h2>Synthetic relay action test</h2>
+        <p class="boundary">
+          Test data only. Post the app-owned Android test notification and paste its exported
+          capability reference. No notification title, body, reply, token, or key is displayed.
+        </p>
+        <label>
+          Synthetic action target from Android
+          <textarea id="synthetic-action-target" rows="7" maxlength="2048"
+                    spellcheck="false" placeholder="{&quot;version&quot;:1,…}"></textarea>
+        </label>
+        <button id="queue-synthetic-action" type="button">Queue synthetic Mark handled action</button>
+        <button id="refresh-synthetic-action" type="button" hidden>Refresh durable result status</button>
+        <p id="synthetic-action-status" role="status" aria-live="polite"></p>
+      </section>
     </main>
     <script type="module" src="./main.ts"></script>
   </body>

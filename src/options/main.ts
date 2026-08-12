@@ -42,6 +42,12 @@ const safetyConfirmed = document.querySelector<HTMLInputElement>('#trust-code-co
 const approvePeerButton = document.querySelector<HTMLButtonElement>('#approve-trust-peer');
 const cancelPairingButton = document.querySelector<HTMLButtonElement>('#cancel-trust-pairing');
 const pairingStatus = document.querySelector<HTMLElement>('#trust-pairing-status');
+const relayTestSection = document.querySelector<HTMLElement>('#synthetic-relay-test');
+const syntheticTargetInput = document.querySelector<HTMLTextAreaElement>('#synthetic-action-target');
+const queueSyntheticActionButton = document.querySelector<HTMLButtonElement>('#queue-synthetic-action');
+const refreshSyntheticActionButton = document.querySelector<HTMLButtonElement>('#refresh-synthetic-action');
+const syntheticActionStatus = document.querySelector<HTMLElement>('#synthetic-action-status');
+let currentSyntheticIdempotencyKey: string | undefined;
 let currentSafetyCode: string | undefined;
 let currentPairingView: TrustPairingView | undefined;
 let pairingFailed = false;
@@ -54,6 +60,7 @@ async function render(): Promise<void> {
     setStatus('This Chrome profile is registered. Connection status is available in the extension popup.');
     pairingSection?.removeAttribute('hidden');
     await renderPairing();
+    await renderSyntheticRelayAvailability();
   }
 }
 
@@ -100,6 +107,7 @@ form?.addEventListener('submit', async (event) => {
     form.setAttribute('hidden', '');
     pairingSection?.removeAttribute('hidden');
     await renderPairing();
+    await renderSyntheticRelayAvailability();
   } catch {
     if (originPermission !== undefined && !permissionAlreadyGranted && !registered) {
       await chrome.permissions.remove({ origins: [originPermission] });
@@ -288,6 +296,88 @@ function setPairingButtonsBusy(busy: boolean): void {
   if (cancelPairingButton) cancelPairingButton.disabled = busy;
   if (copyPayloadButton) copyPayloadButton.disabled = busy;
   if (approvePeerButton) approvePeerButton.disabled = busy || !safetyConfirmed?.checked;
+}
+
+queueSyntheticActionButton?.addEventListener('click', () => {
+  const raw = syntheticTargetInput?.value ?? '';
+  if (!raw) return;
+  if (queueSyntheticActionButton) queueSyntheticActionButton.disabled = true;
+  setSyntheticActionStatus('Validating and durably queueing the synthetic action…');
+  void queueSyntheticAction(raw).finally(() => {
+    if (queueSyntheticActionButton) queueSyntheticActionButton.disabled = false;
+  });
+});
+
+refreshSyntheticActionButton?.addEventListener('click', () => {
+  void refreshSyntheticActionStatus();
+});
+
+async function renderSyntheticRelayAvailability(): Promise<void> {
+  const response = await chrome.runtime.sendMessage({ type: 'get-synthetic-action-target' }) as {
+    target?: { targetDeviceId: string; targetKeyId: string };
+  };
+  if (relayTestSection) relayTestSection.hidden = response.target === undefined;
+  if (response.target === undefined) return;
+  setSyntheticActionStatus('Ready. Post the Android app-owned test notification and copy its synthetic relay target.');
+}
+
+async function queueSyntheticAction(raw: string): Promise<void> {
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (parsed.version !== 1 || typeof parsed.targetDeviceId !== 'string' ||
+        typeof parsed.targetKeyId !== 'string' || typeof parsed.notificationId !== 'string' ||
+        typeof parsed.notificationRevision !== 'string' || typeof parsed.actionId !== 'string') {
+      throw new Error('Synthetic target shape is invalid');
+    }
+    const expected = await chrome.runtime.sendMessage({ type: 'get-synthetic-action-target' }) as {
+      target?: { targetDeviceId: string; targetKeyId: string };
+    };
+    if (expected.target === undefined || parsed.targetDeviceId !== expected.target.targetDeviceId ||
+        parsed.targetKeyId !== expected.target.targetKeyId) {
+      throw new Error('Synthetic target does not match the sole approved Android peer');
+    }
+    const result = await chrome.runtime.sendMessage({
+      type: 'queue-action-invoke',
+      targetDeviceId: parsed.targetDeviceId,
+      targetKeyId: parsed.targetKeyId,
+      notificationId: parsed.notificationId,
+      notificationRevision: parsed.notificationRevision,
+      actionId: parsed.actionId,
+    }) as { queued?: boolean; accepted?: boolean; idempotencyKey?: string };
+    if (!result.queued || typeof result.idempotencyKey !== 'string') {
+      throw new Error('Synthetic action was not durably queued');
+    }
+    currentSyntheticIdempotencyKey = result.idempotencyKey;
+    if (syntheticTargetInput) syntheticTargetInput.value = '';
+    if (refreshSyntheticActionButton) refreshSyntheticActionButton.hidden = false;
+    setSyntheticActionStatus(result.accepted
+      ? 'Queued durably; current authenticated socket accepted the encrypted frame locally. Awaiting Android result.'
+      : 'Queued durably; no current socket acceptance. Durable retry remains pending.');
+    window.setTimeout(() => { void refreshSyntheticActionStatus(); }, 1_000);
+  } catch {
+    setSyntheticActionStatus('Synthetic action rejected before queueing. Verify the current app-owned target and approved peer.');
+  }
+}
+
+async function refreshSyntheticActionStatus(): Promise<void> {
+  if (currentSyntheticIdempotencyKey === undefined) return;
+  const result = await chrome.runtime.sendMessage({
+    type: 'get-synthetic-action-status',
+    idempotencyKey: currentSyntheticIdempotencyKey,
+  }) as { found?: boolean; state?: string; resultStatus?: string; invokeAttemptCount?: number };
+  if (!result.found) {
+    setSyntheticActionStatus('Durable action record was not found.');
+    return;
+  }
+  if (result.state === 'completed') {
+    setSyntheticActionStatus(`Authenticated Android result reconciled. Status code: ${result.resultStatus ?? 'unknown'}.`);
+  } else {
+    setSyntheticActionStatus(`Still pending. Locally accepted send attempts: ${result.invokeAttemptCount ?? 0}.`);
+  }
+}
+
+function setSyntheticActionStatus(message: string): void {
+  if (syntheticActionStatus) syntheticActionStatus.textContent = message;
 }
 
 function pairingFailureMessage(error: unknown): string {

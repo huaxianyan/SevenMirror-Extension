@@ -85,6 +85,36 @@ export class IndexedDbTrustedPeerStore {
     }
   }
 
+  async listApproved(workspaceId: Uint8Array): Promise<Array<{
+    deviceId: Uint8Array;
+    keyId: Uint8Array;
+  }>> {
+    validateIdentifier(workspaceId, 'workspaceId');
+    const database = await this.openDatabase();
+    try {
+      const transaction = database.transaction(STORE_NAME, 'readonly');
+      const completed = transactionCompleted(transaction);
+      const records = await requestResult<ApprovedPeerRecord[]>(
+        transaction.objectStore(STORE_NAME).getAll(),
+      );
+      await completed;
+      const approved: Array<{ deviceId: Uint8Array; keyId: Uint8Array }> = [];
+      for (const record of records) {
+        validateRecord(record);
+        await validatePublicKeyPoint(record.publicKey);
+        if (!bytesEqual(record.keyId, await sha256(record.publicKey))) {
+          throw new Error('Approved peer record key binding is corrupt');
+        }
+        if (bytesEqual(record.workspaceId, workspaceId)) {
+          approved.push({ deviceId: record.deviceId.slice(), keyId: record.keyId.slice() });
+        }
+      }
+      return approved.sort((left, right) => toHex(left.deviceId).localeCompare(toHex(right.deviceId)));
+    } finally {
+      database.close();
+    }
+  }
+
   async remove(workspaceId: Uint8Array, deviceId: Uint8Array): Promise<void> {
     validateIdentifier(workspaceId, 'workspaceId');
     validateIdentifier(deviceId, 'deviceId');

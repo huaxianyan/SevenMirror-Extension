@@ -120,6 +120,20 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
       );
       return true;
 
+    case 'get-synthetic-action-target':
+      void getSyntheticActionTarget().then(
+        (target) => sendResponse({ target }),
+        () => sendResponse({ target: undefined }),
+      );
+      return true;
+
+    case 'get-synthetic-action-status':
+      void getSyntheticActionStatus(message).then(
+        (result) => sendResponse(result),
+        () => sendResponse({ found: false }),
+      );
+      return true;
+
     case 'queue-action-invoke':
       void queueActionInvoke(message).then(
         (result) => sendResponse(result),
@@ -140,6 +154,41 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
       return false;
   }
 });
+
+async function getSyntheticActionTarget(): Promise<{
+  targetDeviceId: string;
+  targetKeyId: string;
+} | undefined> {
+  const credential = await credentialStore.load();
+  if (credential === undefined) return undefined;
+  try {
+    const approved = await trustedPeerStore.listApproved(credential.workspaceId);
+    if (approved.length !== 1) return undefined;
+    return {
+      targetDeviceId: toHex(approved[0]!.deviceId),
+      targetKeyId: toHex(approved[0]!.keyId),
+    };
+  } finally {
+    credential.authToken.fill(0);
+  }
+}
+
+async function getSyntheticActionStatus(message: Record<string, unknown>): Promise<{
+  found: boolean;
+  state?: 'pending' | 'completed';
+  resultStatus?: string;
+  invokeAttemptCount?: number;
+}> {
+  const key = parseHex(message.idempotencyKey, 16, 'idempotencyKey');
+  const record = await pendingActionStore.get(key);
+  if (record === undefined) return { found: false };
+  return {
+    found: true,
+    state: record.state,
+    resultStatus: record.resultStatus === undefined ? undefined : String(record.resultStatus),
+    invokeAttemptCount: record.invokeAttemptCount,
+  };
+}
 
 async function drainActionInvokes(): Promise<void> {
   try {
