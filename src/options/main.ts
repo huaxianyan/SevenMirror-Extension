@@ -28,10 +28,12 @@ const nameInput = document.querySelector<HTMLInputElement>('#device-name');
 const submit = document.querySelector<HTMLButtonElement>('#register');
 const status = document.querySelector<HTMLElement>('#registration-status');
 const pairingSection = document.querySelector<HTMLElement>('#trust-pairing');
+const pairingStage = document.querySelector<HTMLElement>('#trust-pairing-stage');
 const createOfferButton = document.querySelector<HTMLButtonElement>('#create-trust-offer');
 const payloadInput = document.querySelector<HTMLTextAreaElement>('#trust-payload-input');
 const importPayloadButton = document.querySelector<HTMLButtonElement>('#import-trust-payload');
 const pairingOutput = document.querySelector<HTMLElement>('#pairing-output');
+const payloadOutputLabel = document.querySelector<HTMLElement>('#trust-payload-output-label');
 const payloadOutput = document.querySelector<HTMLTextAreaElement>('#trust-payload-output');
 const copyPayloadButton = document.querySelector<HTMLButtonElement>('#copy-trust-payload');
 const safetySection = document.querySelector<HTMLElement>('#safety-confirmation');
@@ -130,8 +132,8 @@ importPayloadButton?.addEventListener('click', () => {
       : await pairingCoordinator.acceptOffer(payload, local);
     renderPairingView(view);
     setPairingStatus(view.role === 'approver'
-      ? 'Approval persisted. Transfer the approval payload, then compare both complete codes.'
-      : 'Approval persisted. Compare the complete safety code on both devices.');
+      ? 'Offer accepted. Android/this device created an approval response. Send that response back to the device that created the offer.'
+      : 'Approval response accepted. Both devices must now show the same safety code.');
   });
 });
 
@@ -196,6 +198,13 @@ function renderPairingView(view: TrustPairingView | undefined, failed = false): 
   if (importPayloadButton) importPayloadButton.disabled =
     view?.stage === 'compare-safety-code' || failed || pairingBusy;
   if (cancelPairingButton) cancelPairingButton.hidden = view === undefined && !failed;
+  if (pairingStage) {
+    pairingStage.textContent = view === undefined
+      ? 'Step 1 — Create or import an offer'
+      : view.stage === 'offer-created'
+        ? 'Step 2 — Send this offer, then import the approval response'
+        : 'Step 3 — Compare the complete safety code and approve independently';
+  }
 
   const transferablePayload = view?.stage === 'offer-created'
     ? view.offerQr
@@ -203,6 +212,11 @@ function renderPairingView(view: TrustPairingView | undefined, failed = false): 
   if (pairingOutput && payloadOutput) {
     pairingOutput.hidden = transferablePayload === undefined;
     payloadOutput.value = transferablePayload ?? '';
+    if (payloadOutputLabel) {
+      payloadOutputLabel.textContent = view?.stage === 'offer-created'
+        ? 'Offer — send this once to the other device'
+        : 'Approval response — send this back to the offer creator';
+    }
   }
 
   if (safetySection && safetyCodeOutput && safetyConfirmed && approvePeerButton) {
@@ -224,11 +238,17 @@ async function runPairingOperation(
   try {
     const local = await loadLocalTrustIdentity();
     await operation(local);
-  } catch {
-    setPairingStatus('Pairing failed closed. Verify the payload, expiry, workspace, and safety code.');
-    await renderPairing().catch(() => {
+  } catch (error) {
+    const failure = pairingFailureMessage(error);
+    try {
+      const local = await loadLocalTrustIdentity();
+      const restored = await pairingCoordinator.resume(local);
+      renderPairingView(restored);
+      setPairingStatus(`${failure} The previous durable session is still active.`);
+    } catch {
       renderPairingView(undefined, true);
-    });
+      setPairingStatus(`${failure} Pairing state could not be restored; cancel before retrying.`);
+    }
   } finally {
     pairingBusy = false;
     setPairingButtonsBusy(false);
@@ -268,6 +288,27 @@ function setPairingButtonsBusy(busy: boolean): void {
   if (cancelPairingButton) cancelPairingButton.disabled = busy;
   if (copyPayloadButton) copyPayloadButton.disabled = busy;
   if (approvePeerButton) approvePeerButton.disabled = busy || !safetyConfirmed?.checked;
+}
+
+function pairingFailureMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : '';
+  if (message.includes('expired')) return 'Import rejected: this pairing payload expired. Cancel both sides and create a new offer.';
+  if (message.includes('different workspace')) return 'Import rejected: the devices are registered in different workspaces.';
+  if (message.includes('exact trust offer') || message.includes('does not match this approval')) {
+    return 'Import rejected: this approval response does not belong to the active Chrome offer.';
+  }
+  if (message.includes('base64url') || message.includes('prefix') || message.includes('magic') ||
+      message.includes('bytes') || message.includes('length')) {
+    return 'Import rejected: the copied pairing payload is incomplete or malformed.';
+  }
+  if (message.includes('No offer is awaiting') || message.includes('No active trust pairing')) {
+    return 'Import rejected: Chrome no longer has the offer session required by this approval response.';
+  }
+  if (message.includes('already exists') || message.includes('Cancel the active')) {
+    return 'Import rejected: another pairing session is active. Cancel it explicitly before importing a new offer.';
+  }
+  if (message.includes('Safety code')) return 'Approval rejected: the safety code does not match the active transcript.';
+  return 'Pairing failed closed. Verify the payload, expiry, workspace, and active step.';
 }
 
 function setPairingStatus(message: string): void {

@@ -39,18 +39,19 @@
           Synthetic testing only. Exchange the QR payload out of band and compare the complete
           safety code on both devices. Importing a payload alone never approves a peer.
         </p>
+        <h3 id="trust-pairing-stage">Step 1 — Create or import an offer</h3>
         <div id="pairing-actions">
-          <button id="create-trust-offer" type="button">Create trust offer</button>
+          <button id="create-trust-offer" type="button">Create offer on this Chrome device</button>
           <label>
-            Scanned or copied QR payload
+            Payload received from the other device
             <textarea id="trust-payload-input" rows="5" maxlength="512"
                       placeholder="sntrust1:…" spellcheck="false"></textarea>
           </label>
-          <button id="import-trust-payload" type="button">Import pairing payload</button>
+          <button id="import-trust-payload" type="button">Import received payload</button>
         </div>
         <div id="pairing-output" hidden>
           <label>
-            Payload to transfer to the other device
+            <span id="trust-payload-output-label">Payload to transfer to the other device</span>
             <textarea id="trust-payload-output" rows="5" readonly spellcheck="false"></textarea>
           </label>
           <button id="copy-trust-payload" type="button">Copy payload</button>
