@@ -20,7 +20,7 @@ npm test
 npm run build
 ```
 
-Load `dist/` as an unpacked extension from `chrome://extensions` after building.
+Load `dist/` as an unpacked extension from `chrome://extensions` after building. The Options page displays the current manifest version; user-visible extension iterations increment it so a reload can be verified.
 
 ## Current functionality
 

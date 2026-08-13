@@ -9,6 +9,7 @@
   <body>
     <main>
       <h1>Notification Mirroring</h1>
+      <p id="extension-version">Extension version: checking…</p>
       <p class="boundary">
         Registration grants access to a private instance. It does not trust other devices for E2EE.
         Real notification synchronization remains disabled until trusted-device approval and relay validation are complete.
@@ -80,7 +81,7 @@
           <textarea id="synthetic-action-target" rows="7" maxlength="2048"
                     spellcheck="false" placeholder="{&quot;version&quot;:1,…}"></textarea>
         </label>
-        <button id="queue-synthetic-action" type="button">Queue synthetic Mark handled action</button>
+        <button id="queue-synthetic-action" type="button">Queue new synthetic operation</button>
         <button id="refresh-synthetic-action" type="button" hidden>Refresh durable result status</button>
         <button id="resend-synthetic-action" type="button" hidden>Resend exact completed action</button>
         <p id="synthetic-action-status" role="status" aria-live="polite"></p>

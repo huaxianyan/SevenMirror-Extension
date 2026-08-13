@@ -21,6 +21,7 @@ const credentialStore = new IndexedDbTransportCredentialStore();
 const pairingSessions = new IndexedDbTrustPairingSessionStore();
 const trustedPeers = new IndexedDbTrustedPeerStore();
 const pairingCoordinator = new TrustPairingCoordinator(pairingSessions, trustedPeers);
+const versionOutput = document.querySelector<HTMLElement>('#extension-version');
 const form = document.querySelector<HTMLFormElement>('#registration-form');
 const serverInput = document.querySelector<HTMLInputElement>('#server-origin');
 const codeInput = document.querySelector<HTMLInputElement>('#pairing-code');
@@ -55,6 +56,9 @@ let pairingFailed = false;
 let pairingBusy = false;
 
 async function render(): Promise<void> {
+  if (versionOutput) {
+    versionOutput.textContent = `Extension version: ${chrome.runtime.getManifest().version}`;
+  }
   const existing = await credentialStore.load();
   if (existing !== undefined) {
     form?.setAttribute('hidden', '');
@@ -353,8 +357,8 @@ async function queueSyntheticAction(raw: string): Promise<void> {
       throw new Error('Synthetic action was not durably queued');
     }
     currentSyntheticIdempotencyKey = result.idempotencyKey;
-    if (syntheticTargetInput) syntheticTargetInput.value = '';
     if (refreshSyntheticActionButton) refreshSyntheticActionButton.hidden = false;
+    if (resendSyntheticActionButton) resendSyntheticActionButton.hidden = true;
     setSyntheticActionStatus(result.accepted
       ? 'Queued durably; current authenticated socket accepted the encrypted frame locally. Awaiting Android result.'
       : 'Queued durably; no current socket acceptance. Durable retry remains pending.');
