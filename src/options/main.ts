@@ -46,6 +46,7 @@ const relayTestSection = document.querySelector<HTMLElement>('#synthetic-relay-t
 const syntheticTargetInput = document.querySelector<HTMLTextAreaElement>('#synthetic-action-target');
 const queueSyntheticActionButton = document.querySelector<HTMLButtonElement>('#queue-synthetic-action');
 const refreshSyntheticActionButton = document.querySelector<HTMLButtonElement>('#refresh-synthetic-action');
+const resendSyntheticActionButton = document.querySelector<HTMLButtonElement>('#resend-synthetic-action');
 const syntheticActionStatus = document.querySelector<HTMLElement>('#synthetic-action-status');
 let currentSyntheticIdempotencyKey: string | undefined;
 let currentSafetyCode: string | undefined;
@@ -312,6 +313,10 @@ refreshSyntheticActionButton?.addEventListener('click', () => {
   void refreshSyntheticActionStatus();
 });
 
+resendSyntheticActionButton?.addEventListener('click', () => {
+  void resendSyntheticAction();
+});
+
 async function renderSyntheticRelayAvailability(): Promise<void> {
   const response = await chrome.runtime.sendMessage({ type: 'get-synthetic-action-target' }) as {
     target?: { targetDeviceId: string; targetKeyId: string };
@@ -364,15 +369,39 @@ async function refreshSyntheticActionStatus(): Promise<void> {
   const result = await chrome.runtime.sendMessage({
     type: 'get-synthetic-action-status',
     idempotencyKey: currentSyntheticIdempotencyKey,
-  }) as { found?: boolean; state?: string; resultStatus?: string; invokeAttemptCount?: number };
+  }) as {
+    found?: boolean;
+    state?: string;
+    resultStatus?: string;
+    invokeAttemptCount?: number;
+    authenticatedResultCount?: number;
+  };
   if (!result.found) {
     setSyntheticActionStatus('Durable action record was not found.');
     return;
   }
   if (result.state === 'completed') {
-    setSyntheticActionStatus(`Authenticated Android result reconciled. Status code: ${result.resultStatus ?? 'unknown'}.`);
+    if (resendSyntheticActionButton) resendSyntheticActionButton.hidden = false;
+    setSyntheticActionStatus(`Authenticated Android result reconciled. Status code: ${result.resultStatus ?? 'unknown'}. Locally accepted invoke attempts: ${result.invokeAttemptCount ?? 0}; authenticated results observed: ${result.authenticatedResultCount ?? 1}.`);
   } else {
     setSyntheticActionStatus(`Still pending. Locally accepted send attempts: ${result.invokeAttemptCount ?? 0}.`);
+  }
+}
+
+async function resendSyntheticAction(): Promise<void> {
+  if (currentSyntheticIdempotencyKey === undefined || !resendSyntheticActionButton) return;
+  resendSyntheticActionButton.disabled = true;
+  try {
+    const result = await chrome.runtime.sendMessage({
+      type: 'resend-synthetic-action',
+      idempotencyKey: currentSyntheticIdempotencyKey,
+    }) as { accepted?: boolean };
+    setSyntheticActionStatus(result.accepted
+      ? 'Fresh encrypted envelope accepted locally for the exact completed operation. Awaiting duplicate result reconciliation.'
+      : 'Exact resend was not accepted by the current authenticated socket.');
+    window.setTimeout(() => { void refreshSyntheticActionStatus(); }, 1_000);
+  } finally {
+    resendSyntheticActionButton.disabled = false;
   }
 }
 

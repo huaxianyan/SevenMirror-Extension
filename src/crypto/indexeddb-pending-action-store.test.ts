@@ -43,6 +43,7 @@ describe('IndexedDbPendingActionStore', () => {
       expect(await store.reconcile(
         key, sender, ActionResultStatus.STALE_NOTIFICATION_VERSION, 'revision changed', now + 2,
       )).toBe('already-completed');
+      expect((await store.get(key))?.authenticatedResultCount).toBe(2);
       expect(await store.reconcile(
         key, sender, ActionResultStatus.SUCCEEDED, undefined, now + 3,
       )).toBe('conflict');
@@ -117,7 +118,12 @@ describe('IndexedDbPendingActionStore', () => {
       )).toBe('already-registered');
       expect((await store.dueInvokes(now + 2_001)).at(0)?.attemptCount).toBe(0);
       await store.reconcile(key, sender, ActionResultStatus.SUCCEEDED, undefined, now + 2_002);
+      expect((await store.get(key))?.authenticatedResultCount).toBe(1);
       expect(await store.dueInvokes(now + 2_002)).toEqual([]);
+      const completedDelivery = await store.getInvokeDelivery(key);
+      expect(completedDelivery?.idempotencyKey).toEqual(key);
+      expect(completedDelivery?.canonicalInvokePayload).toEqual(operation.canonicalPayload);
+      expect(completedDelivery?.recipientKeyId).toEqual(recipientKeyId);
       await expect(store.register(
         key,
         sender,

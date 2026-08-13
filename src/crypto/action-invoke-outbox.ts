@@ -95,6 +95,38 @@ export class ActionInvokeOutbox {
     });
   }
 
+  /** Sends one fresh envelope for the exact durable operation, including a completed one. */
+  resendExact(idempotencyKey: Uint8Array): Promise<boolean> {
+    return this.runExclusive(async () => {
+      const entry = await this.pendingActions.getInvokeDelivery(idempotencyKey);
+      if (entry === undefined) throw new Error('Durable invoke delivery is unavailable');
+      const credential = await this.credentialStore.load();
+      if (credential === undefined) throw new Error('Transport is not configured');
+      try {
+        const identity = await this.requireBoundIdentity(credential);
+        const recipientPublicKey = await this.trustedPeers.findApproved(
+          credential.workspaceId,
+          entry.recipientDeviceId,
+          entry.recipientKeyId,
+        );
+        if (recipientPublicKey === undefined) throw new Error('Action recipient is not approved');
+        try {
+          return await this.sendDelivery(
+            credential,
+            identity,
+            recipientPublicKey,
+            entry,
+            this.now(),
+          );
+        } finally {
+          recipientPublicKey.fill(0);
+        }
+      } finally {
+        credential.authToken.fill(0);
+      }
+    });
+  }
+
   drainDue(): Promise<ActionInvokeDrainResult> {
     return this.runExclusive(async () => {
       const nowUnixMs = this.now();

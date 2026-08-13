@@ -134,6 +134,13 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
       );
       return true;
 
+    case 'resend-synthetic-action':
+      void resendSyntheticAction(message).then(
+        (accepted) => sendResponse({ accepted }),
+        () => sendResponse({ accepted: false }),
+      );
+      return true;
+
     case 'queue-action-invoke':
       void queueActionInvoke(message).then(
         (result) => sendResponse(result),
@@ -178,6 +185,7 @@ async function getSyntheticActionStatus(message: Record<string, unknown>): Promi
   state?: 'pending' | 'completed';
   resultStatus?: string;
   invokeAttemptCount?: number;
+  authenticatedResultCount?: number;
 }> {
   const key = parseHex(message.idempotencyKey, 16, 'idempotencyKey');
   const record = await pendingActionStore.get(key);
@@ -187,7 +195,13 @@ async function getSyntheticActionStatus(message: Record<string, unknown>): Promi
     state: record.state,
     resultStatus: record.resultStatus === undefined ? undefined : String(record.resultStatus),
     invokeAttemptCount: record.invokeAttemptCount,
+    authenticatedResultCount: record.authenticatedResultCount,
   };
+}
+
+async function resendSyntheticAction(message: Record<string, unknown>): Promise<boolean> {
+  const key = parseHex(message.idempotencyKey, 16, 'idempotencyKey');
+  return actionInvokeOutbox.resendExact(key);
 }
 
 async function drainActionInvokes(): Promise<void> {

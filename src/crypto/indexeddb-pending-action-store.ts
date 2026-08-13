@@ -22,6 +22,7 @@ export interface PendingActionRecord {
   resultStatus?: ActionResultStatus;
   resultDetail?: string;
   completedAtUnixMs?: number;
+  authenticatedResultCount?: number;
   canonicalInvokePayload?: Uint8Array;
   recipientKeyId?: Uint8Array;
   nextAttemptAtUnixMs?: number;
@@ -163,9 +164,17 @@ export class IndexedDbPendingActionStore {
       if (existing === undefined) return 'not-found';
       if (existing.senderDeviceId !== toHex(senderDeviceId)) return 'sender-mismatch';
       if (existing.state === 'completed') {
-        return existing.resultStatus === status && existing.resultDetail === detail
-          ? 'already-completed'
-          : 'conflict';
+        if (existing.resultStatus !== status || existing.resultDetail !== detail) return 'conflict';
+        const authenticatedResultCount = existing.authenticatedResultCount ?? 1;
+        if (!Number.isSafeInteger(authenticatedResultCount) || authenticatedResultCount < 1 ||
+            authenticatedResultCount >= Number.MAX_SAFE_INTEGER) {
+          throw new Error('Stored authenticated result count is corrupt');
+        }
+        await requestResult(store.put({
+          ...existing,
+          authenticatedResultCount: authenticatedResultCount + 1,
+        } satisfies PendingActionRecord));
+        return 'already-completed';
       }
       await requestResult(store.put({
         ...existing,
@@ -173,6 +182,7 @@ export class IndexedDbPendingActionStore {
         resultStatus: status,
         resultDetail: detail,
         completedAtUnixMs: nowUnixMs,
+        authenticatedResultCount: 1,
       } satisfies PendingActionRecord));
       return 'completed';
     });
@@ -231,6 +241,24 @@ export class IndexedDbPendingActionStore {
           : nextAttemptAtUnixMs,
       } satisfies PendingActionRecord));
     });
+  }
+
+  /** Returns the exact durable invoke delivery even after terminal reconciliation. */
+  async getInvokeDelivery(idempotencyKey: Uint8Array): Promise<PendingInvokeDelivery | undefined> {
+    const record = await this.get(idempotencyKey);
+    if (record === undefined) return undefined;
+    validateDeliveryRecord(record);
+    if (record.canonicalInvokePayload === undefined || record.recipientKeyId === undefined) {
+      return undefined;
+    }
+    return {
+      idempotencyKey: fromHex(record.idempotencyKey, IDENTIFIER_BYTES),
+      recipientDeviceId: fromHex(record.senderDeviceId, IDENTIFIER_BYTES),
+      recipientKeyId: record.recipientKeyId.slice(),
+      canonicalInvokePayload: record.canonicalInvokePayload.slice(),
+      attemptCount: record.invokeAttemptCount ?? 0,
+      expiresAtUnixMs: record.expiresAtUnixMs,
+    };
   }
 
   async get(idempotencyKey: Uint8Array): Promise<PendingActionRecord | undefined> {

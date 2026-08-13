@@ -99,10 +99,32 @@ describe('ActionInvokeOutbox', () => {
       }, new MemoryReplayLedger(), now);
       expect(secondOpened.header.sequence).toBe(2n);
 
+      await pending.reconcile(
+        idempotencyKey,
+        recipientDeviceId,
+        1,
+        undefined,
+        now + 1,
+      );
+      now += 2_000;
+      expect(await outbox.resendExact(idempotencyKey)).toBe(true);
+      const duplicateOpened = await openEnvelopeOnce(sent[2]!, {
+        workspaceId,
+        recipientDeviceId,
+        recipientIdentity,
+        pinnedSenderPublicKey: senderPublicKey,
+      }, new MemoryReplayLedger(), now);
+      const duplicatePayload = decodeEncryptedPayloadV1(duplicateOpened.plaintext);
+      expect(duplicateOpened.header.sequence).toBe(3n);
+      expect(duplicateOpened.header.messageId).not.toEqual(firstOpened.header.messageId);
+      expect(duplicatePayload.body.case === 'actionInvoke' &&
+        duplicatePayload.body.value.idempotencyKey).toEqual(idempotencyKey);
+
       await peers.remove(workspaceId, recipientDeviceId);
+      await expect(outbox.resendExact(idempotencyKey)).rejects.toThrow('not approved');
       now += 2_000;
       expect(await outbox.drainDue()).toEqual({ acceptedSends: 0, attemptedEntries: 0 });
-      expect(sent).toHaveLength(2);
+      expect(sent).toHaveLength(3);
     } finally {
       await Promise.all([pending.clear(), peers.clear(), sequences.clear()]);
     }
