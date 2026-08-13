@@ -111,13 +111,17 @@ export class ActionInvokeOutbox {
         );
         if (recipientPublicKey === undefined) throw new Error('Action recipient is not approved');
         try {
-          return await this.sendDelivery(
+          const accepted = await this.sendDelivery(
             credential,
             identity,
             recipientPublicKey,
             entry,
             this.now(),
           );
+          if (accepted) {
+            await this.pendingActions.recordExplicitInvokeResend(idempotencyKey);
+          }
+          return accepted;
         } finally {
           recipientPublicKey.fill(0);
         }

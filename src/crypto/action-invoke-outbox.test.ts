@@ -108,6 +108,7 @@ describe('ActionInvokeOutbox', () => {
       );
       now += 2_000;
       expect(await outbox.resendExact(idempotencyKey)).toBe(true);
+      expect((await pending.get(idempotencyKey))?.invokeAttemptCount).toBe(3);
       const duplicateOpened = await openEnvelopeOnce(sent[2]!, {
         workspaceId,
         recipientDeviceId,

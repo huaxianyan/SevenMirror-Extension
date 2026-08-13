@@ -243,6 +243,27 @@ export class IndexedDbPendingActionStore {
     });
   }
 
+  /** Records a locally accepted explicit resend, including after terminal reconciliation. */
+  async recordExplicitInvokeResend(idempotencyKey: Uint8Array): Promise<void> {
+    validateIdentifier(idempotencyKey, 'idempotencyKey', true);
+    await this.withWriteTransaction(async (store) => {
+      const key = toHex(idempotencyKey);
+      const existing = await requestResult<PendingActionRecord | undefined>(store.get(key));
+      if (existing === undefined || existing.canonicalInvokePayload === undefined) {
+        throw new Error('Durable invoke delivery is unavailable');
+      }
+      const attemptCount = existing.invokeAttemptCount ?? 0;
+      if (!Number.isSafeInteger(attemptCount) || attemptCount < 0 ||
+          attemptCount >= Number.MAX_SAFE_INTEGER) {
+        throw new Error('Stored invoke attempt count is corrupt');
+      }
+      await requestResult(store.put({
+        ...existing,
+        invokeAttemptCount: attemptCount + 1,
+      } satisfies PendingActionRecord));
+    });
+  }
+
   /** Returns the exact durable invoke delivery even after terminal reconciliation. */
   async getInvokeDelivery(idempotencyKey: Uint8Array): Promise<PendingInvokeDelivery | undefined> {
     const record = await this.get(idempotencyKey);

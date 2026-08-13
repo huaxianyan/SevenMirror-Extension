@@ -124,6 +124,8 @@ describe('IndexedDbPendingActionStore', () => {
       expect(completedDelivery?.idempotencyKey).toEqual(key);
       expect(completedDelivery?.canonicalInvokePayload).toEqual(operation.canonicalPayload);
       expect(completedDelivery?.recipientKeyId).toEqual(recipientKeyId);
+      await store.recordExplicitInvokeResend(key);
+      expect((await store.get(key))?.invokeAttemptCount).toBe(1);
       await expect(store.register(
         key,
         sender,

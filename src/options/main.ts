@@ -382,7 +382,7 @@ async function refreshSyntheticActionStatus(): Promise<void> {
   }
   if (result.state === 'completed') {
     if (resendSyntheticActionButton) resendSyntheticActionButton.hidden = false;
-    setSyntheticActionStatus(`Authenticated Android result reconciled. Status code: ${result.resultStatus ?? 'unknown'}. Locally accepted invoke attempts: ${result.invokeAttemptCount ?? 0}; authenticated results observed: ${result.authenticatedResultCount ?? 1}.`);
+    setSyntheticActionStatus(`Operation: completed. Authenticated Android result status: ${result.resultStatus ?? 'unknown'}. Locally accepted invoke deliveries: ${result.invokeAttemptCount ?? 0}; authenticated result deliveries observed: ${result.authenticatedResultCount ?? 1} (delivery count may exceed operation count until end-to-end ACK exists).`);
   } else {
     setSyntheticActionStatus(`Still pending. Locally accepted send attempts: ${result.invokeAttemptCount ?? 0}.`);
   }
