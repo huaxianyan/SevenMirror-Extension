@@ -84,7 +84,22 @@ export async function createActionInvokeEnvelopeFromPayload(
   context: ActionEnvelopeContext,
   canonicalPayload: Uint8Array,
 ): Promise<Uint8Array> {
-  const decoded = createActionInvokePayloadFromCanonical(canonicalPayload);
+  return createEnvelopeFromCanonicalPayload(context, canonicalPayload, 'actionInvoke');
+}
+
+export async function createActionResultAckEnvelopeFromPayload(
+  context: ActionEnvelopeContext,
+  canonicalPayload: Uint8Array,
+): Promise<Uint8Array> {
+  return createEnvelopeFromCanonicalPayload(context, canonicalPayload, 'actionResultAck');
+}
+
+async function createEnvelopeFromCanonicalPayload(
+  context: ActionEnvelopeContext,
+  canonicalPayload: Uint8Array,
+  expectedBody: 'actionInvoke' | 'actionResultAck',
+): Promise<Uint8Array> {
+  const decoded = createPayloadFromCanonical(canonicalPayload, expectedBody);
   const senderPublicKey = await serializeIdentityPublicKey(context.senderIdentity);
   const routingHeader = encodeRoutingHeaderV1({
     workspaceId: context.workspaceId,
@@ -110,14 +125,17 @@ export async function createActionInvokeEnvelopeFromPayload(
   });
 }
 
-function createActionInvokePayloadFromCanonical(value: Uint8Array): Uint8Array {
+function createPayloadFromCanonical(
+  value: Uint8Array,
+  expectedBody: 'actionInvoke' | 'actionResultAck',
+): Uint8Array {
   const decoded = decodeEncryptedPayloadV1(value);
-  if (decoded.body.case !== 'actionInvoke') {
-    throw new Error('Expected canonical action.invoke payload');
+  if (decoded.body.case !== expectedBody) {
+    throw new Error(`Expected canonical ${expectedBody} payload`);
   }
   const canonical = encodeEncryptedPayloadV1(decoded);
   if (!bytesEqual(canonical, value)) {
-    throw new Error('Stored action.invoke payload is not canonical');
+    throw new Error('Stored encrypted payload is not canonical');
   }
   return canonical;
 }

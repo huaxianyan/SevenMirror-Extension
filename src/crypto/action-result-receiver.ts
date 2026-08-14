@@ -1,5 +1,9 @@
 import type { ActionResult } from '../protocol/generated/notification/v1/payload_pb';
-import { decodeEncryptedPayloadV1 } from '../protocol/encrypted-payload';
+import {
+  createActionResultAckPayload,
+  decodeEncryptedPayloadV1,
+  encodeEncryptedPayloadV1,
+} from '../protocol/encrypted-payload';
 import {
   openEnvelopeOnce,
   type EnvelopeRecipientContext,
@@ -14,6 +18,7 @@ export interface PendingActionReconciler {
     status: ActionResult['status'],
     detail: string | undefined,
     nowUnixMs: number,
+    canonicalResultAckPayload?: Uint8Array,
   ): Promise<ActionResultReconciliation>;
 }
 
@@ -42,14 +47,18 @@ export async function receiveActionResultOnce(
   if (payload.body.case !== 'actionResult') {
     throw new ActionResultRejectedError('UNEXPECTED_PAYLOAD');
   }
-
   const result = payload.body.value;
+  const canonicalAck = encodeEncryptedPayloadV1(createActionResultAckPayload({
+    idempotencyKey: result.idempotencyKey,
+    resultSha256: await sha256(opened.plaintext),
+  }));
   const reconciliation = await pendingActions.reconcile(
     result.idempotencyKey,
     opened.header.senderDeviceId,
     result.status,
     result.detail,
     nowUnixMs,
+    canonicalAck,
   );
   switch (reconciliation) {
     case 'completed':
@@ -61,5 +70,14 @@ export async function receiveActionResultOnce(
       throw new ActionResultRejectedError('SENDER_MISMATCH');
     case 'conflict':
       throw new ActionResultRejectedError('RESULT_CONFLICT');
+  }
+}
+
+async function sha256(value: Uint8Array): Promise<Uint8Array> {
+  const copy = value.slice();
+  try {
+    return new Uint8Array(await crypto.subtle.digest('SHA-256', copy));
+  } finally {
+    copy.fill(0);
   }
 }

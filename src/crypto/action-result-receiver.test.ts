@@ -2,7 +2,12 @@ import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
 import { ActionResultStatus } from '../protocol/generated/notification/v1/payload_pb';
 import { encodeEncryptedEnvelopeV1 } from '../protocol/encrypted-envelope';
-import { createActionResultPayload, encodeEncryptedPayloadV1 } from '../protocol/encrypted-payload';
+import {
+  createActionInvokePayload,
+  createActionResultPayload,
+  decodeEncryptedPayloadV1,
+  encodeEncryptedPayloadV1,
+} from '../protocol/encrypted-payload';
 import { encodeRoutingHeaderV1 } from '../protocol/routing-header';
 import { receiveActionResultOnce } from './action-result-receiver';
 import {
@@ -40,12 +45,20 @@ describe('action result receiver', () => {
     const pending = new IndexedDbPendingActionStore(storeName);
     const replay = new MemoryReplayLedger();
     try {
+      const canonicalInvoke = encodeEncryptedPayloadV1(createActionInvokePayload({
+        notificationId: 'synthetic.notification/42',
+        notificationRevision: 1n,
+        actionId: new Uint8Array(16).fill(8),
+        idempotencyKey,
+      }));
       await pending.register(
         idempotencyKey,
         androidDeviceId,
-        new Uint8Array(32).fill(9),
+        await sha256(canonicalInvoke),
         now,
         now + 60_000,
+        canonicalInvoke,
+        await sha256(androidPublicKey),
       );
       const firstFrame = await resultFrame(
         androidIdentity,
@@ -64,6 +77,10 @@ describe('action result receiver', () => {
       const first = await receiveActionResultOnce(firstFrame, context, replay, pending, now);
       expect(first.reconciliation).toBe('completed');
       expect(first.result.status).toBe(ActionResultStatus.SUCCEEDED);
+      const ack = decodeEncryptedPayloadV1(
+        (await pending.dueAcks(now)).at(0)!.canonicalAckPayload,
+      );
+      expect(ack.body.case).toBe('actionResultAck');
 
       const recoveredFrame = await resultFrame(
         androidIdentity,

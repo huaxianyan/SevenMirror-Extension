@@ -1,4 +1,5 @@
 import { ActionResultStatus } from '../protocol/generated/notification/v1/payload_pb';
+import { decodeEncryptedPayloadV1 } from '../protocol/encrypted-payload';
 
 export type PendingActionRegistration =
   | 'registered'
@@ -27,6 +28,9 @@ export interface PendingActionRecord {
   recipientKeyId?: Uint8Array;
   nextAttemptAtUnixMs?: number;
   invokeAttemptCount?: number;
+  canonicalResultAckPayload?: Uint8Array;
+  nextAckAttemptAtUnixMs?: number;
+  ackAttemptCount?: number;
 }
 
 export interface PendingInvokeDelivery {
@@ -34,6 +38,15 @@ export interface PendingInvokeDelivery {
   recipientDeviceId: Uint8Array;
   recipientKeyId: Uint8Array;
   canonicalInvokePayload: Uint8Array;
+  attemptCount: number;
+  expiresAtUnixMs: number;
+}
+
+export interface PendingAckDelivery {
+  idempotencyKey: Uint8Array;
+  recipientDeviceId: Uint8Array;
+  recipientKeyId: Uint8Array;
+  canonicalAckPayload: Uint8Array;
   attemptCount: number;
   expiresAtUnixMs: number;
 }
@@ -151,11 +164,15 @@ export class IndexedDbPendingActionStore {
     status: ActionResultStatus,
     detail: string | undefined,
     nowUnixMs: number,
+    canonicalResultAckPayload?: Uint8Array,
   ): Promise<ActionResultReconciliation> {
     validateIdentifier(idempotencyKey, 'idempotencyKey', true);
     validateIdentifier(senderDeviceId, 'senderDeviceId', true);
     validateResult(status, detail);
     validateTimestamp(nowUnixMs, 'nowUnixMs');
+    if (canonicalResultAckPayload !== undefined) {
+      validateCanonicalAck(canonicalResultAckPayload, idempotencyKey);
+    }
 
     return this.withWriteTransaction(async (store) => {
       await purgeExpired(store, nowUnixMs);
@@ -170,9 +187,19 @@ export class IndexedDbPendingActionStore {
             authenticatedResultCount >= Number.MAX_SAFE_INTEGER) {
           throw new Error('Stored authenticated result count is corrupt');
         }
+        if (existing.canonicalResultAckPayload !== undefined &&
+            canonicalResultAckPayload !== undefined &&
+            !bytesEqual(existing.canonicalResultAckPayload, canonicalResultAckPayload)) {
+          return 'conflict';
+        }
         await requestResult(store.put({
           ...existing,
           authenticatedResultCount: authenticatedResultCount + 1,
+          ...(existing.recipientKeyId === undefined || canonicalResultAckPayload === undefined ? {} : {
+            canonicalResultAckPayload: canonicalResultAckPayload.slice(),
+            nextAckAttemptAtUnixMs: nowUnixMs,
+            ackAttemptCount: 0,
+          }),
         } satisfies PendingActionRecord));
         return 'already-completed';
       }
@@ -183,6 +210,11 @@ export class IndexedDbPendingActionStore {
         resultDetail: detail,
         completedAtUnixMs: nowUnixMs,
         authenticatedResultCount: 1,
+        ...(existing.recipientKeyId === undefined || canonicalResultAckPayload === undefined ? {} : {
+          canonicalResultAckPayload: canonicalResultAckPayload.slice(),
+          nextAckAttemptAtUnixMs: nowUnixMs,
+          ackAttemptCount: 0,
+        }),
       } satisfies PendingActionRecord));
       return 'completed';
     });
@@ -213,6 +245,60 @@ export class IndexedDbPendingActionStore {
           attemptCount: record.invokeAttemptCount ?? 0,
           expiresAtUnixMs: record.expiresAtUnixMs,
         }));
+    });
+  }
+
+  async dueAcks(nowUnixMs: number, limit = 16): Promise<PendingAckDelivery[]> {
+    validateTimestamp(nowUnixMs, 'nowUnixMs');
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 128) {
+      throw new Error('limit must be 1..128');
+    }
+    return this.withWriteTransaction(async (store) => {
+      await purgeExpired(store, nowUnixMs);
+      const records = await requestResult<PendingActionRecord[]>(store.getAll());
+      records.forEach(validateDeliveryRecord);
+      return records
+        .filter((record) => record.state === 'completed' &&
+          record.canonicalResultAckPayload !== undefined && record.recipientKeyId !== undefined &&
+          record.nextAckAttemptAtUnixMs !== undefined && record.nextAckAttemptAtUnixMs <= nowUnixMs)
+        .sort((left, right) =>
+          (left.nextAckAttemptAtUnixMs! - right.nextAckAttemptAtUnixMs!) ||
+          left.idempotencyKey.localeCompare(right.idempotencyKey))
+        .slice(0, limit)
+        .map((record) => ({
+          idempotencyKey: fromHex(record.idempotencyKey, IDENTIFIER_BYTES),
+          recipientDeviceId: fromHex(record.senderDeviceId, IDENTIFIER_BYTES),
+          recipientKeyId: record.recipientKeyId!.slice(),
+          canonicalAckPayload: record.canonicalResultAckPayload!.slice(),
+          attemptCount: record.ackAttemptCount ?? 0,
+          expiresAtUnixMs: record.expiresAtUnixMs,
+        }));
+    });
+  }
+
+  async recordAckSendAttempt(
+    idempotencyKey: Uint8Array,
+    nextAttemptAtUnixMs: number,
+    maximumAttempts = 5,
+  ): Promise<void> {
+    validateIdentifier(idempotencyKey, 'idempotencyKey', true);
+    validateTimestamp(nextAttemptAtUnixMs, 'nextAttemptAtUnixMs');
+    if (!Number.isSafeInteger(maximumAttempts) || maximumAttempts < 1) {
+      throw new Error('maximumAttempts must be positive');
+    }
+    await this.withWriteTransaction(async (store) => {
+      const key = toHex(idempotencyKey);
+      const existing = await requestResult<PendingActionRecord | undefined>(store.get(key));
+      if (existing === undefined || existing.state !== 'completed' ||
+          existing.canonicalResultAckPayload === undefined) return;
+      const attemptCount = (existing.ackAttemptCount ?? 0) + 1;
+      await requestResult(store.put({
+        ...existing,
+        ackAttemptCount: attemptCount,
+        nextAckAttemptAtUnixMs: attemptCount >= maximumAttempts
+          ? existing.expiresAtUnixMs
+          : nextAttemptAtUnixMs,
+      } satisfies PendingActionRecord));
     });
   }
 
@@ -353,18 +439,45 @@ function validateDeliveryRecord(record: PendingActionRecord): void {
     record.nextAttemptAtUnixMs,
     record.invokeAttemptCount,
   ];
-  if (values.every((value) => value === undefined)) return;
-  if (values.some((value) => value === undefined)) {
-    throw new Error('Stored invoke delivery state is partial');
+  if (values.some((value) => value !== undefined)) {
+    if (values.some((value) => value === undefined)) {
+      throw new Error('Stored invoke delivery state is partial');
+    }
+    if (!(record.canonicalInvokePayload instanceof Uint8Array) ||
+        record.canonicalInvokePayload.byteLength === 0) {
+      throw new Error('Stored invoke payload is corrupt');
+    }
+    validateKeyId(record.recipientKeyId!);
+    validateTimestamp(record.nextAttemptAtUnixMs!, 'nextAttemptAtUnixMs');
+    if (!Number.isSafeInteger(record.invokeAttemptCount) || record.invokeAttemptCount! < 0) {
+      throw new Error('Stored invoke attempt count is corrupt');
+    }
   }
-  if (!(record.canonicalInvokePayload instanceof Uint8Array) ||
-      record.canonicalInvokePayload.byteLength === 0) {
-    throw new Error('Stored invoke payload is corrupt');
+  const ackValues = [
+    record.canonicalResultAckPayload,
+    record.nextAckAttemptAtUnixMs,
+    record.ackAttemptCount,
+  ];
+  if (ackValues.some((value) => value !== undefined)) {
+    if (ackValues.some((value) => value === undefined) || record.recipientKeyId === undefined) {
+      throw new Error('Stored acknowledgement delivery state is partial');
+    }
+    validateCanonicalAck(
+      record.canonicalResultAckPayload!,
+      fromHex(record.idempotencyKey, IDENTIFIER_BYTES),
+    );
+    validateTimestamp(record.nextAckAttemptAtUnixMs!, 'nextAckAttemptAtUnixMs');
+    if (!Number.isSafeInteger(record.ackAttemptCount) || record.ackAttemptCount! < 0) {
+      throw new Error('Stored acknowledgement attempt count is corrupt');
+    }
   }
-  validateKeyId(record.recipientKeyId!);
-  validateTimestamp(record.nextAttemptAtUnixMs!, 'nextAttemptAtUnixMs');
-  if (!Number.isSafeInteger(record.invokeAttemptCount) || record.invokeAttemptCount! < 0) {
-    throw new Error('Stored invoke attempt count is corrupt');
+}
+
+function validateCanonicalAck(payload: Uint8Array, idempotencyKey: Uint8Array): void {
+  const decoded = decodeEncryptedPayloadV1(payload);
+  if (decoded.body.case !== 'actionResultAck' ||
+      !bytesEqual(decoded.body.value.idempotencyKey, idempotencyKey)) {
+    throw new Error('Canonical acknowledgement does not match the operation');
   }
 }
 

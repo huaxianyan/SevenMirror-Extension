@@ -1,6 +1,10 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
 import { actionInvokeOperationDigest } from './action-envelope-sender';
+import {
+  createActionResultAckPayload,
+  encodeEncryptedPayloadV1,
+} from '../protocol/encrypted-payload';
 import { ActionResultStatus } from '../protocol/generated/notification/v1/payload_pb';
 import { IndexedDbPendingActionStore } from './indexeddb-pending-action-store';
 
@@ -117,9 +121,34 @@ describe('IndexedDbPendingActionStore', () => {
         recipientKeyId,
       )).toBe('already-registered');
       expect((await store.dueInvokes(now + 2_001)).at(0)?.attemptCount).toBe(0);
-      await store.reconcile(key, sender, ActionResultStatus.SUCCEEDED, undefined, now + 2_002);
+      const canonicalAck = encodeEncryptedPayloadV1(createActionResultAckPayload({
+        idempotencyKey: key,
+        resultSha256: new Uint8Array(32).fill(6),
+      }));
+      await store.reconcile(
+        key,
+        sender,
+        ActionResultStatus.SUCCEEDED,
+        undefined,
+        now + 2_002,
+        canonicalAck,
+      );
       expect((await store.get(key))?.authenticatedResultCount).toBe(1);
       expect(await store.dueInvokes(now + 2_002)).toEqual([]);
+      const dueAck = (await store.dueAcks(now + 2_002)).at(0);
+      expect(dueAck?.canonicalAckPayload).toEqual(canonicalAck);
+      expect(dueAck?.recipientKeyId).toEqual(recipientKeyId);
+      await store.recordAckSendAttempt(key, now + 3_002, 1);
+      expect(await store.dueAcks(now + 3_002)).toEqual([]);
+      await store.reconcile(
+        key,
+        sender,
+        ActionResultStatus.SUCCEEDED,
+        undefined,
+        now + 3_003,
+        canonicalAck,
+      );
+      expect((await store.dueAcks(now + 3_003)).at(0)?.attemptCount).toBe(0);
       const completedDelivery = await store.getInvokeDelivery(key);
       expect(completedDelivery?.idempotencyKey).toEqual(key);
       expect(completedDelivery?.canonicalInvokePayload).toEqual(operation.canonicalPayload);
