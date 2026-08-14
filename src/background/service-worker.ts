@@ -136,8 +136,8 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
 
     case 'resend-synthetic-action':
       void resendSyntheticAction(message).then(
-        (accepted) => sendResponse({ accepted }),
-        () => sendResponse({ accepted: false }),
+        (result) => sendResponse(result),
+        () => sendResponse({ accepted: false, reason: 'failed-closed' }),
       );
       return true;
 
@@ -199,9 +199,19 @@ async function getSyntheticActionStatus(message: Record<string, unknown>): Promi
   };
 }
 
-async function resendSyntheticAction(message: Record<string, unknown>): Promise<boolean> {
+async function resendSyntheticAction(message: Record<string, unknown>): Promise<{
+  accepted: boolean;
+  reason?: 'recipient-not-approved';
+}> {
   const key = parseHex(message.idempotencyKey, 16, 'idempotencyKey');
-  return actionInvokeOutbox.resendExact(key);
+  try {
+    return { accepted: await actionInvokeOutbox.resendExact(key) };
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Action recipient is not approved') {
+      return { accepted: false, reason: 'recipient-not-approved' };
+    }
+    throw error;
+  }
 }
 
 async function drainActionInvokes(): Promise<void> {

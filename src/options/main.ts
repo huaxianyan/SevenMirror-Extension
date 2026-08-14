@@ -42,6 +42,7 @@ const safetyCodeOutput = document.querySelector<HTMLOutputElement>('#trust-safet
 const safetyConfirmed = document.querySelector<HTMLInputElement>('#trust-code-confirmed');
 const approvePeerButton = document.querySelector<HTMLButtonElement>('#approve-trust-peer');
 const cancelPairingButton = document.querySelector<HTMLButtonElement>('#cancel-trust-pairing');
+const removeApprovedPeerButton = document.querySelector<HTMLButtonElement>('#remove-approved-peer');
 const pairingStatus = document.querySelector<HTMLElement>('#trust-pairing-status');
 const relayTestSection = document.querySelector<HTMLElement>('#synthetic-relay-test');
 const syntheticTargetInput = document.querySelector<HTMLTextAreaElement>('#synthetic-action-target');
@@ -65,6 +66,7 @@ async function render(): Promise<void> {
     setStatus('This Chrome profile is registered. Connection status is available in the extension popup.');
     pairingSection?.removeAttribute('hidden');
     await renderPairing();
+    await renderApprovedPeerControl();
     await renderSyntheticRelayAvailability();
   }
 }
@@ -112,6 +114,7 @@ form?.addEventListener('submit', async (event) => {
     form.setAttribute('hidden', '');
     pairingSection?.removeAttribute('hidden');
     await renderPairing();
+    await renderApprovedPeerControl();
     await renderSyntheticRelayAvailability();
   } catch {
     if (originPermission !== undefined && !permissionAlreadyGranted && !registered) {
@@ -168,8 +171,24 @@ approvePeerButton?.addEventListener('click', () => {
   void runPairingOperation(async (local) => {
     await pairingCoordinator.confirmSafetyCode(safetyCode, local);
     renderPairingView(undefined);
+    await renderApprovedPeerControl();
     setPairingStatus('Peer approved locally. The other device must confirm independently.');
   });
+});
+
+removeApprovedPeerButton?.addEventListener('click', () => {
+  if (!window.confirm(
+    'Remove the sole approved Android peer? Encrypted action delivery will fail closed until the devices complete safety-code approval again.',
+  )) return;
+  removeApprovedPeerButton.disabled = true;
+  void removeSoleApprovedPeer()
+    .then(() => {
+      removeApprovedPeerButton.hidden = true;
+      setPairingStatus('Approved Android peer removed locally. Re-approval with a complete matching safety code is required.');
+      setSyntheticActionStatus('Exact resend is now expected to fail closed before encryption because the Android peer is not approved.');
+    })
+    .catch(() => setPairingStatus('Approved-peer removal failed closed; the existing trust state was not reported as removed.'))
+    .finally(() => { removeApprovedPeerButton.disabled = false; });
 });
 
 cancelPairingButton?.addEventListener('click', () => {
@@ -187,6 +206,40 @@ cancelPairingButton?.addEventListener('click', () => {
       setPairingButtonsBusy(false);
     });
 });
+
+async function renderApprovedPeerControl(): Promise<void> {
+  const credential = await credentialStore.load();
+  if (credential === undefined) return;
+  try {
+    const approved = await trustedPeers.listApproved(credential.workspaceId);
+    if (removeApprovedPeerButton) removeApprovedPeerButton.hidden = approved.length !== 1;
+    for (const peer of approved) {
+      peer.deviceId.fill(0);
+      peer.keyId.fill(0);
+    }
+  } finally {
+    credential.authToken.fill(0);
+  }
+}
+
+async function removeSoleApprovedPeer(): Promise<void> {
+  const credential = await credentialStore.load();
+  if (credential === undefined) throw new Error('Transport registration is required');
+  try {
+    const approved = await trustedPeers.listApproved(credential.workspaceId);
+    if (approved.length !== 1) throw new Error('Exactly one approved peer is required');
+    try {
+      await trustedPeers.remove(credential.workspaceId, approved[0]!.deviceId);
+    } finally {
+      for (const peer of approved) {
+        peer.deviceId.fill(0);
+        peer.keyId.fill(0);
+      }
+    }
+  } finally {
+    credential.authToken.fill(0);
+  }
+}
 
 async function renderPairing(): Promise<void> {
   try {
@@ -399,10 +452,12 @@ async function resendSyntheticAction(): Promise<void> {
     const result = await chrome.runtime.sendMessage({
       type: 'resend-synthetic-action',
       idempotencyKey: currentSyntheticIdempotencyKey,
-    }) as { accepted?: boolean };
+    }) as { accepted?: boolean; reason?: string };
     setSyntheticActionStatus(result.accepted
       ? 'Fresh encrypted envelope accepted locally for the exact completed operation. Awaiting duplicate result reconciliation.'
-      : 'Exact resend was not accepted by the current authenticated socket.');
+      : result.reason === 'recipient-not-approved'
+        ? 'Exact resend rejected before encryption: the Android recipient is not approved.'
+        : 'Exact resend was not accepted by the current authenticated socket.');
     window.setTimeout(() => { void refreshSyntheticActionStatus(); }, 1_000);
   } finally {
     resendSyntheticActionButton.disabled = false;
