@@ -15,6 +15,7 @@ message EncryptedPayload {
   oneof body {
     ActionInvoke action_invoke = 10;
     ActionResult action_result = 11;
+    ActionResultAck action_result_ack = 12;
   }
 }
 
@@ -34,6 +35,13 @@ message ActionResult {
   bytes idempotency_key = 1;
   ActionResultStatus status = 2;
   optional string detail = 3;
+}
+
+// ActionResultAck proves that one Chrome recipient durably reconciled the
+// exact canonical action.result bytes identified by result_sha256.
+message ActionResultAck {
+  bytes idempotency_key = 1;
+  bytes result_sha256 = 2;
 }
 
 enum ActionResultStatus {

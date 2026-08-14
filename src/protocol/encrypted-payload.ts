@@ -2,10 +2,12 @@ import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
 import {
   ActionInvokeSchema,
   ActionResultSchema,
+  ActionResultAckSchema,
   ActionResultStatus,
   EncryptedPayloadSchema,
   type ActionInvoke,
   type ActionResult,
+  type ActionResultAck,
   type EncryptedPayload,
 } from './generated/notification/v1/payload_pb';
 
@@ -16,6 +18,7 @@ export const ENCRYPTED_PAYLOAD_LIMITS = {
   maxReplyTextBytes: 4_000,
   maxResultDetailBytes: 256,
   identifierSize: 16,
+  sha256Size: 32,
   maxNotificationRevision: 0x7fff_ffff_ffff_ffffn,
 } as const;
 
@@ -41,6 +44,18 @@ export function createActionResultPayload(
     body: {
       case: 'actionResult',
       value: create(ActionResultSchema, result),
+    },
+  });
+}
+
+export function createActionResultAckPayload(
+  ack: Omit<ActionResultAck, '$typeName'>,
+): EncryptedPayload {
+  return create(EncryptedPayloadSchema, {
+    schemaVersion: ENCRYPTED_PAYLOAD_LIMITS.schemaVersion,
+    body: {
+      case: 'actionResultAck',
+      value: create(ActionResultAckSchema, ack),
     },
   });
 }
@@ -78,6 +93,9 @@ export function validateEncryptedPayloadV1(payload: EncryptedPayload): void {
       return;
     case 'actionResult':
       validateResult(payload.body.value);
+      return;
+    case 'actionResultAck':
+      validateResultAck(payload.body.value);
       return;
     default:
       throw new Error('Exactly one supported encrypted payload body is required');
@@ -128,6 +146,20 @@ function validateResult(result: ActionResult): void {
     if (detailSize < 1 || detailSize > ENCRYPTED_PAYLOAD_LIMITS.maxResultDetailBytes) {
       throw new Error('Action result detail is out of range');
     }
+  }
+}
+
+function validateResultAck(ack: ActionResultAck): void {
+  if (ack.$unknown?.length) {
+    throw new Error('Action result acknowledgement contains unknown fields');
+  }
+  if (ack.idempotencyKey.byteLength !== ENCRYPTED_PAYLOAD_LIMITS.identifierSize ||
+      ack.idempotencyKey.every((value) => value === 0)) {
+    throw new Error('Idempotency key must be a non-zero 16-byte value');
+  }
+  if (ack.resultSha256.byteLength !== ENCRYPTED_PAYLOAD_LIMITS.sha256Size ||
+      ack.resultSha256.every((value) => value === 0)) {
+    throw new Error('Result SHA-256 must be a non-zero 32-byte value');
   }
 }
 

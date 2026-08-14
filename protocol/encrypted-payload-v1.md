@@ -15,7 +15,8 @@ Receivers MUST reject a plaintext unless all of the following hold:
 2. protobuf parsing succeeds;
 3. no unknown fields occur at any message level;
 4. `schema_version` is exactly `1`;
-5. exactly one supported `body` (`action_invoke` or `action_result`) is present;
+5. exactly one supported `body` (`action_invoke`, `action_result`, or
+   `action_result_ack`) is present;
 6. every message-specific semantic constraint below holds; and
 7. deterministic re-encoding produces exactly the received bytes.
 
@@ -64,3 +65,31 @@ sending them. A duplicate request returns the stored result without invoking the
 notification action again. If the operation tuple exists without a stored result
 (for example, a process crash around the side effect), Android returns
 `OUTCOME_UNKNOWN` and MUST NOT retry the side effect automatically.
+
+## `action_result_ack`
+
+An action-result acknowledgement proves only that the authenticated Chrome
+recipient durably reconciled one exact canonical `action_result`. It does not
+acknowledge Android execution before Chrome persistence, and it does not create
+an acknowledgement-of-acknowledgement chain.
+
+Constraints:
+
+- `idempotency_key`: the same non-zero 16-byte value from `action_invoke` and
+  `action_result`;
+- `result_sha256`: exactly 32 bytes, not all zero, and equal to SHA-256 over the
+  complete canonical encoded `EncryptedPayload` whose body is the acknowledged
+  `action_result`.
+
+Chrome MUST atomically persist terminal result reconciliation and an ACK intent
+before sending this body. Android MUST authenticate the ACK sender, resolve the
+completed operation by `(sender_key_id, idempotency_key)`, recompute the digest
+from its exact stored canonical result bytes, and require a constant-time match
+before deleting the corresponding recipient-bound result-outbox entry. A wrong
+sender, digest, operation binding, or approved-peer state fails closed. A valid
+duplicate ACK is idempotent even when the outbox entry was already deleted.
+
+ACK delivery itself has no ACK. Chrome retains a bounded durable ACK intent and
+may retry it or reactivate it when another identical result arrives. General
+relay stream cursors remain a separate protocol concern and MUST NOT be inferred
+from this per-operation acknowledgement.

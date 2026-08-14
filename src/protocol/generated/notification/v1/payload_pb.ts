@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file notification/v1/payload.proto.
  */
 export const file_notification_v1_payload: GenFile = /*@__PURE__*/
-  fileDesc("Ch1ub3RpZmljYXRpb24vdjEvcGF5bG9hZC5wcm90bxIZbm90aWZpY2F0aW9uLm1pcnJvcmluZy52MSK2AQoQRW5jcnlwdGVkUGF5bG9hZBIWCg5zY2hlbWFfdmVyc2lvbhgBIAEoDRJACg1hY3Rpb25faW52b2tlGAogASgLMicubm90aWZpY2F0aW9uLm1pcnJvcmluZy52MS5BY3Rpb25JbnZva2VIABJACg1hY3Rpb25fcmVzdWx0GAsgASgLMicubm90aWZpY2F0aW9uLm1pcnJvcmluZy52MS5BY3Rpb25SZXN1bHRIAEIGCgRib2R5IpoBCgxBY3Rpb25JbnZva2USFwoPbm90aWZpY2F0aW9uX2lkGAEgASgJEh0KFW5vdGlmaWNhdGlvbl9yZXZpc2lvbhgCIAEoBBIRCglhY3Rpb25faWQYAyABKAwSFwoPaWRlbXBvdGVuY3lfa2V5GAQgASgMEhcKCnJlcGx5X3RleHQYBSABKAlIAIgBAUINCgtfcmVwbHlfdGV4dCKGAQoMQWN0aW9uUmVzdWx0EhcKD2lkZW1wb3RlbmN5X2tleRgBIAEoDBI9CgZzdGF0dXMYAiABKA4yLS5ub3RpZmljYXRpb24ubWlycm9yaW5nLnYxLkFjdGlvblJlc3VsdFN0YXR1cxITCgZkZXRhaWwYAyABKAlIAIgBAUIJCgdfZGV0YWlsKsoDChJBY3Rpb25SZXN1bHRTdGF0dXMSJAogQUNUSU9OX1JFU1VMVF9TVEFUVVNfVU5TUEVDSUZJRUQQABIiCh5BQ1RJT05fUkVTVUxUX1NUQVRVU19TVUNDRUVERUQQARIvCitBQ1RJT05fUkVTVUxUX1NUQVRVU19OT1RJRklDQVRJT05fTk9UX0ZPVU5EEAISMwovQUNUSU9OX1JFU1VMVF9TVEFUVVNfU1RBTEVfTk9USUZJQ0FUSU9OX1ZFUlNJT04QAxIpCiVBQ1RJT05fUkVTVUxUX1NUQVRVU19BQ1RJT05fTk9UX0ZPVU5EEAQSJgoiQUNUSU9OX1JFU1VMVF9TVEFUVVNfVEVYVF9SRVFVSVJFRBAFEisKJ0FDVElPTl9SRVNVTFRfU1RBVFVTX1RFWFRfTk9UX1NVUFBPUlRFRBAGEjEKLUFDVElPTl9SRVNVTFRfU1RBVFVTX1BFTkRJTkdfSU5URU5UX0NBTkNFTExFRBAHEicKI0FDVElPTl9SRVNVTFRfU1RBVFVTX0lOVEVSTkFMX0VSUk9SEAgSKAokQUNUSU9OX1JFU1VMVF9TVEFUVVNfT1VUQ09NRV9VTktOT1dOEAlCowEKL2Rldi5ub3RpZmljYXRpb25taXJyb3JpbmcucHJvdG9jb2wuZ2VuZXJhdGVkLnYxQgxQYXlsb2FkUHJvdG9QAVpgZ2l0aHViLmNvbS9odWF4aWFueWFuL1N5bmNOb3RpZmljYXRpb25zLVNlcnZlci9wcm90b2NvbC9nZW5lcmF0ZWQvbm90aWZpY2F0aW9uL3YxO25vdGlmaWNhdGlvbnYxYgZwcm90bzM");
+  fileDesc("Ch1ub3RpZmljYXRpb24vdjEvcGF5bG9hZC5wcm90bxIZbm90aWZpY2F0aW9uLm1pcnJvcmluZy52MSL/AQoQRW5jcnlwdGVkUGF5bG9hZBIWCg5zY2hlbWFfdmVyc2lvbhgBIAEoDRJACg1hY3Rpb25faW52b2tlGAogASgLMicubm90aWZpY2F0aW9uLm1pcnJvcmluZy52MS5BY3Rpb25JbnZva2VIABJACg1hY3Rpb25fcmVzdWx0GAsgASgLMicubm90aWZpY2F0aW9uLm1pcnJvcmluZy52MS5BY3Rpb25SZXN1bHRIABJHChFhY3Rpb25fcmVzdWx0X2FjaxgMIAEoCzIqLm5vdGlmaWNhdGlvbi5taXJyb3JpbmcudjEuQWN0aW9uUmVzdWx0QWNrSABCBgoEYm9keSKaAQoMQWN0aW9uSW52b2tlEhcKD25vdGlmaWNhdGlvbl9pZBgBIAEoCRIdChVub3RpZmljYXRpb25fcmV2aXNpb24YAiABKAQSEQoJYWN0aW9uX2lkGAMgASgMEhcKD2lkZW1wb3RlbmN5X2tleRgEIAEoDBIXCgpyZXBseV90ZXh0GAUgASgJSACIAQFCDQoLX3JlcGx5X3RleHQihgEKDEFjdGlvblJlc3VsdBIXCg9pZGVtcG90ZW5jeV9rZXkYASABKAwSPQoGc3RhdHVzGAIgASgOMi0ubm90aWZpY2F0aW9uLm1pcnJvcmluZy52MS5BY3Rpb25SZXN1bHRTdGF0dXMSEwoGZGV0YWlsGAMgASgJSACIAQFCCQoHX2RldGFpbCJBCg9BY3Rpb25SZXN1bHRBY2sSFwoPaWRlbXBvdGVuY3lfa2V5GAEgASgMEhUKDXJlc3VsdF9zaGEyNTYYAiABKAwqygMKEkFjdGlvblJlc3VsdFN0YXR1cxIkCiBBQ1RJT05fUkVTVUxUX1NUQVRVU19VTlNQRUNJRklFRBAAEiIKHkFDVElPTl9SRVNVTFRfU1RBVFVTX1NVQ0NFRURFRBABEi8KK0FDVElPTl9SRVNVTFRfU1RBVFVTX05PVElGSUNBVElPTl9OT1RfRk9VTkQQAhIzCi9BQ1RJT05fUkVTVUxUX1NUQVRVU19TVEFMRV9OT1RJRklDQVRJT05fVkVSU0lPThADEikKJUFDVElPTl9SRVNVTFRfU1RBVFVTX0FDVElPTl9OT1RfRk9VTkQQBBImCiJBQ1RJT05fUkVTVUxUX1NUQVRVU19URVhUX1JFUVVJUkVEEAUSKwonQUNUSU9OX1JFU1VMVF9TVEFUVVNfVEVYVF9OT1RfU1VQUE9SVEVEEAYSMQotQUNUSU9OX1JFU1VMVF9TVEFUVVNfUEVORElOR19JTlRFTlRfQ0FOQ0VMTEVEEAcSJwojQUNUSU9OX1JFU1VMVF9TVEFUVVNfSU5URVJOQUxfRVJST1IQCBIoCiRBQ1RJT05fUkVTVUxUX1NUQVRVU19PVVRDT01FX1VOS05PV04QCUKjAQovZGV2Lm5vdGlmaWNhdGlvbm1pcnJvcmluZy5wcm90b2NvbC5nZW5lcmF0ZWQudjFCDFBheWxvYWRQcm90b1ABWmBnaXRodWIuY29tL2h1YXhpYW55YW4vU3luY05vdGlmaWNhdGlvbnMtU2VydmVyL3Byb3RvY29sL2dlbmVyYXRlZC9ub3RpZmljYXRpb24vdjE7bm90aWZpY2F0aW9udjFiBnByb3RvMw");
 
 /**
  * EncryptedPayload is serialized before HPKE sealing. Its type and every
@@ -39,6 +39,12 @@ export type EncryptedPayload = Message<"notification.mirroring.v1.EncryptedPaylo
      */
     value: ActionResult;
     case: "actionResult";
+  } | {
+    /**
+     * @generated from field: notification.mirroring.v1.ActionResultAck action_result_ack = 12;
+     */
+    value: ActionResultAck;
+    case: "actionResultAck";
   } | { case: undefined; value?: undefined };
 };
 
@@ -118,6 +124,31 @@ export type ActionResult = Message<"notification.mirroring.v1.ActionResult"> & {
  */
 export const ActionResultSchema: GenMessage<ActionResult> = /*@__PURE__*/
   messageDesc(file_notification_v1_payload, 2);
+
+/**
+ * ActionResultAck proves that one Chrome recipient durably reconciled the
+ * exact canonical action.result bytes identified by result_sha256.
+ *
+ * @generated from message notification.mirroring.v1.ActionResultAck
+ */
+export type ActionResultAck = Message<"notification.mirroring.v1.ActionResultAck"> & {
+  /**
+   * @generated from field: bytes idempotency_key = 1;
+   */
+  idempotencyKey: Uint8Array;
+
+  /**
+   * @generated from field: bytes result_sha256 = 2;
+   */
+  resultSha256: Uint8Array;
+};
+
+/**
+ * Describes the message notification.mirroring.v1.ActionResultAck.
+ * Use `create(ActionResultAckSchema)` to create a new message.
+ */
+export const ActionResultAckSchema: GenMessage<ActionResultAck> = /*@__PURE__*/
+  messageDesc(file_notification_v1_payload, 3);
 
 /**
  * @generated from enum notification.mirroring.v1.ActionResultStatus

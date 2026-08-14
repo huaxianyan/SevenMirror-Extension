@@ -3,6 +3,7 @@ import vector from '../../protocol/test-vectors/encrypted-payload-v1.json';
 import {
   createActionInvokePayload,
   createActionResultPayload,
+  createActionResultAckPayload,
   decodeEncryptedPayloadV1,
   encodeEncryptedPayloadV1,
 } from './encrypted-payload';
@@ -44,6 +45,26 @@ describe('Encrypted Payload v1', () => {
       expect(decoded.body.value.status).toBe(ActionResultStatus.STALE_NOTIFICATION_VERSION);
       expect(decoded.body.value.detail).toBe('revision changed');
     }
+  });
+
+  it('round-trips a canonical action result acknowledgement', () => {
+    const digest = fromHex(vector.actionResultSha256Hex);
+    const payload = createActionResultAckPayload({
+      idempotencyKey: fromHex(vector.idempotencyKeyHex),
+      resultSha256: digest,
+    });
+    const encoded = encodeEncryptedPayloadV1(payload);
+    expect(encoded).toEqual(fromHex(vector.actionResultAckEncodedHex));
+    const decoded = decodeEncryptedPayloadV1(encoded);
+    expect(decoded.body.case).toBe('actionResultAck');
+    if (decoded.body.case === 'actionResultAck') {
+      expect(decoded.body.value.resultSha256).toEqual(digest);
+    }
+
+    if (payload.body.case === 'actionResultAck') {
+      payload.body.value.resultSha256 = new Uint8Array(32);
+    }
+    expect(() => encodeEncryptedPayloadV1(payload)).toThrow(/SHA-256/i);
   });
 
   it('rejects duplicate, unknown and invalid semantic fields', () => {
