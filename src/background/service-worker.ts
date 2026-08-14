@@ -9,6 +9,7 @@ import { DEFAULT_CONNECTION_STATE } from '../shared/status';
 import { runE2eePersistenceSpike } from './e2ee-spike';
 import { IndexedDbIdentityStore } from '../crypto/indexeddb-identity-store';
 import { ActionInvokeOutbox } from '../crypto/action-invoke-outbox';
+import { ActionResultAckOutbox } from '../crypto/action-result-ack-outbox';
 import { IndexedDbOutboundSequenceStore } from '../crypto/indexeddb-outbound-sequence-store';
 import { IndexedDbPendingActionStore } from '../crypto/indexeddb-pending-action-store';
 import { IndexedDbReplayLedger } from '../crypto/indexeddb-replay-ledger';
@@ -20,10 +21,12 @@ import { TransportRuntime } from '../transport/transport-runtime';
 const CONNECTION_STATE_KEY = 'connectionState';
 const TRANSPORT_RECONNECT_ALARM = 'transport-reconnect-v1';
 const ACTION_INVOKE_RETRY_ALARM = 'action-invoke-retry-v1';
+const ACTION_RESULT_ACK_RETRY_ALARM = 'action-result-ack-retry-v1';
 const credentialStore = new IndexedDbTransportCredentialStore();
 const identityStore = new IndexedDbIdentityStore();
 const trustedPeerStore = new IndexedDbTrustedPeerStore();
 const pendingActionStore = new IndexedDbPendingActionStore();
+const outboundSequenceStore = new IndexedDbOutboundSequenceStore();
 const actionResultDispatcher = new ActionResultDispatcher(
   credentialStore,
   identityStore,
@@ -37,14 +40,25 @@ const actionInvokeOutbox = new ActionInvokeOutbox(
   identityStore,
   trustedPeerStore,
   pendingActionStore,
-  new IndexedDbOutboundSequenceStore(),
+  outboundSequenceStore,
+  (frame) => transportRuntime.sendEnvelope(frame),
+);
+const actionResultAckOutbox = new ActionResultAckOutbox(
+  credentialStore,
+  identityStore,
+  trustedPeerStore,
+  pendingActionStore,
+  outboundSequenceStore,
   (frame) => transportRuntime.sendEnvelope(frame),
 );
 transportRuntime = new TransportRuntime(
   credentialStore,
   identityStore,
   async (state) => chrome.storage.local.set({ [CONNECTION_STATE_KEY]: state }),
-  async (frame) => { await actionResultDispatcher.receive(frame); },
+  async (frame) => {
+    await actionResultDispatcher.receive(frame);
+    await drainActionResultAcks();
+  },
   undefined,
   {
     // Alarms survive MV3 worker suspension; worker startup remains an immediate recovery path.
@@ -57,7 +71,10 @@ transportRuntime = new TransportRuntime(
     clearTimer: () => {
       void chrome.alarms.clear(TRANSPORT_RECONNECT_ALARM);
     },
-    onAuthenticated: () => { void drainActionInvokes(); },
+    onAuthenticated: () => {
+      void drainActionInvokes();
+      void drainActionResultAcks();
+    },
   },
 );
 
@@ -76,6 +93,8 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     void transportRuntime.retryScheduledConnection().catch(() => undefined);
   } else if (alarm.name === ACTION_INVOKE_RETRY_ALARM) {
     void drainActionInvokes();
+  } else if (alarm.name === ACTION_RESULT_ACK_RETRY_ALARM) {
+    void drainActionResultAcks();
   }
 });
 
@@ -186,6 +205,8 @@ async function getSyntheticActionStatus(message: Record<string, unknown>): Promi
   resultStatus?: string;
   invokeAttemptCount?: number;
   authenticatedResultCount?: number;
+  ackAttemptCount?: number;
+  ackPending?: boolean;
 }> {
   const key = parseHex(message.idempotencyKey, 16, 'idempotencyKey');
   const record = await pendingActionStore.get(key);
@@ -196,6 +217,8 @@ async function getSyntheticActionStatus(message: Record<string, unknown>): Promi
     resultStatus: record.resultStatus === undefined ? undefined : String(record.resultStatus),
     invokeAttemptCount: record.invokeAttemptCount,
     authenticatedResultCount: record.authenticatedResultCount,
+    ackAttemptCount: record.ackAttemptCount,
+    ackPending: record.canonicalResultAckPayload !== undefined,
   };
 }
 
@@ -211,6 +234,24 @@ async function resendSyntheticAction(message: Record<string, unknown>): Promise<
       return { accepted: false, reason: 'recipient-not-approved' };
     }
     throw error;
+  }
+}
+
+async function drainActionResultAcks(): Promise<void> {
+  try {
+    const result = await actionResultAckOutbox.drainDue();
+    const delayMs = result.nextWakeDelayMs ??
+      (result.attemptedEntries > result.acceptedSends ? 1_000 : undefined);
+    if (delayMs !== undefined) {
+      await chrome.alarms.create(ACTION_RESULT_ACK_RETRY_ALARM, {
+        when: Date.now() + Math.max(1_000, delayMs),
+      });
+    } else {
+      await chrome.alarms.clear(ACTION_RESULT_ACK_RETRY_ALARM);
+    }
+  } catch {
+    // Corrupt ACK state, trust changes during encryption, or identity mismatch fail closed.
+    await transportRuntime.failClosed();
   }
 }
 

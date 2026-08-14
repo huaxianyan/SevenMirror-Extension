@@ -432,6 +432,8 @@ async function refreshSyntheticActionStatus(): Promise<void> {
     resultStatus?: string;
     invokeAttemptCount?: number;
     authenticatedResultCount?: number;
+    ackAttemptCount?: number;
+    ackPending?: boolean;
   };
   if (!result.found) {
     setSyntheticActionStatus('Durable action record was not found.');
@@ -439,7 +441,7 @@ async function refreshSyntheticActionStatus(): Promise<void> {
   }
   if (result.state === 'completed') {
     if (resendSyntheticActionButton) resendSyntheticActionButton.hidden = false;
-    setSyntheticActionStatus(`Operation: completed. Authenticated Android result status: ${result.resultStatus ?? 'unknown'}. Locally accepted invoke deliveries: ${result.invokeAttemptCount ?? 0}; authenticated result deliveries observed: ${result.authenticatedResultCount ?? 1} (delivery count may exceed operation count until end-to-end ACK exists).`);
+    setSyntheticActionStatus(`Operation: completed. Authenticated Android result status: ${result.resultStatus ?? 'unknown'}. Locally accepted invoke deliveries: ${result.invokeAttemptCount ?? 0}; authenticated result deliveries observed: ${result.authenticatedResultCount ?? 1}; locally accepted result ACK deliveries: ${result.ackAttemptCount ?? 0}; durable ACK intent: ${result.ackPending === true ? 'present' : 'not present'}.`);
   } else {
     setSyntheticActionStatus(`Still pending. Locally accepted send attempts: ${result.invokeAttemptCount ?? 0}.`);
   }
