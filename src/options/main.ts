@@ -11,6 +11,7 @@ import {
   type TrustPairingView,
 } from '../crypto/trust-pairing-coordinator';
 import { registerChromeDevice } from '../transport/device-registration-client';
+import { rotateChromeTransportCredential } from '../transport/transport-credential-rotation-client';
 import {
   IndexedDbTransportCredentialStore,
   normalizeServerOrigin,
@@ -30,6 +31,11 @@ const nameInput = document.querySelector<HTMLInputElement>('#device-name');
 const submit = document.querySelector<HTMLButtonElement>('#register');
 const status = document.querySelector<HTMLElement>('#registration-status');
 const reconnectTransportButton = document.querySelector<HTMLButtonElement>('#reconnect-transport');
+const rotationSection = document.querySelector<HTMLElement>('#credential-rotation');
+const rotationForm = document.querySelector<HTMLFormElement>('#credential-rotation-form');
+const rotationCodeInput = document.querySelector<HTMLInputElement>('#credential-rotation-code');
+const rotateCredentialButton = document.querySelector<HTMLButtonElement>('#rotate-credential');
+const rotationStatus = document.querySelector<HTMLElement>('#credential-rotation-status');
 const pairingSection = document.querySelector<HTMLElement>('#trust-pairing');
 const pairingStage = document.querySelector<HTMLElement>('#trust-pairing-stage');
 const createOfferButton = document.querySelector<HTMLButtonElement>('#create-trust-offer');
@@ -71,6 +77,8 @@ async function render(): Promise<void> {
     form?.setAttribute('hidden', '');
     setStatus('This Chrome profile is registered. Connection status is available in the extension popup.');
     reconnectTransportButton?.removeAttribute('hidden');
+    rotationSection?.removeAttribute('hidden');
+    await renderCredentialRotation();
     pairingSection?.removeAttribute('hidden');
     await renderPairing();
     await renderApprovedPeerControl();
@@ -78,6 +86,31 @@ async function render(): Promise<void> {
     await restoreSyntheticOperationSelection();
   }
 }
+
+rotationForm?.addEventListener('submit', (event) => {
+  event.preventDefault();
+  if (!rotationCodeInput || !rotateCredentialButton) return;
+  const rotationCode = rotationCodeInput.value;
+  rotationCodeInput.value = '';
+  rotateCredentialButton.disabled = true;
+  setRotationStatus('Persisting one pending credential before any network request…');
+  void rotateChromeTransportCredential(rotationCode, credentialStore).then(async () => {
+    setRotationStatus('Rotation request accepted. Probing pending authentication; completion requires SNO1.');
+    await chrome.runtime.sendMessage({ type: 'transport-connect' });
+  }).catch(async () => {
+    const rotation = await credentialStore.loadRotation().catch(() => undefined);
+    if (rotation?.phase === 'attempted') {
+      rotation.current.authToken.fill(0);
+      rotation.pendingAuthToken.fill(0);
+      setRotationStatus('Rotation was not confirmed. Exact pending state was retained; transport will probe pending, then fall back to current. Retry with the same or a newly issued code.');
+      await chrome.runtime.sendMessage({ type: 'transport-connect' }).catch(() => undefined);
+    } else {
+      setRotationStatus('Rotation was not attempted. Verify the exact 32-character code.');
+    }
+  }).finally(() => {
+    rotateCredentialButton.disabled = false;
+  });
+});
 
 reconnectTransportButton?.addEventListener('click', () => {
   reconnectTransportButton.disabled = true;
@@ -132,6 +165,8 @@ form?.addEventListener('submit', async (event) => {
       : 'Registered, but the connection could not start. The credential remains safely stored.');
     form.setAttribute('hidden', '');
     reconnectTransportButton?.removeAttribute('hidden');
+    rotationSection?.removeAttribute('hidden');
+    await renderCredentialRotation();
     pairingSection?.removeAttribute('hidden');
     await renderPairing();
     await renderApprovedPeerControl();
@@ -586,6 +621,26 @@ function pairingFailureMessage(error: unknown): string {
   }
   if (message.includes('Safety code')) return 'Approval rejected: the safety code does not match the active transcript.';
   return 'Pairing failed closed. Verify the payload, expiry, workspace, and active step.';
+}
+
+async function renderCredentialRotation(): Promise<void> {
+  const rotation = await credentialStore.loadRotation();
+  if (rotation === undefined) {
+    setRotationStatus('No pending transport credential.');
+    return;
+  }
+  try {
+    setRotationStatus(rotation.phase === 'prepared'
+      ? 'A pending credential is durable, but no request was marked attempted. Submit the exact rotation code to continue.'
+      : 'An exact pending credential is durable. Transport will probe it first, fall back to current if denied, and promote only after pending SNO1.');
+  } finally {
+    rotation.current.authToken.fill(0);
+    rotation.pendingAuthToken.fill(0);
+  }
+}
+
+function setRotationStatus(message: string): void {
+  if (rotationStatus) rotationStatus.textContent = message;
 }
 
 function setPairingStatus(message: string): void {

@@ -45,6 +45,45 @@ describe('IndexedDbTransportCredentialStore', () => {
     await store.clear();
   });
 
+  it('persists one exact pending credential across reconstruction and promotes only after attempt', async () => {
+    const name = storeName();
+    const store = new IndexedDbTransportCredentialStore(name);
+    const current = credential();
+    const pending = new Uint8Array(32).fill(9);
+    await store.saveNew(current);
+
+    const prepared = await store.prepareRotation(pending);
+    expect(prepared.phase).toBe('prepared');
+    expect((await store.loadConnectionCandidate())?.source).toBe('current');
+    await expect(store.promotePending()).rejects.toThrow('attempted');
+
+    pending.fill(0);
+    const restored = new IndexedDbTransportCredentialStore(name);
+    expect((await restored.loadRotation())?.pendingAuthToken).toEqual(new Uint8Array(32).fill(9));
+    await restored.markRotationAttempted(new Uint8Array(32).fill(9));
+    const candidate = await restored.loadConnectionCandidate();
+    expect(candidate?.source).toBe('pending');
+    expect(candidate?.credential.authToken).toEqual(new Uint8Array(32).fill(9));
+    expect((await restored.loadConnectionCandidate(true))?.source).toBe('current');
+    expect((await restored.load())?.authToken).toEqual(current.authToken);
+
+    const promoted = await restored.promotePending();
+    expect(promoted.authToken).toEqual(new Uint8Array(32).fill(9));
+    expect(await restored.loadRotation()).toBeUndefined();
+    expect((await restored.load())?.authToken).toEqual(new Uint8Array(32).fill(9));
+  });
+
+  it('is idempotent for the exact pending secret and rejects silent replacement', async () => {
+    const store = new IndexedDbTransportCredentialStore(storeName());
+    await store.saveNew(credential());
+    const pending = new Uint8Array(32).fill(8);
+    await store.prepareRotation(pending);
+    await store.prepareRotation(pending);
+    await expect(store.prepareRotation(new Uint8Array(32).fill(7))).rejects.toThrow('different pending');
+    await expect(store.markRotationAttempted(new Uint8Array(32).fill(7))).rejects.toThrow('Exact pending');
+    expect((await store.loadRotation())?.phase).toBe('prepared');
+  });
+
   it('normalizes secure origins and only permits loopback HTTP', () => {
     expect(normalizeServerOrigin('https://notify.example/')).toBe('https://notify.example');
     expect(normalizeServerOrigin('http://127.0.0.1:8080')).toBe('http://127.0.0.1:8080');

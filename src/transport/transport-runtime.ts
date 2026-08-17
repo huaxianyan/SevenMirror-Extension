@@ -8,10 +8,15 @@ import {
   openAuthenticatedWebSocket,
   type TransportDiagnosticEvent,
 } from './authenticated-websocket';
-import type { StoredTransportCredential } from './indexeddb-transport-credential-store';
+import type {
+  StoredTransportCredential,
+  TransportCredentialCandidate,
+} from './indexeddb-transport-credential-store';
 
 interface CredentialStore {
   load(): Promise<StoredTransportCredential | undefined>;
+  loadConnectionCandidate?(preferCurrentFallback?: boolean): Promise<TransportCredentialCandidate | undefined>;
+  promotePending?(): Promise<StoredTransportCredential>;
 }
 
 interface IdentityStore {
@@ -65,6 +70,8 @@ export class TransportRuntime {
   private reconnectTimer?: TimerHandle;
   private reconnectAttempt = 0;
   private authenticatedGeneration?: number;
+  private sno1Generation?: number;
+  private preferCurrentFallback = false;
   private readonly onAuthenticated: () => void;
   private readonly reconnectPolicy: ReconnectPolicy;
 
@@ -142,6 +149,7 @@ export class TransportRuntime {
     ++this.generation;
     this.terminalGeneration = undefined;
     this.authenticatedGeneration = undefined;
+    this.sno1Generation = undefined;
     this.socket?.close(1008, 'encrypted message processing failed');
     this.socket = undefined;
     await this.writeState('offline');
@@ -153,6 +161,7 @@ export class TransportRuntime {
     ++this.generation;
     this.terminalGeneration = undefined;
     this.authenticatedGeneration = undefined;
+    this.sno1Generation = undefined;
     this.socket?.close(1000, 'local disconnect');
     this.socket = undefined;
     await this.writeState('offline');
@@ -162,10 +171,15 @@ export class TransportRuntime {
     const generation = ++this.generation;
     this.terminalGeneration = undefined;
     this.authenticatedGeneration = undefined;
+    this.sno1Generation = undefined;
     this.socket?.close(1000, 'replaced by new connection');
     this.socket = undefined;
 
-    const credential = await this.credentialStore.load();
+    const candidate = this.credentialStore.loadConnectionCandidate === undefined
+      ? await this.loadCurrentCandidate()
+      : await this.credentialStore.loadConnectionCandidate(this.preferCurrentFallback);
+    const credential = candidate?.credential;
+    const credentialSource = candidate?.source ?? 'current';
     if (generation !== this.generation) {
       credential?.authToken.fill(0);
       return;
@@ -195,12 +209,10 @@ export class TransportRuntime {
       socket = this.openSocket(credential, (event) => {
         if (generation !== this.generation) return;
         if (event === 'authenticated') {
-          this.reconnectAttempt = 0;
-          this.authenticatedGeneration = generation;
-          void this.writeState('online');
-          this.onAuthenticated();
+          this.sno1Generation = generation;
+          void this.completeAuthentication(generation, socket, credentialSource);
         } else if (event === 'socket-error' || event === 'socket-closed') {
-          this.handleSocketTermination(generation, socket);
+          this.handleSocketTermination(generation, socket, credentialSource);
         }
       });
     } catch (error) {
@@ -243,6 +255,44 @@ export class TransportRuntime {
     this.socket = socket;
   }
 
+  private async loadCurrentCandidate(): Promise<TransportCredentialCandidate | undefined> {
+    const credential = await this.credentialStore.load();
+    return credential === undefined ? undefined : { credential, source: 'current' };
+  }
+
+  private async completeAuthentication(
+    generation: number,
+    socket: WebSocket,
+    credentialSource: 'current' | 'pending',
+  ): Promise<void> {
+    try {
+      if (credentialSource === 'pending') {
+        if (this.credentialStore.promotePending === undefined) {
+          throw new Error('Pending credential promotion is unavailable');
+        }
+        const promoted = await this.credentialStore.promotePending();
+        promoted.authToken.fill(0);
+      }
+    } catch {
+      if (generation === this.generation) {
+        this.cancelReconnect();
+        ++this.generation;
+        this.authenticatedGeneration = undefined;
+        this.sno1Generation = undefined;
+        if (this.socket === socket) this.socket = undefined;
+        socket.close(1008, 'pending credential promotion failed');
+        await this.writeState('offline');
+      }
+      return;
+    }
+    if (generation !== this.generation || this.socket !== socket) return;
+    this.preferCurrentFallback = false;
+    this.reconnectAttempt = 0;
+    this.authenticatedGeneration = generation;
+    await this.writeState('online');
+    this.onAuthenticated();
+  }
+
   private isAuthenticated(): boolean {
     return this.socket !== undefined && this.authenticatedGeneration === this.generation &&
       this.socket.readyState === 1;
@@ -260,10 +310,18 @@ export class TransportRuntime {
     }
   }
 
-  private handleSocketTermination(generation: number, socket: WebSocket): void {
+  private handleSocketTermination(
+    generation: number,
+    socket: WebSocket,
+    credentialSource: 'current' | 'pending',
+  ): void {
     if (generation !== this.generation || this.terminalGeneration === generation) return;
     this.terminalGeneration = generation;
+    if (this.sno1Generation !== generation) {
+      this.preferCurrentFallback = credentialSource === 'pending';
+    }
     this.authenticatedGeneration = undefined;
+    this.sno1Generation = undefined;
     if (this.socket === socket) this.socket = undefined;
     void this.writeState('offline');
     this.scheduleReconnect(generation);

@@ -20,6 +20,8 @@ Run `npm run protocol:verify` after updating the schema. Do not edit the vendore
 
 `transport-heartbeat-v1.md` defines the post-authentication `SNH1`/`SNH2` liveness exchange consumed outside encrypted-envelope routing. `TRANSPORT_HEARTBEAT_SPEC_SHA256` pins the server-owned copy.
 
+`transport-credential-rotation-v1.md` defines client-generated pending credentials, exact-device-bound administrator authorization, atomic server replacement, and `SNO1`-gated client promotion. `TRANSPORT_CREDENTIAL_ROTATION_SPEC_SHA256` pins the server-owned copy.
+
 `trusted-device-pairing-v1.md` and its vector define the server-independent canonical offer/approval QR transcript and 60-bit safety code required before writing immutable approved-peer pins. `TRUST_PAIRING_SPEC_SHA256` and `TRUST_PAIRING_VECTOR_SHA256` pin these assets. Scanning alone never establishes trust.
 
 After updating vendored schemas, regenerate committed TypeScript sources with the pinned configuration:

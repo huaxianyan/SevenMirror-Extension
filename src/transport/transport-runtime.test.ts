@@ -1,3 +1,4 @@
+import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
 import {
   deriveIdentityKeyId,
@@ -7,7 +8,10 @@ import {
 } from '../crypto/auth-hpke';
 import type { ConnectionState } from '../shared/status';
 import type { TransportDiagnosticEvent } from './authenticated-websocket';
-import type { StoredTransportCredential } from './indexeddb-transport-credential-store';
+import {
+  IndexedDbTransportCredentialStore,
+  type StoredTransportCredential,
+} from './indexeddb-transport-credential-store';
 import { TransportRuntime } from './transport-runtime';
 
 class FakeSocket extends EventTarget {
@@ -88,6 +92,115 @@ describe('TransportRuntime', () => {
     observer?.('authenticated');
     await expect(authenticated).resolves.toBe(true);
     expect(runtime.sendEnvelope(new Uint8Array([2]))).toBe(true);
+  });
+
+  it('promotes an attempted pending credential only after its exact SNO1', async () => {
+    const identity = await generateNonExtractableIdentity();
+    const current = await credentialFor(identity);
+    const store = new IndexedDbTransportCredentialStore(
+      `runtime-rotation-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    );
+    await store.saveNew(current);
+    const pending = new Uint8Array(32).fill(9);
+    await store.prepareRotation(pending);
+    await store.markRotationAttempted(pending);
+    const states: ConnectionState[] = [];
+    let observer: ((event: TransportDiagnosticEvent) => void) | undefined;
+    let openedToken: Uint8Array | undefined;
+    const runtime = new TransportRuntime(
+      store,
+      { loadExisting: async () => identity },
+      async (state) => { states.push(state); },
+      undefined,
+      (loaded, observe) => {
+        openedToken = loaded.authToken.slice();
+        observer = observe;
+        return new FakeSocket() as unknown as WebSocket;
+      },
+    );
+
+    await runtime.connect();
+    expect(openedToken).toEqual(pending);
+    expect((await store.load())?.authToken).toEqual(current.authToken);
+    expect((await store.loadRotation())?.phase).toBe('attempted');
+    observer?.('authenticated');
+    await waitFor(() => runtime.hasAuthenticatedConnection());
+    expect(states.at(-1)).toBe('online');
+    expect(await store.loadRotation()).toBeUndefined();
+    expect((await store.load())?.authToken).toEqual(pending);
+  });
+
+  it('fails closed if durable promotion fails after pending SNO1', async () => {
+    const identity = await generateNonExtractableIdentity();
+    const pending = await credentialFor(identity);
+    pending.authToken.fill(9);
+    const socket = new FakeSocket();
+    const states: ConnectionState[] = [];
+    let observer: ((event: TransportDiagnosticEvent) => void) | undefined;
+    const runtime = new TransportRuntime(
+      {
+        load: async () => undefined,
+        loadConnectionCandidate: async () => ({
+          credential: copyCredential(pending),
+          source: 'pending',
+        }),
+        promotePending: async () => { throw new Error('synthetic IndexedDB failure'); },
+      },
+      { loadExisting: async () => identity },
+      async (state) => { states.push(state); },
+      undefined,
+      (_loaded, observe) => {
+        observer = observe;
+        return socket as unknown as WebSocket;
+      },
+    );
+
+    await runtime.connect();
+    observer?.('authenticated');
+    await waitFor(() => socket.closed);
+    expect(socket.closeCode).toBe(1008);
+    expect(socket.closeReason).toBe('pending credential promotion failed');
+    expect(runtime.hasAuthenticatedConnection()).toBe(false);
+    expect(states).toEqual(['connecting', 'offline']);
+  });
+
+  it('falls back to current after pending is denied without discarding pending', async () => {
+    const identity = await generateNonExtractableIdentity();
+    const current = await credentialFor(identity);
+    const store = new IndexedDbTransportCredentialStore(
+      `runtime-fallback-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    );
+    await store.saveNew(current);
+    const pending = new Uint8Array(32).fill(8);
+    await store.prepareRotation(pending);
+    await store.markRotationAttempted(pending);
+    const scheduler = new FakeScheduler();
+    const observers: Array<(event: TransportDiagnosticEvent) => void> = [];
+    const openedTokens: Uint8Array[] = [];
+    const runtime = new TransportRuntime(
+      store,
+      { loadExisting: async () => identity },
+      async () => undefined,
+      undefined,
+      (loaded, observe) => {
+        openedTokens.push(loaded.authToken.slice());
+        observers.push(observe);
+        return new FakeSocket() as unknown as WebSocket;
+      },
+      scheduler.options(),
+    );
+
+    await runtime.connect();
+    expect(openedTokens[0]).toEqual(pending);
+    observers[0]?.('socket-closed');
+    await flushPromises();
+    scheduler.runNext();
+    await waitFor(() => openedTokens.length === 2);
+    expect(openedTokens[1]).toEqual(current.authToken);
+    observers[1]?.('authenticated');
+    await waitFor(() => runtime.hasAuthenticatedConnection());
+    expect((await store.loadRotation())?.pendingAuthToken).toEqual(pending);
+    expect((await store.load())?.authToken).toEqual(current.authToken);
   });
 
   it('fails closed without creating a replacement for a missing identity', async () => {

@@ -35,6 +35,24 @@
       <p id="registration-status" role="status" aria-live="polite">Checking registration state…</p>
       <button id="reconnect-transport" type="button" hidden>Reconnect authenticated transport</button>
 
+      <section id="credential-rotation" hidden>
+        <h2>Rotate transport credential</h2>
+        <p class="boundary">
+          Enter the short-lived code issued for this exact device. The current credential remains
+          stored until the pending credential receives authenticated SNO1. HTTP success alone does
+          not complete rotation. Repeating after interruption reuses the same pending credential.
+        </p>
+        <form id="credential-rotation-form" autocomplete="off">
+          <label>
+            One-time rotation code
+            <input id="credential-rotation-code" type="password" minlength="32" maxlength="32"
+                   required autocomplete="new-password" spellcheck="false" />
+          </label>
+          <button id="rotate-credential" type="submit">Start recoverable rotation</button>
+        </form>
+        <p id="credential-rotation-status" role="status" aria-live="polite"></p>
+      </section>
+
       <section id="trust-pairing" hidden>
         <h2>Trusted E2EE device</h2>
         <p class="boundary">
