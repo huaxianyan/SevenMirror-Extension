@@ -28,6 +28,7 @@ const codeInput = document.querySelector<HTMLInputElement>('#pairing-code');
 const nameInput = document.querySelector<HTMLInputElement>('#device-name');
 const submit = document.querySelector<HTMLButtonElement>('#register');
 const status = document.querySelector<HTMLElement>('#registration-status');
+const reconnectTransportButton = document.querySelector<HTMLButtonElement>('#reconnect-transport');
 const pairingSection = document.querySelector<HTMLElement>('#trust-pairing');
 const pairingStage = document.querySelector<HTMLElement>('#trust-pairing-stage');
 const createOfferButton = document.querySelector<HTMLButtonElement>('#create-trust-offer');
@@ -55,6 +56,7 @@ let currentSafetyCode: string | undefined;
 let currentPairingView: TrustPairingView | undefined;
 let pairingFailed = false;
 let pairingBusy = false;
+const SYNTHETIC_OPERATION_SELECTION_KEY = 'syntheticOperationSelectionV1';
 
 async function render(): Promise<void> {
   if (versionOutput) {
@@ -64,12 +66,25 @@ async function render(): Promise<void> {
   if (existing !== undefined) {
     form?.setAttribute('hidden', '');
     setStatus('This Chrome profile is registered. Connection status is available in the extension popup.');
+    reconnectTransportButton?.removeAttribute('hidden');
     pairingSection?.removeAttribute('hidden');
     await renderPairing();
     await renderApprovedPeerControl();
     await renderSyntheticRelayAvailability();
+    await restoreSyntheticOperationSelection();
   }
 }
+
+reconnectTransportButton?.addEventListener('click', () => {
+  reconnectTransportButton.disabled = true;
+  setStatus('Restarting authenticated transport…');
+  void chrome.runtime.sendMessage({ type: 'transport-connect' }).then(
+    (response: { started?: boolean }) => setStatus(response.started
+      ? 'Authenticated transport restart requested; check the popup for Online status.'
+      : 'Authenticated transport restart was not accepted.'),
+    () => setStatus('Authenticated transport restart failed.'),
+  ).finally(() => { reconnectTransportButton.disabled = false; });
+});
 
 form?.addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -112,6 +127,7 @@ form?.addEventListener('submit', async (event) => {
       ? 'Registered. Connection authentication has started; check the popup for status.'
       : 'Registered, but the connection could not start. The credential remains safely stored.');
     form.setAttribute('hidden', '');
+    reconnectTransportButton?.removeAttribute('hidden');
     pairingSection?.removeAttribute('hidden');
     await renderPairing();
     await renderApprovedPeerControl();
@@ -410,6 +426,9 @@ async function queueSyntheticAction(raw: string): Promise<void> {
       throw new Error('Synthetic action was not durably queued');
     }
     currentSyntheticIdempotencyKey = result.idempotencyKey;
+    await chrome.storage.local.set({
+      [SYNTHETIC_OPERATION_SELECTION_KEY]: result.idempotencyKey,
+    });
     if (refreshSyntheticActionButton) refreshSyntheticActionButton.hidden = false;
     if (resendSyntheticActionButton) resendSyntheticActionButton.hidden = true;
     setSyntheticActionStatus(result.accepted
@@ -419,6 +438,15 @@ async function queueSyntheticAction(raw: string): Promise<void> {
   } catch {
     setSyntheticActionStatus('Synthetic action rejected before queueing. Verify the current app-owned target and approved peer.');
   }
+}
+
+async function restoreSyntheticOperationSelection(): Promise<void> {
+  const stored = await chrome.storage.local.get(SYNTHETIC_OPERATION_SELECTION_KEY);
+  const key = stored[SYNTHETIC_OPERATION_SELECTION_KEY];
+  if (typeof key !== 'string' || !/^[0-9a-f]{32}$/.test(key) || /^0+$/.test(key)) return;
+  currentSyntheticIdempotencyKey = key;
+  if (refreshSyntheticActionButton) refreshSyntheticActionButton.hidden = false;
+  await refreshSyntheticActionStatus();
 }
 
 async function refreshSyntheticActionStatus(): Promise<void> {
