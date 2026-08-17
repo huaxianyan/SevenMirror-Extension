@@ -187,6 +187,29 @@ describe('TransportRuntime', () => {
     expect(sockets).toBe(2);
   });
 
+  it('replaces a pre-authentication socket when a durable watchdog alarm wakes', async () => {
+    const identity = await generateNonExtractableIdentity();
+    const credential = await credentialFor(identity);
+    const sockets: FakeSocket[] = [];
+    const runtime = new TransportRuntime(
+      { load: async () => copyCredential(credential) },
+      { loadExisting: async () => identity },
+      async () => undefined,
+      undefined,
+      () => {
+        const socket = new FakeSocket();
+        sockets.push(socket);
+        return socket as unknown as WebSocket;
+      },
+    );
+
+    await runtime.connect();
+    expect(runtime.hasAuthenticatedConnection()).toBe(false);
+    await runtime.retryScheduledConnection();
+    expect(sockets).toHaveLength(2);
+    expect(sockets[0]?.closed).toBe(true);
+  });
+
   it('bounds exponential retries and cancels them on explicit disconnect', async () => {
     const identity = await generateNonExtractableIdentity();
     const credential = await credentialFor(identity);

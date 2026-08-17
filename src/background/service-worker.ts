@@ -24,6 +24,7 @@ const TRANSPORT_RECONNECT_ALARM = 'transport-reconnect-v1';
 const ACTION_INVOKE_RETRY_ALARM = 'action-invoke-retry-v1';
 const ACTION_RESULT_ACK_RETRY_ALARM = 'action-result-ack-retry-v1';
 const SYNTHETIC_ACK_HOLD_MAX_MS = 10 * 60_000;
+const TRANSPORT_AUTH_WATCHDOG_MS = 60_000;
 let syntheticAckHold: { idempotencyKeyHex: string; expiresAtUnixMs: number } | undefined;
 const credentialStore = new IndexedDbTransportCredentialStore();
 const identityStore = new IndexedDbIdentityStore();
@@ -75,6 +76,7 @@ transportRuntime = new TransportRuntime(
       void chrome.alarms.clear(TRANSPORT_RECONNECT_ALARM);
     },
     onAuthenticated: () => {
+      void chrome.alarms.clear(TRANSPORT_RECONNECT_ALARM);
       void drainActionInvokes();
       void drainActionResultAcks();
     },
@@ -82,7 +84,7 @@ transportRuntime = new TransportRuntime(
 );
 
 void recordWorkerStart();
-void transportRuntime.connect().catch(() => undefined);
+void connectTransportWithWatchdog().catch(() => undefined);
 
 chrome.runtime.onInstalled.addListener(async () => {
   const stored = await chrome.storage.local.get(CONNECTION_STATE_KEY);
@@ -93,7 +95,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === TRANSPORT_RECONNECT_ALARM) {
-    void transportRuntime.retryScheduledConnection().catch(() => undefined);
+    void retryTransportWithWatchdog().catch(() => undefined);
   } else if (alarm.name === ACTION_INVOKE_RETRY_ALARM) {
     void drainActionInvokes();
   } else if (alarm.name === ACTION_RESULT_ACK_RETRY_ALARM) {
@@ -136,7 +138,7 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
       return true;
 
     case 'transport-connect':
-      void transportRuntime.connect().then(
+      void connectTransportWithWatchdog().then(
         () => sendResponse({ started: true }),
         () => sendResponse({ started: false }),
       );
@@ -197,6 +199,26 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
       return false;
   }
 });
+
+async function connectTransportWithWatchdog(): Promise<void> {
+  await transportRuntime.connect();
+  await scheduleTransportAuthWatchdog();
+}
+
+async function retryTransportWithWatchdog(): Promise<void> {
+  await transportRuntime.retryScheduledConnection();
+  await scheduleTransportAuthWatchdog();
+}
+
+async function scheduleTransportAuthWatchdog(): Promise<void> {
+  if (transportRuntime.hasAuthenticatedConnection()) {
+    await chrome.alarms.clear(TRANSPORT_RECONNECT_ALARM);
+    return;
+  }
+  await chrome.alarms.create(TRANSPORT_RECONNECT_ALARM, {
+    when: Date.now() + TRANSPORT_AUTH_WATCHDOG_MS,
+  });
+}
 
 async function getSyntheticActionTarget(): Promise<{
   targetDeviceId: string;

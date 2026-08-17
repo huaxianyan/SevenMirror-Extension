@@ -94,8 +94,12 @@ export class TransportRuntime {
   /** Handles a durable scheduler wake without resetting the exponential retry sequence. */
   async retryScheduledConnection(): Promise<void> {
     this.reconnectTimer = undefined;
-    if (this.socket !== undefined) return;
+    if (this.isAuthenticated()) return;
     await this.startConnection();
+  }
+
+  hasAuthenticatedConnection(): boolean {
+    return this.isAuthenticated();
   }
 
   /**
