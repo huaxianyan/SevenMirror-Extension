@@ -17,6 +17,12 @@ jobs:
         with:
           node-version: '20'
           cache: npm
+      - name: Verify project license
+        run: |
+          echo '3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986  LICENSE' | sha256sum --check -
+          grep -Fq 'GPL-3.0-only' LICENSE-TRANSITION.md
+          grep -Fq '97c3430f71c85c6b2cffc6fe8184a1f447b2f0fb' LICENSE-TRANSITION.md
+          node -e "if (require('./package.json').license !== 'GPL-3.0-only') process.exit(1)"
       - run: npm ci
       - name: Verify vendored protocol
         run: node protocol/verify-schema.mjs
