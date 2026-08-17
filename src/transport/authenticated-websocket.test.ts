@@ -51,6 +51,42 @@ describe('authenticated WebSocket', () => {
     }));
     expect(events).toEqual(['socket-open', 'auth-frame-sent', 'authenticated']);
     expect(acknowledgementReachedApplication).toBe(false);
+    fake.dispatchEvent(new Event('close'));
+  });
+
+  it('keeps the Worker active with SNH1 and consumes exact SNH2 responses', () => {
+    vi.useFakeTimers();
+    try {
+      const fake = new FakeSocket();
+      const events: string[] = [];
+      openAuthenticatedWebSocket(
+        credential,
+        (event) => events.push(event),
+        () => fake as unknown as WebSocket,
+      );
+      fake.dispatchEvent(new Event('open'));
+      fake.dispatchEvent(new MessageEvent('message', {
+        data: encodeTransportAuthenticationSuccessV1().buffer,
+      }));
+
+      let heartbeatReachedApplication = false;
+      fake.addEventListener('message', () => { heartbeatReachedApplication = true; });
+      vi.advanceTimersByTime(20_000);
+      expect(new TextDecoder().decode(fake.sent[1])).toBe('SNH1');
+      fake.dispatchEvent(new MessageEvent('message', {
+        data: Uint8Array.of(0x53, 0x4e, 0x48, 0x32).buffer,
+      }));
+      expect(heartbeatReachedApplication).toBe(false);
+
+      vi.advanceTimersByTime(20_000);
+      expect(new TextDecoder().decode(fake.sent[2])).toBe('SNH1');
+      vi.advanceTimersByTime(10_000);
+      expect(fake.closed).toBe(true);
+      expect(events.at(-1)).toBe('socket-error');
+      fake.dispatchEvent(new Event('close'));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('rejects a malformed authentication acknowledgement', () => {

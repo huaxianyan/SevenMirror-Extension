@@ -3,6 +3,10 @@ import {
   isTransportAuthenticationSuccessV1,
 } from './device-auth-frame';
 import type { StoredTransportCredential } from './indexeddb-transport-credential-store';
+import {
+  encodeTransportHeartbeatRequestV1,
+  isTransportHeartbeatResponseV1,
+} from './transport-heartbeat';
 
 export type TransportDiagnosticEvent =
   | 'socket-open'
@@ -37,6 +41,29 @@ export function openAuthenticatedWebSocket(
   let authenticationSent = false;
   let authenticated = false;
   let acknowledgementTimeout: ReturnType<typeof setTimeout> | undefined;
+  let heartbeatInterval: ReturnType<typeof setInterval> | undefined;
+  let heartbeatResponseTimeout: ReturnType<typeof setTimeout> | undefined;
+  const clearHeartbeat = () => {
+    if (heartbeatInterval !== undefined) clearInterval(heartbeatInterval);
+    if (heartbeatResponseTimeout !== undefined) clearTimeout(heartbeatResponseTimeout);
+    heartbeatInterval = undefined;
+    heartbeatResponseTimeout = undefined;
+  };
+  const sendHeartbeat = () => {
+    if (!authenticated || heartbeatResponseTimeout !== undefined) return;
+    try {
+      socket.send(encodeTransportHeartbeatRequestV1());
+    } catch {
+      observe('socket-error');
+      socket.close(1008, 'heartbeat send failed');
+      return;
+    }
+    heartbeatResponseTimeout = setTimeout(() => {
+      heartbeatResponseTimeout = undefined;
+      observe('socket-error');
+      socket.close(1008, 'heartbeat response timeout');
+    }, HEARTBEAT_RESPONSE_TIMEOUT_MS);
+  };
   socket.addEventListener('message', (event) => {
     if (!authenticated) {
       if (!authenticationSent) {
@@ -58,7 +85,14 @@ export function openAuthenticatedWebSocket(
       authenticated = true;
       if (acknowledgementTimeout !== undefined) clearTimeout(acknowledgementTimeout);
       acknowledgementTimeout = undefined;
+      heartbeatInterval = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
       observe('authenticated');
+      return;
+    }
+    if (isTransportHeartbeatResponseV1(event.data)) {
+      event.stopImmediatePropagation();
+      if (heartbeatResponseTimeout !== undefined) clearTimeout(heartbeatResponseTimeout);
+      heartbeatResponseTimeout = undefined;
       return;
     }
     if (isTransportAuthenticationSuccessV1(event.data)) {
@@ -91,15 +125,20 @@ export function openAuthenticatedWebSocket(
     }
   }, { once: true });
   socket.addEventListener('error', () => {
+    clearHeartbeat();
     if (!authenticationSent) authenticationFrame.fill(0);
     if (acknowledgementTimeout !== undefined) clearTimeout(acknowledgementTimeout);
     acknowledgementTimeout = undefined;
     observe('socket-error');
   });
   socket.addEventListener('close', () => {
+    clearHeartbeat();
     if (acknowledgementTimeout !== undefined) clearTimeout(acknowledgementTimeout);
     acknowledgementTimeout = undefined;
     observe('socket-closed');
   });
   return socket;
 }
+
+const HEARTBEAT_INTERVAL_MS = 20_000;
+const HEARTBEAT_RESPONSE_TIMEOUT_MS = 10_000;
