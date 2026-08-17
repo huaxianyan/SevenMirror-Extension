@@ -48,9 +48,9 @@ describe('ActionResultAckOutbox', () => {
       authToken: new Uint8Array(32).fill(5),
       identityKeyId: await deriveIdentityKeyId(chromePublicKey),
     };
-    const pending = new IndexedDbPendingActionStore(name);
-    const peers = new IndexedDbTrustedPeerStore(`trusted-${name}`);
-    const sequences = new IndexedDbOutboundSequenceStore(`sequences-${name}`);
+    let pending = new IndexedDbPendingActionStore(name);
+    let peers = new IndexedDbTrustedPeerStore(`trusted-${name}`);
+    let sequences = new IndexedDbOutboundSequenceStore(`sequences-${name}`);
     const canonicalInvoke = encodeEncryptedPayloadV1(createActionInvokePayload({
       notificationId: 'synthetic.notification/42',
       notificationRevision: 1n,
@@ -65,7 +65,7 @@ describe('ActionResultAckOutbox', () => {
     let socketAccepted = false;
     const attemptedFrames: Uint8Array[] = [];
     const sent: Uint8Array[] = [];
-    const outbox = new ActionResultAckOutbox(
+    const createOutbox = () => new ActionResultAckOutbox(
       { load: async () => copyCredential(credential) },
       { loadExisting: async () => chromeIdentity },
       peers,
@@ -80,6 +80,7 @@ describe('ActionResultAckOutbox', () => {
       () => now,
       (target) => target.fill(attemptedFrames.length + 8),
     );
+    let outbox = createOutbox();
     try {
       await peers.pinApproved(workspaceId, androidDeviceId, androidPublicKey);
       await pending.register(
@@ -105,6 +106,13 @@ describe('ActionResultAckOutbox', () => {
         attemptedEntries: 1,
       });
       expect((await pending.dueAcks(now)).at(0)?.attemptCount).toBe(0);
+
+      // Simulate an MV3 Worker being discarded while the authenticated socket is unavailable.
+      pending = new IndexedDbPendingActionStore(name);
+      peers = new IndexedDbTrustedPeerStore(`trusted-${name}`);
+      sequences = new IndexedDbOutboundSequenceStore(`sequences-${name}`);
+      outbox = createOutbox();
+      expect((await pending.dueAcks(now)).at(0)?.canonicalAckPayload).toEqual(canonicalAck);
 
       socketAccepted = true;
       expect(await outbox.drainDue()).toEqual({
