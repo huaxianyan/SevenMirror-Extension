@@ -15,6 +15,7 @@ import {
   IndexedDbTransportCredentialStore,
   normalizeServerOrigin,
 } from '../transport/indexeddb-transport-credential-store';
+import { presentActionResultStatus } from './action-result-status';
 
 const identityStore = new IndexedDbIdentityStore();
 const credentialStore = new IndexedDbTransportCredentialStore();
@@ -54,6 +55,7 @@ const holdSyntheticResultAckButton = document.querySelector<HTMLButtonElement>('
 const releaseSyntheticResultAckButton = document.querySelector<HTMLButtonElement>('#release-synthetic-result-ack');
 const syntheticActionStatus = document.querySelector<HTMLElement>('#synthetic-action-status');
 let currentSyntheticIdempotencyKey: string | undefined;
+let currentSyntheticResultUncertain = false;
 let currentSafetyCode: string | undefined;
 let currentPairingView: TrustPairingView | undefined;
 let pairingFailed = false;
@@ -436,6 +438,7 @@ async function queueSyntheticAction(raw: string): Promise<void> {
       throw new Error('Synthetic action was not durably queued');
     }
     currentSyntheticIdempotencyKey = result.idempotencyKey;
+    currentSyntheticResultUncertain = false;
     await chrome.storage.local.set({
       [SYNTHETIC_OPERATION_SELECTION_KEY]: result.idempotencyKey,
     });
@@ -477,15 +480,26 @@ async function refreshSyntheticActionStatus(): Promise<void> {
     ackHoldActive?: boolean;
   };
   if (!result.found) {
+    currentSyntheticResultUncertain = false;
     setSyntheticActionStatus('Durable action record was not found.');
     return;
   }
   if (result.state === 'completed') {
-    if (resendSyntheticActionButton) resendSyntheticActionButton.hidden = false;
+    const numericStatus = result.resultStatus !== undefined && /^[0-9]+$/.test(result.resultStatus)
+      ? Number(result.resultStatus)
+      : undefined;
+    const presentation = presentActionResultStatus(numericStatus);
+    currentSyntheticResultUncertain = presentation.uncertain;
+    if (resendSyntheticActionButton) {
+      resendSyntheticActionButton.hidden = false;
+      resendSyntheticActionButton.textContent = presentation.resendLabel;
+    }
     if (holdSyntheticResultAckButton) holdSyntheticResultAckButton.hidden = result.ackHoldActive === true;
     if (releaseSyntheticResultAckButton) releaseSyntheticResultAckButton.hidden = result.ackHoldActive !== true;
-    setSyntheticActionStatus(`Operation: completed. Authenticated Android result status: ${result.resultStatus ?? 'unknown'}. Locally accepted invoke deliveries: ${result.invokeAttemptCount ?? 0}; authenticated result deliveries observed: ${result.authenticatedResultCount ?? 1}; locally accepted result ACK deliveries: ${result.ackAttemptCount ?? 0}; durable ACK intent: ${result.ackPending === true ? 'present' : 'not present'}; synthetic ACK hold: ${result.ackHoldActive === true ? 'active' : 'inactive'}.`);
+    setSyntheticActionStatus(`Operation: terminal. Result: ${presentation.headline}. ${presentation.explanation} Authenticated Android status code: ${result.resultStatus ?? 'unknown'}. Locally accepted invoke deliveries: ${result.invokeAttemptCount ?? 0}; authenticated result deliveries observed: ${result.authenticatedResultCount ?? 1}; locally accepted result ACK deliveries: ${result.ackAttemptCount ?? 0}; durable ACK intent: ${result.ackPending === true ? 'present' : 'not present'}; synthetic ACK hold: ${result.ackHoldActive === true ? 'active' : 'inactive'}.`, presentation.uncertain);
   } else {
+    currentSyntheticResultUncertain = false;
+    if (resendSyntheticActionButton) resendSyntheticActionButton.textContent = 'Resend exact completed action';
     if (holdSyntheticResultAckButton) holdSyntheticResultAckButton.hidden = true;
     if (releaseSyntheticResultAckButton) releaseSyntheticResultAckButton.hidden = true;
     setSyntheticActionStatus(`Still pending. Locally accepted send attempts: ${result.invokeAttemptCount ?? 0}.`);
@@ -535,18 +549,22 @@ async function resendSyntheticAction(): Promise<void> {
       idempotencyKey: currentSyntheticIdempotencyKey,
     }) as { accepted?: boolean; reason?: string };
     setSyntheticActionStatus(result.accepted
-      ? 'Fresh encrypted envelope accepted locally for the exact completed operation. Awaiting duplicate result reconciliation.'
+      ? currentSyntheticResultUncertain
+        ? 'Exact operation envelope accepted locally. Android execute-once prevents re-execution; awaiting the duplicate terminal uncertainty.'
+        : 'Fresh encrypted envelope accepted locally for the exact completed operation. Awaiting duplicate result reconciliation.'
       : result.reason === 'recipient-not-approved'
         ? 'Exact resend rejected before encryption: the Android recipient is not approved.'
-        : 'Exact resend was not accepted by the current authenticated socket.');
+        : 'Exact resend was not accepted by the current authenticated socket.', currentSyntheticResultUncertain);
     window.setTimeout(() => { void refreshSyntheticActionStatus(); }, 5_000);
   } finally {
     resendSyntheticActionButton.disabled = false;
   }
 }
 
-function setSyntheticActionStatus(message: string): void {
-  if (syntheticActionStatus) syntheticActionStatus.textContent = message;
+function setSyntheticActionStatus(message: string, uncertain = false): void {
+  if (!syntheticActionStatus) return;
+  syntheticActionStatus.textContent = message;
+  syntheticActionStatus.classList.toggle('uncertain-result', uncertain);
 }
 
 function pairingFailureMessage(error: unknown): string {
