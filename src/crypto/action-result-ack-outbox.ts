@@ -48,14 +48,21 @@ export class ActionResultAckOutbox {
     private readonly random: (target: Uint8Array) => void = (target) => crypto.getRandomValues(target),
   ) {}
 
-  drainDue(): Promise<ActionResultAckDrainResult> {
+  drainDue(excludedIdempotencyKey?: Uint8Array): Promise<ActionResultAckDrainResult> {
+    if (excludedIdempotencyKey !== undefined &&
+        (excludedIdempotencyKey.byteLength !== 16 ||
+          excludedIdempotencyKey.every((byte) => byte === 0))) {
+      throw new Error('excludedIdempotencyKey must be a non-zero 16-byte value');
+    }
     return this.runExclusive(async () => {
       const nowUnixMs = this.now();
       const credential = await this.credentialStore.load();
       if (credential === undefined) throw new Error('Transport is not configured');
       try {
         const identity = await this.requireBoundIdentity(credential);
-        const due = await this.pendingActions.dueAcks(nowUnixMs);
+        const due = (await this.pendingActions.dueAcks(nowUnixMs))
+          .filter((entry) => excludedIdempotencyKey === undefined ||
+            !bytesEqual(entry.idempotencyKey, excludedIdempotencyKey));
         let acceptedSends = 0;
         let attemptedEntries = 0;
         let nextWakeDelayMs: number | undefined;

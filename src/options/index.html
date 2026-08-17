@@ -86,6 +86,12 @@
         <button id="queue-synthetic-action" type="button">Queue new synthetic operation</button>
         <button id="refresh-synthetic-action" type="button" hidden>Refresh durable result status</button>
         <button id="resend-synthetic-action" type="button" hidden>Resend exact completed action</button>
+        <button id="hold-synthetic-result-ack" type="button" hidden>Hold ACK for restart test</button>
+        <button id="release-synthetic-result-ack" type="button" hidden>Release held ACK now</button>
+        <p class="boundary">
+          ACK hold is restricted to the selected app-owned synthetic operation, exists only in the
+          current Worker memory, expires after ten minutes, and is released by Worker restart.
+        </p>
         <p id="synthetic-action-status" role="status" aria-live="polite"></p>
       </section>
     </main>

@@ -50,6 +50,8 @@ const syntheticTargetInput = document.querySelector<HTMLTextAreaElement>('#synth
 const queueSyntheticActionButton = document.querySelector<HTMLButtonElement>('#queue-synthetic-action');
 const refreshSyntheticActionButton = document.querySelector<HTMLButtonElement>('#refresh-synthetic-action');
 const resendSyntheticActionButton = document.querySelector<HTMLButtonElement>('#resend-synthetic-action');
+const holdSyntheticResultAckButton = document.querySelector<HTMLButtonElement>('#hold-synthetic-result-ack');
+const releaseSyntheticResultAckButton = document.querySelector<HTMLButtonElement>('#release-synthetic-result-ack');
 const syntheticActionStatus = document.querySelector<HTMLElement>('#synthetic-action-status');
 let currentSyntheticIdempotencyKey: string | undefined;
 let currentSafetyCode: string | undefined;
@@ -390,6 +392,14 @@ resendSyntheticActionButton?.addEventListener('click', () => {
   void resendSyntheticAction();
 });
 
+holdSyntheticResultAckButton?.addEventListener('click', () => {
+  void holdSyntheticResultAck();
+});
+
+releaseSyntheticResultAckButton?.addEventListener('click', () => {
+  void releaseSyntheticResultAck();
+});
+
 async function renderSyntheticRelayAvailability(): Promise<void> {
   const response = await chrome.runtime.sendMessage({ type: 'get-synthetic-action-target' }) as {
     target?: { targetDeviceId: string; targetKeyId: string };
@@ -431,6 +441,8 @@ async function queueSyntheticAction(raw: string): Promise<void> {
     });
     if (refreshSyntheticActionButton) refreshSyntheticActionButton.hidden = false;
     if (resendSyntheticActionButton) resendSyntheticActionButton.hidden = true;
+    if (holdSyntheticResultAckButton) holdSyntheticResultAckButton.hidden = true;
+    if (releaseSyntheticResultAckButton) releaseSyntheticResultAckButton.hidden = true;
     setSyntheticActionStatus(result.accepted
       ? 'Queued durably; current authenticated socket accepted the encrypted frame locally. Awaiting Android result.'
       : 'Queued durably; no current socket acceptance. Durable retry remains pending.');
@@ -462,6 +474,7 @@ async function refreshSyntheticActionStatus(): Promise<void> {
     authenticatedResultCount?: number;
     ackAttemptCount?: number;
     ackPending?: boolean;
+    ackHoldActive?: boolean;
   };
   if (!result.found) {
     setSyntheticActionStatus('Durable action record was not found.');
@@ -469,9 +482,47 @@ async function refreshSyntheticActionStatus(): Promise<void> {
   }
   if (result.state === 'completed') {
     if (resendSyntheticActionButton) resendSyntheticActionButton.hidden = false;
-    setSyntheticActionStatus(`Operation: completed. Authenticated Android result status: ${result.resultStatus ?? 'unknown'}. Locally accepted invoke deliveries: ${result.invokeAttemptCount ?? 0}; authenticated result deliveries observed: ${result.authenticatedResultCount ?? 1}; locally accepted result ACK deliveries: ${result.ackAttemptCount ?? 0}; durable ACK intent: ${result.ackPending === true ? 'present' : 'not present'}.`);
+    if (holdSyntheticResultAckButton) holdSyntheticResultAckButton.hidden = result.ackHoldActive === true;
+    if (releaseSyntheticResultAckButton) releaseSyntheticResultAckButton.hidden = result.ackHoldActive !== true;
+    setSyntheticActionStatus(`Operation: completed. Authenticated Android result status: ${result.resultStatus ?? 'unknown'}. Locally accepted invoke deliveries: ${result.invokeAttemptCount ?? 0}; authenticated result deliveries observed: ${result.authenticatedResultCount ?? 1}; locally accepted result ACK deliveries: ${result.ackAttemptCount ?? 0}; durable ACK intent: ${result.ackPending === true ? 'present' : 'not present'}; synthetic ACK hold: ${result.ackHoldActive === true ? 'active' : 'inactive'}.`);
   } else {
+    if (holdSyntheticResultAckButton) holdSyntheticResultAckButton.hidden = true;
+    if (releaseSyntheticResultAckButton) releaseSyntheticResultAckButton.hidden = true;
     setSyntheticActionStatus(`Still pending. Locally accepted send attempts: ${result.invokeAttemptCount ?? 0}.`);
+  }
+}
+
+async function holdSyntheticResultAck(): Promise<void> {
+  if (currentSyntheticIdempotencyKey === undefined || !holdSyntheticResultAckButton) return;
+  holdSyntheticResultAckButton.disabled = true;
+  try {
+    const result = await chrome.runtime.sendMessage({
+      type: 'hold-synthetic-result-ack',
+      idempotencyKey: currentSyntheticIdempotencyKey,
+    }) as { held?: boolean };
+    setSyntheticActionStatus(result.held
+      ? 'Synthetic ACK hold armed in this Worker. Resend the exact operation to create a held ACK intent.'
+      : 'ACK hold rejected: the selected operation is not the app-owned synthetic action.');
+    await refreshSyntheticActionStatus();
+  } finally {
+    holdSyntheticResultAckButton.disabled = false;
+  }
+}
+
+async function releaseSyntheticResultAck(): Promise<void> {
+  if (currentSyntheticIdempotencyKey === undefined || !releaseSyntheticResultAckButton) return;
+  releaseSyntheticResultAckButton.disabled = true;
+  try {
+    const result = await chrome.runtime.sendMessage({
+      type: 'release-synthetic-result-ack',
+      idempotencyKey: currentSyntheticIdempotencyKey,
+    }) as { released?: boolean };
+    setSyntheticActionStatus(result.released
+      ? 'Synthetic ACK hold released; authenticated delivery has been requested.'
+      : 'No matching synthetic ACK hold was active.');
+    window.setTimeout(() => { void refreshSyntheticActionStatus(); }, 1_000);
+  } finally {
+    releaseSyntheticResultAckButton.disabled = false;
   }
 }
 

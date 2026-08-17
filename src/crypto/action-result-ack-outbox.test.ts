@@ -101,6 +101,13 @@ describe('ActionResultAckOutbox', () => {
         canonicalAck,
       );
 
+      expect(await outbox.drainDue(idempotencyKey)).toEqual({
+        acceptedSends: 0,
+        attemptedEntries: 0,
+      });
+      expect(attemptedFrames).toHaveLength(0);
+      expect((await pending.dueAcks(now)).at(0)?.attemptCount).toBe(0);
+
       expect(await outbox.drainDue()).toEqual({
         acceptedSends: 0,
         attemptedEntries: 1,

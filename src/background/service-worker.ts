@@ -17,11 +17,14 @@ import { IndexedDbTrustedPeerStore } from '../crypto/indexeddb-trusted-peer-stor
 import { ActionResultDispatcher } from '../crypto/action-result-dispatcher';
 import { IndexedDbTransportCredentialStore } from '../transport/indexeddb-transport-credential-store';
 import { TransportRuntime } from '../transport/transport-runtime';
+import { isAppOwnedSyntheticInvoke } from './synthetic-ack-hold';
 
 const CONNECTION_STATE_KEY = 'connectionState';
 const TRANSPORT_RECONNECT_ALARM = 'transport-reconnect-v1';
 const ACTION_INVOKE_RETRY_ALARM = 'action-invoke-retry-v1';
 const ACTION_RESULT_ACK_RETRY_ALARM = 'action-result-ack-retry-v1';
+const SYNTHETIC_ACK_HOLD_MAX_MS = 10 * 60_000;
+let syntheticAckHold: { idempotencyKeyHex: string; expiresAtUnixMs: number } | undefined;
 const credentialStore = new IndexedDbTransportCredentialStore();
 const identityStore = new IndexedDbIdentityStore();
 const trustedPeerStore = new IndexedDbTrustedPeerStore();
@@ -160,6 +163,20 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
       );
       return true;
 
+    case 'hold-synthetic-result-ack':
+      void holdSyntheticResultAck(message).then(
+        (held) => sendResponse({ held }),
+        () => sendResponse({ held: false }),
+      );
+      return true;
+
+    case 'release-synthetic-result-ack':
+      void releaseSyntheticResultAck(message).then(
+        (released) => sendResponse({ released }),
+        () => sendResponse({ released: false }),
+      );
+      return true;
+
     case 'queue-action-invoke':
       void queueActionInvoke(message).then(
         (result) => sendResponse(result),
@@ -207,6 +224,7 @@ async function getSyntheticActionStatus(message: Record<string, unknown>): Promi
   authenticatedResultCount?: number;
   ackAttemptCount?: number;
   ackPending?: boolean;
+  ackHoldActive?: boolean;
 }> {
   const key = parseHex(message.idempotencyKey, 16, 'idempotencyKey');
   const record = await pendingActionStore.get(key);
@@ -219,6 +237,7 @@ async function getSyntheticActionStatus(message: Record<string, unknown>): Promi
     authenticatedResultCount: record.authenticatedResultCount,
     ackAttemptCount: record.ackAttemptCount,
     ackPending: record.canonicalResultAckPayload !== undefined,
+    ackHoldActive: currentSyntheticAckHold()?.idempotencyKeyHex === toHex(key),
   };
 }
 
@@ -242,10 +261,19 @@ async function resendSyntheticAction(message: Record<string, unknown>): Promise<
 }
 
 async function drainActionResultAcks(): Promise<void> {
+  let excludedKey: Uint8Array | undefined;
   try {
-    const result = await actionResultAckOutbox.drainDue();
-    const delayMs = result.nextWakeDelayMs ??
+    const hold = currentSyntheticAckHold();
+    excludedKey = hold === undefined
+      ? undefined
+      : parseHex(hold.idempotencyKeyHex, 16, 'held idempotencyKey');
+    const result = await actionResultAckOutbox.drainDue(excludedKey);
+    const deliveryDelayMs = result.nextWakeDelayMs ??
       (result.attemptedEntries > result.acceptedSends ? 1_000 : undefined);
+    const holdDelayMs = hold === undefined ? undefined : Math.max(1_000, hold.expiresAtUnixMs - Date.now());
+    const delayMs = deliveryDelayMs === undefined
+      ? holdDelayMs
+      : holdDelayMs === undefined ? deliveryDelayMs : Math.min(deliveryDelayMs, holdDelayMs);
     if (delayMs !== undefined) {
       await chrome.alarms.create(ACTION_RESULT_ACK_RETRY_ALARM, {
         when: Date.now() + Math.max(1_000, delayMs),
@@ -256,7 +284,38 @@ async function drainActionResultAcks(): Promise<void> {
   } catch {
     // Corrupt ACK state, trust changes during encryption, or identity mismatch fail closed.
     await transportRuntime.failClosed();
+  } finally {
+    excludedKey?.fill(0);
   }
+}
+
+async function holdSyntheticResultAck(message: Record<string, unknown>): Promise<boolean> {
+  const key = parseHex(message.idempotencyKey, 16, 'idempotencyKey');
+  const record = await pendingActionStore.get(key);
+  if (record?.canonicalInvokePayload === undefined) return false;
+  if (!isAppOwnedSyntheticInvoke(record.canonicalInvokePayload, key)) return false;
+  syntheticAckHold = {
+    idempotencyKeyHex: toHex(key),
+    expiresAtUnixMs: Date.now() + SYNTHETIC_ACK_HOLD_MAX_MS,
+  };
+  await drainActionResultAcks();
+  return true;
+}
+
+async function releaseSyntheticResultAck(message: Record<string, unknown>): Promise<boolean> {
+  const key = parseHex(message.idempotencyKey, 16, 'idempotencyKey');
+  const hold = currentSyntheticAckHold();
+  if (hold?.idempotencyKeyHex !== toHex(key)) return false;
+  syntheticAckHold = undefined;
+  await drainActionResultAcks();
+  return true;
+}
+
+function currentSyntheticAckHold(): { idempotencyKeyHex: string; expiresAtUnixMs: number } | undefined {
+  if (syntheticAckHold !== undefined && syntheticAckHold.expiresAtUnixMs <= Date.now()) {
+    syntheticAckHold = undefined;
+  }
+  return syntheticAckHold;
 }
 
 async function drainActionInvokes(): Promise<void> {
