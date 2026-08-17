@@ -488,7 +488,7 @@ async function resendSyntheticAction(): Promise<void> {
       : result.reason === 'recipient-not-approved'
         ? 'Exact resend rejected before encryption: the Android recipient is not approved.'
         : 'Exact resend was not accepted by the current authenticated socket.');
-    window.setTimeout(() => { void refreshSyntheticActionStatus(); }, 1_000);
+    window.setTimeout(() => { void refreshSyntheticActionStatus(); }, 5_000);
   } finally {
     resendSyntheticActionButton.disabled = false;
   }

@@ -98,11 +98,32 @@ export class TransportRuntime {
     await this.startConnection();
   }
 
+  /**
+   * Re-establishes a suspended MV3 transport and waits for SNO1 before an explicit user resend.
+   * Durable background queues continue to use their normal alarm-driven recovery path.
+   */
+  async ensureAuthenticated(timeoutMs = 5_000): Promise<boolean> {
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+      throw new Error('timeoutMs must be positive');
+    }
+    if (this.isAuthenticated()) return true;
+    try {
+      await this.connect();
+    } catch {
+      return false;
+    }
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (this.isAuthenticated()) return true;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    return this.isAuthenticated();
+  }
+
   /** Sends only after this connection generation has authenticated SNO1. */
   sendEnvelope(frame: Uint8Array): boolean {
     const socket = this.socket;
-    if (socket === undefined || this.authenticatedGeneration !== this.generation ||
-        socket.readyState !== 1) return false;
+    if (socket === undefined || !this.isAuthenticated()) return false;
     try {
       socket.send(frame);
       return true;
@@ -216,6 +237,11 @@ export class TransportRuntime {
       });
     });
     this.socket = socket;
+  }
+
+  private isAuthenticated(): boolean {
+    return this.socket !== undefined && this.authenticatedGeneration === this.generation &&
+      this.socket.readyState === 1;
   }
 
   private async requireBoundIdentity(credential: StoredTransportCredential): Promise<void> {

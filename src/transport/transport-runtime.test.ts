@@ -66,6 +66,30 @@ describe('TransportRuntime', () => {
     expect(states.at(-1)).toBe('offline');
   });
 
+  it('waits for SNO1 when an explicit resend wakes a suspended Worker', async () => {
+    const identity = await generateNonExtractableIdentity();
+    const credential = await credentialFor(identity);
+    const socket = new FakeSocket();
+    let observer: ((event: TransportDiagnosticEvent) => void) | undefined;
+    const runtime = new TransportRuntime(
+      { load: async () => copyCredential(credential) },
+      { loadExisting: async () => identity },
+      async () => undefined,
+      undefined,
+      (_loaded, observe) => {
+        observer = observe;
+        return socket as unknown as WebSocket;
+      },
+    );
+
+    const authenticated = runtime.ensureAuthenticated(1_000);
+    await waitFor(() => observer !== undefined);
+    expect(runtime.sendEnvelope(new Uint8Array([1]))).toBe(false);
+    observer?.('authenticated');
+    await expect(authenticated).resolves.toBe(true);
+    expect(runtime.sendEnvelope(new Uint8Array([2]))).toBe(true);
+  });
+
   it('fails closed without creating a replacement for a missing identity', async () => {
     const credential: StoredTransportCredential = {
       serverOrigin: 'https://notify.example',

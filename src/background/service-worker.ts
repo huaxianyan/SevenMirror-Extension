@@ -228,7 +228,11 @@ async function resendSyntheticAction(message: Record<string, unknown>): Promise<
 }> {
   const key = parseHex(message.idempotencyKey, 16, 'idempotencyKey');
   try {
-    return { accepted: await actionInvokeOutbox.resendExact(key) };
+    let accepted = await actionInvokeOutbox.resendExact(key);
+    if (!accepted && await transportRuntime.ensureAuthenticated()) {
+      accepted = await actionInvokeOutbox.resendExact(key);
+    }
+    return { accepted };
   } catch (error) {
     if (error instanceof Error && error.message === 'Action recipient is not approved') {
       return { accepted: false, reason: 'recipient-not-approved' };
