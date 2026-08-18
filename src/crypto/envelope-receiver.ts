@@ -5,6 +5,8 @@ import {
 } from './auth-hpke';
 import type { PersistentReplayDecision } from './indexeddb-replay-ledger';
 import { decodeEncryptedEnvelopeV1 } from '../protocol/encrypted-envelope';
+import { decodeIdentityKeyLifecyclePayload } from '../protocol/identity-key-transition-payload';
+import type { IdentityKeyTransitionAck } from '../protocol/generated/notification/v1/payload_pb';
 import type { RoutingHeaderV1 } from '../protocol/routing-header';
 
 export interface ReplayLedgerWriter {
@@ -28,13 +30,30 @@ export interface OpenedEnvelope {
   plaintext: Uint8Array;
 }
 
+export interface PendingIdentityAckBinding {
+  senderDeviceId: Uint8Array;
+  transitionId: Uint8Array;
+  previousKeyId: Uint8Array;
+  newKeyId: Uint8Array;
+  transitionSha256: Uint8Array;
+}
+
+export interface OpenedPendingIdentityAck {
+  header: RoutingHeaderV1;
+  acknowledgement: IdentityKeyTransitionAck;
+  canonicalPayload: Uint8Array;
+}
+
 export class EnvelopeRejectedError extends Error {
   constructor(
     readonly code:
       | 'WRONG_WORKSPACE'
       | 'WRONG_RECIPIENT'
+      | 'WRONG_SENDER'
       | 'RECIPIENT_KEY_MISMATCH'
       | 'SENDER_KEY_MISMATCH'
+      | 'PENDING_IDENTITY_PAYLOAD_MISMATCH'
+      | 'TRANSITION_BINDING_MISMATCH'
       | 'DUPLICATE'
       | 'EXPIRED'
       | 'REPLAY_CAPACITY_EXCEEDED',
@@ -52,6 +71,57 @@ export async function openEnvelopeOnce(
   frameBytes: Uint8Array,
   context: EnvelopeRecipientContext,
   replayLedger: ReplayLedgerWriter,
+  nowUnixMs: number,
+): Promise<OpenedEnvelope> {
+  const opened = await authenticateAndOpen(frameBytes, context, nowUnixMs);
+  await consumeReplay(opened.header, replayLedger, nowUnixMs);
+  return opened;
+}
+
+/**
+ * The proposed local identity is not an active business recipient. It may only
+ * open the exact peer acknowledgement bound to caller-validated state.
+ */
+export async function openPendingIdentityAckOnce(
+  frameBytes: Uint8Array,
+  context: EnvelopeRecipientContext,
+  binding: PendingIdentityAckBinding,
+  replayLedger: ReplayLedgerWriter,
+  nowUnixMs: number,
+): Promise<OpenedPendingIdentityAck> {
+  const opened = await authenticateAndOpen(frameBytes, context, nowUnixMs);
+  if (!arraysEqual(opened.header.senderDeviceId, binding.senderDeviceId)) {
+    throw new EnvelopeRejectedError('WRONG_SENDER');
+  }
+  if (!arraysEqual(opened.header.recipientKeyId, binding.newKeyId)) {
+    throw new EnvelopeRejectedError('TRANSITION_BINDING_MISMATCH');
+  }
+
+  let payload;
+  try {
+    payload = await decodeIdentityKeyLifecyclePayload(opened.plaintext);
+  } catch {
+    throw new EnvelopeRejectedError('PENDING_IDENTITY_PAYLOAD_MISMATCH');
+  }
+  if (payload.body.case !== 'identityKeyTransitionAck') {
+    throw new EnvelopeRejectedError('PENDING_IDENTITY_PAYLOAD_MISMATCH');
+  }
+  const acknowledgement = payload.body.value;
+  if (
+    !arraysEqual(acknowledgement.transitionId, binding.transitionId) ||
+    !arraysEqual(acknowledgement.previousKeyId, binding.previousKeyId) ||
+    !arraysEqual(acknowledgement.newKeyId, binding.newKeyId) ||
+    !arraysEqual(acknowledgement.transitionSha256, binding.transitionSha256)
+  ) {
+    throw new EnvelopeRejectedError('TRANSITION_BINDING_MISMATCH');
+  }
+  await consumeReplay(opened.header, replayLedger, nowUnixMs);
+  return { header: opened.header, acknowledgement, canonicalPayload: opened.plaintext };
+}
+
+async function authenticateAndOpen(
+  frameBytes: Uint8Array,
+  context: EnvelopeRecipientContext,
   nowUnixMs: number,
 ): Promise<OpenedEnvelope> {
   const envelope = decodeEncryptedEnvelopeV1(frameBytes);
@@ -86,6 +156,14 @@ export async function openEnvelopeOnce(
     },
     envelope.routingHeaderBytes,
   );
+  return { header, plaintext };
+}
+
+async function consumeReplay(
+  header: RoutingHeaderV1,
+  replayLedger: ReplayLedgerWriter,
+  nowUnixMs: number,
+): Promise<void> {
   const replayDecision = await replayLedger.checkAndRecord(
     header.senderKeyId,
     header.messageId,
@@ -94,7 +172,7 @@ export async function openEnvelopeOnce(
   );
   switch (replayDecision) {
     case 'accepted':
-      return { header, plaintext };
+      return;
     case 'duplicate':
       throw new EnvelopeRejectedError('DUPLICATE');
     case 'expired':
@@ -111,6 +189,10 @@ async function sha256(value: Uint8Array): Promise<Uint8Array> {
 }
 
 function arraysEqual(left: Uint8Array, right: Uint8Array): boolean {
-  return left.byteLength === right.byteLength &&
-    left.every((value, index) => value === right[index]);
+  if (left.byteLength !== right.byteLength) return false;
+  let difference = 0;
+  for (let index = 0; index < left.byteLength; index += 1) {
+    difference |= left[index]! ^ right[index]!;
+  }
+  return difference === 0;
 }
