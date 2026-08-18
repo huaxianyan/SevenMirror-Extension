@@ -233,7 +233,7 @@ async function createLegacyApprovedPeerDatabase(
 
 async function corruptStoredKeyId(databaseName: string): Promise<void> {
   const database = await new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(databaseName, 3);
+    const request = indexedDB.open(databaseName, 4);
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });

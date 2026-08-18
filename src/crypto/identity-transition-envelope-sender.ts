@@ -27,13 +27,29 @@ export async function createIdentityTransitionAckEnvelopeFromPayload(
   context: IdentityTransitionEnvelopeContext,
   canonicalAck: Uint8Array,
 ): Promise<Uint8Array> {
-  const payload = await decodeIdentityKeyLifecyclePayload(canonicalAck);
-  if (payload.body.case !== 'identityKeyTransitionAck') {
-    throw new Error('Expected canonical identity key transition acknowledgement');
+  return createIdentityTransitionEnvelope(context, canonicalAck, 'identityKeyTransitionAck');
+}
+
+/** Encrypts one exact durable identity-transition commit under a fresh envelope tuple. */
+export async function createIdentityTransitionCommitEnvelopeFromPayload(
+  context: IdentityTransitionEnvelopeContext,
+  canonicalCommit: Uint8Array,
+): Promise<Uint8Array> {
+  return createIdentityTransitionEnvelope(context, canonicalCommit, 'identityKeyTransitionCommit');
+}
+
+async function createIdentityTransitionEnvelope(
+  context: IdentityTransitionEnvelopeContext,
+  canonicalPayload: Uint8Array,
+  expectedBody: 'identityKeyTransitionAck' | 'identityKeyTransitionCommit',
+): Promise<Uint8Array> {
+  const payload = await decodeIdentityKeyLifecyclePayload(canonicalPayload);
+  if (payload.body.case !== expectedBody) {
+    throw new Error(`Expected canonical ${expectedBody} payload`);
   }
   const canonical = await encodeIdentityKeyLifecyclePayload(payload);
-  if (!bytesEqual(canonical, canonicalAck)) {
-    throw new Error('Stored identity transition acknowledgement is not canonical');
+  if (!bytesEqual(canonical, canonicalPayload)) {
+    throw new Error('Stored identity transition payload is not canonical');
   }
   const senderPublicKey = await serializeIdentityPublicKey(context.senderIdentity);
   const routingHeader = encodeRoutingHeaderV1({

@@ -14,6 +14,7 @@ import type {
 } from './indexeddb-local-identity-transition-store';
 import type {
   AcceptPeerIdentityTransitionResult,
+  CommitPeerIdentityTransitionResult,
   IndexedDbTrustedPeerStore,
 } from './indexeddb-trusted-peer-store';
 
@@ -60,6 +61,11 @@ export interface AcceptedPeerIdentityTransitionEnvelope {
 export interface AcceptedLocalIdentityAckEnvelope {
   header: RoutingHeaderV1;
   accepted: AcceptedLocalIdentityAck;
+}
+
+export interface AcceptedPeerIdentityCommitEnvelope {
+  header: RoutingHeaderV1;
+  committed: CommitPeerIdentityTransitionResult;
 }
 
 export class EnvelopeRejectedError extends Error {
@@ -171,6 +177,60 @@ export async function receivePendingIdentityAckOnce(
   }
   await consumeReplay(opened.header, replayLedger, nowUnixMs);
   return { header: opened.header, accepted };
+}
+
+/** Accepts a pending successor only for its exact commit and promotes before replay consumption. */
+export async function receiveIdentityTransitionCommitOnce(
+  frameBytes: Uint8Array,
+  recipient: Omit<EnvelopeRecipientContext, 'pinnedSenderPublicKey'>,
+  trustedPeers: IndexedDbTrustedPeerStore,
+  replayLedger: ReplayLedgerWriter,
+  nowUnixMs: number,
+): Promise<AcceptedPeerIdentityCommitEnvelope> {
+  const envelope = decodeEncryptedEnvelopeV1(frameBytes);
+  if (!arraysEqual(envelope.routingHeader.workspaceId, recipient.workspaceId)) {
+    throw new EnvelopeRejectedError('WRONG_WORKSPACE');
+  }
+  if (!arraysEqual(envelope.routingHeader.recipientDeviceId, recipient.recipientDeviceId)) {
+    throw new EnvelopeRejectedError('WRONG_RECIPIENT');
+  }
+  const binding = await trustedPeers.resolveIdentityCommitSender(
+    envelope.routingHeader.workspaceId,
+    envelope.routingHeader.senderDeviceId,
+    envelope.routingHeader.senderKeyId,
+    nowUnixMs,
+  );
+  if (binding === undefined) throw new EnvelopeRejectedError('WRONG_SENDER');
+  const opened = await authenticateAndOpen(frameBytes, {
+    ...recipient,
+    pinnedSenderPublicKey: binding.senderPublicKey,
+  }, nowUnixMs);
+  let payload;
+  try {
+    payload = await decodeIdentityKeyLifecyclePayload(opened.plaintext);
+  } catch {
+    throw new EnvelopeRejectedError('IDENTITY_TRANSITION_PAYLOAD_MISMATCH');
+  }
+  if (payload.body.case !== 'identityKeyTransitionCommit') {
+    throw new EnvelopeRejectedError('IDENTITY_TRANSITION_PAYLOAD_MISMATCH');
+  }
+  const commit = payload.body.value;
+  if (!arraysEqual(commit.transitionId, binding.transitionId) ||
+      !arraysEqual(commit.previousKeyId, binding.previousKeyId) ||
+      !arraysEqual(commit.newKeyId, binding.newKeyId) ||
+      !arraysEqual(commit.transitionSha256, binding.transitionSha256) ||
+      !arraysEqual(commit.ackSha256, binding.ackSha256)) {
+    throw new EnvelopeRejectedError('TRANSITION_BINDING_MISMATCH');
+  }
+  const committed = await trustedPeers.commitIdentityTransition(
+    opened.header.workspaceId,
+    opened.header.senderDeviceId,
+    opened.header.senderKeyId,
+    opened.plaintext,
+    nowUnixMs,
+  );
+  await consumeReplay(opened.header, replayLedger, nowUnixMs);
+  return { header: opened.header, committed };
 }
 
 /**

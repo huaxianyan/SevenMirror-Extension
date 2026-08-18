@@ -3,10 +3,12 @@ import {
   decodeIdentityKeyLifecyclePayload,
   encodeIdentityKeyLifecyclePayload,
 } from '../protocol/identity-key-transition-payload';
+import type { IdentityKeyTransitionCommit } from '../protocol/generated/notification/v1/payload_pb';
 
 const STORE_NAME = 'approved-peer';
 const TRANSITION_STORE_NAME = 'peer-identity-transition';
-const DATABASE_VERSION = 3;
+const TRANSITION_TOMBSTONE_STORE_NAME = 'peer-identity-transition-tombstone';
+const DATABASE_VERSION = 4;
 const IDENTIFIER_BYTES = 16;
 const KEY_ID_BYTES = 32;
 const P256_PUBLIC_KEY_BYTES = 65;
@@ -44,6 +46,36 @@ interface StoredPeerIdentityTransition extends PeerIdentityTransitionState {
 export interface AcceptPeerIdentityTransitionResult {
   disposition: 'accepted' | 'already-accepted';
   state: PeerIdentityTransitionState;
+}
+
+interface StoredIdentityTransitionTombstone {
+  tuple: string;
+  workspaceId: Uint8Array;
+  peerDeviceId: Uint8Array;
+  transitionId: Uint8Array;
+  previousKeyId: Uint8Array;
+  newKeyId: Uint8Array;
+  transitionSha256: Uint8Array;
+  ackSha256: Uint8Array;
+  canonicalCommit: Uint8Array;
+  commitSha256: Uint8Array;
+  committedAtUnixMs: number;
+  expiresAtUnixMs: number;
+}
+
+export interface IdentityCommitSenderBinding {
+  senderPublicKey: Uint8Array;
+  transitionId: Uint8Array;
+  previousKeyId: Uint8Array;
+  newKeyId: Uint8Array;
+  transitionSha256: Uint8Array;
+  ackSha256: Uint8Array;
+  disposition: 'pending' | 'already-committed';
+}
+
+export interface CommitPeerIdentityTransitionResult {
+  disposition: 'committed' | 'already-committed';
+  newKeyId: Uint8Array;
 }
 
 /** Local immutable pins only; server directory data must never be written here directly. */
@@ -206,10 +238,23 @@ export class IndexedDbTrustedPeerStore {
     const database = await this.openDatabase();
     try {
       const transaction = database.transaction(
-        [STORE_NAME, TRANSITION_STORE_NAME],
+        [STORE_NAME, TRANSITION_STORE_NAME, TRANSITION_TOMBSTONE_STORE_NAME],
         'readwrite',
       );
       const completed = transactionCompleted(transaction);
+      const tombstoneStore = transaction.objectStore(TRANSITION_TOMBSTONE_STORE_NAME);
+      const tombstone = await requestResult<StoredIdentityTransitionTombstone | undefined>(
+        tombstoneStore.get(tuple),
+      );
+      if (tombstone !== undefined) {
+        validateTombstone(tombstone);
+        if (nowUnixMs < tombstone.expiresAtUnixMs) {
+          transaction.abort();
+          await completed.catch(() => undefined);
+          throw new Error('A committed identity transition tombstone is still active for this peer');
+        }
+        await requestResult(tombstoneStore.delete(tuple));
+      }
       const approved = await requestResult<ApprovedPeerRecord | undefined>(
         transaction.objectStore(STORE_NAME).get(tuple),
       );
@@ -382,17 +427,212 @@ export class IndexedDbTrustedPeerStore {
     }
   }
 
+  /** Resolves only a pending successor or exact committed successor for commit authentication. */
+  async resolveIdentityCommitSender(
+    workspaceId: Uint8Array,
+    peerDeviceId: Uint8Array,
+    senderKeyId: Uint8Array,
+    nowUnixMs: number,
+  ): Promise<IdentityCommitSenderBinding | undefined> {
+    validateIdentifier(workspaceId, 'workspaceId');
+    validateIdentifier(peerDeviceId, 'peerDeviceId');
+    validateKeyId(senderKeyId);
+    validateTimestamp(nowUnixMs, 'nowUnixMs');
+    const tuple = peerTuple(workspaceId, peerDeviceId);
+    const database = await this.openDatabase();
+    let result: IdentityCommitSenderBinding | undefined;
+    let selectedTransition: StoredPeerIdentityTransition | undefined;
+    let selectedTombstone: StoredIdentityTransitionTombstone | undefined;
+    try {
+      const transaction = database.transaction(
+        [STORE_NAME, TRANSITION_STORE_NAME, TRANSITION_TOMBSTONE_STORE_NAME],
+        'readwrite',
+      );
+      const completed = transactionCompleted(transaction);
+      const approved = await requestResult<ApprovedPeerRecord | undefined>(
+        transaction.objectStore(STORE_NAME).get(tuple),
+      );
+      const transitions = transaction.objectStore(TRANSITION_STORE_NAME);
+      let transition = await requestResult<StoredPeerIdentityTransition | undefined>(
+        transitions.get(tuple),
+      );
+      if (transition !== undefined) {
+        validateStoredTransition(transition);
+        if (transition.phase === 'pending-commit' && nowUnixMs >= transition.expiresAtUnixMs) {
+          transition = { ...transition, phase: 'blocked' };
+          await requestResult(transitions.put(transition));
+        }
+        if (transition.phase === 'pending-commit' && approved !== undefined &&
+            bytesEqual(approved.keyId, transition.previousKeyId) &&
+            bytesEqual(senderKeyId, transition.newKeyId)) {
+          selectedTransition = transition;
+          result = {
+            senderPublicKey: transition.newPublicKey.slice(),
+            transitionId: transition.transitionId.slice(),
+            previousKeyId: transition.previousKeyId.slice(),
+            newKeyId: transition.newKeyId.slice(),
+            transitionSha256: transition.transitionSha256.slice(),
+            ackSha256: transition.ackSha256.slice(),
+            disposition: 'pending',
+          };
+        }
+      }
+      if (result === undefined) {
+        const tombstones = transaction.objectStore(TRANSITION_TOMBSTONE_STORE_NAME);
+        const tombstone = await requestResult<StoredIdentityTransitionTombstone | undefined>(
+          tombstones.get(tuple),
+        );
+        if (tombstone !== undefined) {
+          validateTombstone(tombstone);
+          if (nowUnixMs >= tombstone.expiresAtUnixMs) {
+            await requestResult(tombstones.delete(tuple));
+          } else if (approved !== undefined &&
+                     bytesEqual(approved.keyId, tombstone.newKeyId) &&
+                     bytesEqual(senderKeyId, tombstone.newKeyId)) {
+            selectedTombstone = tombstone;
+            result = {
+              senderPublicKey: approved.publicKey.slice(),
+              transitionId: tombstone.transitionId.slice(),
+              previousKeyId: tombstone.previousKeyId.slice(),
+              newKeyId: tombstone.newKeyId.slice(),
+              transitionSha256: tombstone.transitionSha256.slice(),
+              ackSha256: tombstone.ackSha256.slice(),
+              disposition: 'already-committed',
+            };
+          }
+        }
+      }
+      await completed;
+    } finally {
+      database.close();
+    }
+    if (selectedTransition !== undefined) {
+      await validateStoredTransitionCryptography(selectedTransition);
+    }
+    if (selectedTombstone !== undefined) await validateTombstoneCryptography(selectedTombstone);
+    return result;
+  }
+
+  /** Atomically promotes the successor pin and retains an exact bounded duplicate record. */
+  async commitIdentityTransition(
+    workspaceId: Uint8Array,
+    peerDeviceId: Uint8Array,
+    senderKeyId: Uint8Array,
+    canonicalCommit: Uint8Array,
+    nowUnixMs: number,
+  ): Promise<CommitPeerIdentityTransitionResult> {
+    validateIdentifier(workspaceId, 'workspaceId');
+    validateIdentifier(peerDeviceId, 'peerDeviceId');
+    validateKeyId(senderKeyId);
+    validateTimestamp(nowUnixMs, 'nowUnixMs');
+    const payload = await decodeIdentityKeyLifecyclePayload(canonicalCommit);
+    if (payload.body.case !== 'identityKeyTransitionCommit') {
+      throw new Error('Expected canonical identity key transition commit');
+    }
+    const commit = payload.body.value;
+    const commitSha256 = await sha256(canonicalCommit);
+    const tuple = peerTuple(workspaceId, peerDeviceId);
+    const database = await this.openDatabase();
+    try {
+      const transaction = database.transaction(
+        [STORE_NAME, TRANSITION_STORE_NAME, TRANSITION_TOMBSTONE_STORE_NAME],
+        'readwrite',
+      );
+      const completed = transactionCompleted(transaction);
+      const approvedStore = transaction.objectStore(STORE_NAME);
+      const approved = await requestResult<ApprovedPeerRecord | undefined>(approvedStore.get(tuple));
+      const transitionStore = transaction.objectStore(TRANSITION_STORE_NAME);
+      const transition = await requestResult<StoredPeerIdentityTransition | undefined>(
+        transitionStore.get(tuple),
+      );
+      const tombstoneStore = transaction.objectStore(TRANSITION_TOMBSTONE_STORE_NAME);
+      const tombstone = await requestResult<StoredIdentityTransitionTombstone | undefined>(
+        tombstoneStore.get(tuple),
+      );
+      if (transition !== undefined) {
+        validateStoredTransition(transition);
+        if (transition.phase === 'blocked' || nowUnixMs >= transition.expiresAtUnixMs) {
+          if (transition.phase !== 'blocked') {
+            await requestResult(transitionStore.put({ ...transition, phase: 'blocked' }));
+          }
+          await completed;
+          throw new Error('Identity transition is blocked after expiry');
+        }
+        if (approved === undefined ||
+            !bytesEqual(approved.keyId, transition.previousKeyId) ||
+            !bytesEqual(senderKeyId, transition.newKeyId) ||
+            !commitMatchesTransition(commit, transition)) {
+          transaction.abort();
+          await completed.catch(() => undefined);
+          throw new Error('Identity transition commit binding does not match');
+        }
+        if (tombstone !== undefined) {
+          transaction.abort();
+          await completed.catch(() => undefined);
+          throw new Error('Identity transition has conflicting committed state');
+        }
+        const promoted: ApprovedPeerRecord = {
+          tuple,
+          workspaceId: workspaceId.slice(),
+          deviceId: peerDeviceId.slice(),
+          keyId: transition.newKeyId.slice(),
+          publicKey: transition.newPublicKey.slice(),
+        };
+        const committed: StoredIdentityTransitionTombstone = {
+          tuple,
+          workspaceId: workspaceId.slice(),
+          peerDeviceId: peerDeviceId.slice(),
+          transitionId: transition.transitionId.slice(),
+          previousKeyId: transition.previousKeyId.slice(),
+          newKeyId: transition.newKeyId.slice(),
+          transitionSha256: transition.transitionSha256.slice(),
+          ackSha256: transition.ackSha256.slice(),
+          canonicalCommit: canonicalCommit.slice(),
+          commitSha256,
+          committedAtUnixMs: nowUnixMs,
+          expiresAtUnixMs: safeAdd(nowUnixMs, IDENTITY_TRANSITION_RETENTION_MS),
+        };
+        await requestResult(approvedStore.put(promoted));
+        await requestResult(transitionStore.delete(tuple));
+        await requestResult(tombstoneStore.add(committed));
+        await completed;
+        return { disposition: 'committed', newKeyId: transition.newKeyId.slice() };
+      }
+      if (tombstone === undefined || approved === undefined) {
+        transaction.abort();
+        await completed.catch(() => undefined);
+        throw new Error('Identity transition commit has no durable successor state');
+      }
+      validateTombstone(tombstone);
+      if (nowUnixMs >= tombstone.expiresAtUnixMs ||
+          !bytesEqual(approved.keyId, tombstone.newKeyId) ||
+          !bytesEqual(senderKeyId, tombstone.newKeyId) ||
+          !bytesEqual(tombstone.canonicalCommit, canonicalCommit) ||
+          !bytesEqual(tombstone.commitSha256, commitSha256) ||
+          !commitMatchesTombstone(commit, tombstone)) {
+        transaction.abort();
+        await completed.catch(() => undefined);
+        throw new Error('Identity transition duplicate commit binding does not match');
+      }
+      await completed;
+      return { disposition: 'already-committed', newKeyId: tombstone.newKeyId.slice() };
+    } finally {
+      database.close();
+    }
+  }
+
   async remove(workspaceId: Uint8Array, deviceId: Uint8Array): Promise<void> {
     validateIdentifier(workspaceId, 'workspaceId');
     validateIdentifier(deviceId, 'deviceId');
     const database = await this.openDatabase();
     try {
       const transaction = database.transaction(
-        [STORE_NAME, TRANSITION_STORE_NAME],
+        [STORE_NAME, TRANSITION_STORE_NAME, TRANSITION_TOMBSTONE_STORE_NAME],
         'readwrite',
       );
       const completed = transactionCompleted(transaction);
       const tuple = peerTuple(workspaceId, deviceId);
+      await requestResult(transaction.objectStore(TRANSITION_TOMBSTONE_STORE_NAME).delete(tuple));
       await requestResult(transaction.objectStore(TRANSITION_STORE_NAME).delete(tuple));
       await requestResult(transaction.objectStore(STORE_NAME).delete(tuple));
       await completed;
@@ -417,6 +657,9 @@ export class IndexedDbTrustedPeerStore {
         if (!request.result.objectStoreNames.contains(STORE_NAME)) {
           request.result.createObjectStore(STORE_NAME, { keyPath: 'tuple' });
         }
+        if (!request.result.objectStoreNames.contains(TRANSITION_TOMBSTONE_STORE_NAME)) {
+          request.result.createObjectStore(TRANSITION_TOMBSTONE_STORE_NAME, { keyPath: 'tuple' });
+        }
         if (!request.result.objectStoreNames.contains(TRANSITION_STORE_NAME)) {
           request.result.createObjectStore(TRANSITION_STORE_NAME, { keyPath: 'tuple' });
         } else if ((event as IDBVersionChangeEvent).oldVersion < 3) {
@@ -439,6 +682,59 @@ export class IndexedDbTrustedPeerStore {
       request.onblocked = () => reject(new Error('Trusted peer store open was blocked'));
     });
   }
+}
+
+async function validateTombstoneCryptography(
+  record: StoredIdentityTransitionTombstone,
+): Promise<void> {
+  const payload = await decodeIdentityKeyLifecyclePayload(record.canonicalCommit);
+  if (payload.body.case !== 'identityKeyTransitionCommit' ||
+      !bytesEqual(await sha256(record.canonicalCommit), record.commitSha256) ||
+      !commitMatchesTombstone(payload.body.value, record)) {
+    throw new Error('Stored identity transition tombstone binding is corrupt');
+  }
+}
+
+function validateTombstone(record: StoredIdentityTransitionTombstone): void {
+  validateIdentifier(record.workspaceId, 'workspaceId');
+  validateIdentifier(record.peerDeviceId, 'peerDeviceId');
+  validateIdentifier(record.transitionId, 'transitionId');
+  validateKeyId(record.previousKeyId);
+  validateKeyId(record.newKeyId);
+  validateKeyId(record.transitionSha256);
+  validateKeyId(record.ackSha256);
+  validateKeyId(record.commitSha256);
+  validateTimestamp(record.committedAtUnixMs, 'committedAtUnixMs');
+  validateTimestamp(record.expiresAtUnixMs, 'expiresAtUnixMs');
+  if (record.expiresAtUnixMs !== safeAdd(record.committedAtUnixMs, IDENTITY_TRANSITION_RETENTION_MS)) {
+    throw new Error('Stored identity transition tombstone expiry is invalid');
+  }
+  if (record.tuple !== peerTuple(record.workspaceId, record.peerDeviceId) ||
+      !(record.canonicalCommit instanceof Uint8Array)) {
+    throw new Error('Stored identity transition tombstone is invalid');
+  }
+}
+
+function commitMatchesTransition(
+  commit: IdentityKeyTransitionCommit,
+  transition: StoredPeerIdentityTransition,
+): boolean {
+  return bytesEqual(commit.transitionId, transition.transitionId) &&
+    bytesEqual(commit.previousKeyId, transition.previousKeyId) &&
+    bytesEqual(commit.newKeyId, transition.newKeyId) &&
+    bytesEqual(commit.transitionSha256, transition.transitionSha256) &&
+    bytesEqual(commit.ackSha256, transition.ackSha256);
+}
+
+function commitMatchesTombstone(
+  commit: IdentityKeyTransitionCommit,
+  tombstone: StoredIdentityTransitionTombstone,
+): boolean {
+  return bytesEqual(commit.transitionId, tombstone.transitionId) &&
+    bytesEqual(commit.previousKeyId, tombstone.previousKeyId) &&
+    bytesEqual(commit.newKeyId, tombstone.newKeyId) &&
+    bytesEqual(commit.transitionSha256, tombstone.transitionSha256) &&
+    bytesEqual(commit.ackSha256, tombstone.ackSha256);
 }
 
 function validateStoredTransition(record: StoredPeerIdentityTransition): void {

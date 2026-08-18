@@ -7,7 +7,7 @@ import {
 const SESSION_STORE = 'local-transition-session';
 const PEER_STORE = 'local-transition-peer';
 const SESSION_ID = 'active-local-identity-transition-v1';
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 2;
 const RETENTION_MS = 7 * 24 * 60 * 60 * 1_000;
 
 export interface LocalIdentityTransitionPeerSnapshot {
@@ -34,6 +34,8 @@ export interface LocalIdentityTransitionPeerState extends LocalIdentityTransitio
   canonicalAck?: Uint8Array;
   ackSha256?: Uint8Array;
   canonicalCommit?: Uint8Array;
+  nextCommitAttemptAtUnixMs: number;
+  commitAttemptCount: number;
   phase: 'awaiting-ack' | 'commit-queued';
 }
 
@@ -58,6 +60,11 @@ export interface LocalIdentityAckBinding {
 
 export interface AcceptedLocalIdentityAck {
   disposition: 'accepted' | 'already-accepted';
+  peer: LocalIdentityTransitionPeerState;
+}
+
+export interface DueLocalIdentityCommit {
+  session: LocalIdentityTransitionSession;
   peer: LocalIdentityTransitionPeerState;
 }
 
@@ -105,6 +112,8 @@ export class IndexedDbLocalIdentityTransitionStore {
         transitionId: transition.transitionId.slice(),
         deviceId: peer.deviceId.slice(),
         keyId: peer.keyId.slice(),
+        nextCommitAttemptAtUnixMs: nowUnixMs,
+        commitAttemptCount: 0,
         phase: 'awaiting-ack' as const,
       } satisfies StoredPeer;
     });
@@ -226,19 +235,130 @@ export class IndexedDbLocalIdentityTransitionStore {
           await completed;
           throw new Error('Peer acknowledgement is already bound to different bytes');
         }
+        const reactivated: StoredPeer = {
+          ...peer,
+          nextCommitAttemptAtUnixMs: nowUnixMs,
+          commitAttemptCount: 0,
+        };
+        await requestResult(peers.put(reactivated));
         await completed;
-        return { disposition: 'already-accepted', peer: copyPeer(peer) };
+        return { disposition: 'already-accepted', peer: copyPeer(reactivated) };
       }
       const committed: StoredPeer = {
         ...peer,
         canonicalAck: canonicalAck.slice(),
         ackSha256,
         canonicalCommit,
+        nextCommitAttemptAtUnixMs: nowUnixMs,
+        commitAttemptCount: 0,
         phase: 'commit-queued',
       };
       await requestResult(peers.put(committed));
       await completed;
       return { disposition: 'accepted', peer: copyPeer(committed) };
+    } finally {
+      database.close();
+    }
+  }
+
+  async dueCommits(
+    workspaceId: Uint8Array,
+    nowUnixMs: number,
+    limit = 16,
+  ): Promise<DueLocalIdentityCommit[]> {
+    validateIdentifier(workspaceId, 'workspaceId');
+    validateTimestamp(nowUnixMs, 'nowUnixMs');
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 128) {
+      throw new Error('limit must be 1..128');
+    }
+    const database = await this.openDatabase();
+    let session: StoredSession | undefined;
+    const due: StoredPeer[] = [];
+    try {
+      const transaction = database.transaction([SESSION_STORE, PEER_STORE], 'readwrite');
+      const completed = transactionCompleted(transaction);
+      const sessions = transaction.objectStore(SESSION_STORE);
+      session = await requestResult<StoredSession | undefined>(sessions.get(SESSION_ID));
+      if (session !== undefined) {
+        validateSession(session);
+        if (session.phase === 'awaiting-acks' && nowUnixMs >= session.expiresAtUnixMs) {
+          session = { ...session, phase: 'blocked' };
+          await requestResult(sessions.put(session));
+        }
+        if (session.phase === 'awaiting-acks' && bytesEqual(session.workspaceId, workspaceId)) {
+          const peers = await requestResult<StoredPeer[]>(
+            transaction.objectStore(PEER_STORE).getAll(),
+          );
+          for (const peer of peers) {
+            validatePeer(peer);
+            if (peer.phase === 'commit-queued' &&
+                bytesEqual(peer.transitionId, session.transitionId) &&
+                peer.nextCommitAttemptAtUnixMs <= nowUnixMs) {
+              due.push(peer);
+            }
+          }
+        }
+      }
+      await completed;
+    } finally {
+      database.close();
+    }
+    if (session === undefined || session.phase === 'blocked') return [];
+    due.sort((left, right) => left.nextCommitAttemptAtUnixMs - right.nextCommitAttemptAtUnixMs ||
+      left.tuple.localeCompare(right.tuple));
+    const selected = due.slice(0, limit);
+    for (const peer of selected) await validateStoredCryptography(session, peer);
+    return selected.map((peer) => ({ session: copySession(session!), peer: copyPeer(peer) }));
+  }
+
+  async recordCommitSendAttempt(
+    peerDeviceId: Uint8Array,
+    transitionId: Uint8Array,
+    ackSha256: Uint8Array,
+    nextAttemptAtUnixMs: number,
+    maximumAttempts = 5,
+  ): Promise<void> {
+    validateIdentifier(peerDeviceId, 'peerDeviceId');
+    validateIdentifier(transitionId, 'transitionId');
+    validateDigest(ackSha256, 'ackSha256');
+    validateTimestamp(nextAttemptAtUnixMs, 'nextAttemptAtUnixMs');
+    if (!Number.isSafeInteger(maximumAttempts) || maximumAttempts < 1) {
+      throw new Error('maximumAttempts must be positive');
+    }
+    const database = await this.openDatabase();
+    try {
+      const transaction = database.transaction([SESSION_STORE, PEER_STORE], 'readwrite');
+      const completed = transactionCompleted(transaction);
+      const session = await requestResult<StoredSession | undefined>(
+        transaction.objectStore(SESSION_STORE).get(SESSION_ID),
+      );
+      if (session !== undefined) {
+        validateSession(session);
+        const peers = transaction.objectStore(PEER_STORE);
+        const peer = await requestResult<StoredPeer | undefined>(
+          peers.get(peerTuple(session.transitionId, peerDeviceId)),
+        );
+        if (peer !== undefined) {
+          validatePeer(peer);
+          if (!bytesEqual(peer.transitionId, transitionId) ||
+              !optionalBytesEqual(peer.ackSha256, ackSha256)) {
+            transaction.abort();
+            await completed.catch(() => undefined);
+            throw new Error('Identity transition commit attempt binding changed');
+          }
+          if (session.phase === 'awaiting-acks' && peer.phase === 'commit-queued') {
+            const attemptCount = peer.commitAttemptCount + 1;
+            await requestResult(peers.put({
+              ...peer,
+              commitAttemptCount: attemptCount,
+              nextCommitAttemptAtUnixMs: attemptCount >= maximumAttempts
+                ? session.expiresAtUnixMs
+                : Math.min(nextAttemptAtUnixMs, session.expiresAtUnixMs),
+            }));
+          }
+        }
+      }
+      await completed;
     } finally {
       database.close();
     }
@@ -297,12 +417,25 @@ export class IndexedDbLocalIdentityTransitionStore {
   private openDatabase(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(this.databaseName, DATABASE_VERSION);
-      request.onupgradeneeded = () => {
+      request.onupgradeneeded = (event) => {
         if (!request.result.objectStoreNames.contains(SESSION_STORE)) {
           request.result.createObjectStore(SESSION_STORE, { keyPath: 'id' });
         }
         if (!request.result.objectStoreNames.contains(PEER_STORE)) {
           request.result.createObjectStore(PEER_STORE, { keyPath: 'tuple' });
+        } else if ((event as IDBVersionChangeEvent).oldVersion < 2) {
+          const store = request.transaction!.objectStore(PEER_STORE);
+          store.openCursor().onsuccess = (cursorEvent) => {
+            const cursor = (cursorEvent.target as IDBRequest<IDBCursorWithValue | null>).result;
+            if (cursor === null) return;
+            const record = cursor.value as StoredPeer;
+            cursor.update({
+              ...record,
+              nextCommitAttemptAtUnixMs: 0,
+              commitAttemptCount: 0,
+            });
+            cursor.continue();
+          };
         }
       };
       request.onsuccess = () => resolve(request.result);
@@ -370,6 +503,10 @@ function validatePeer(value: StoredPeer): void {
   validateIdentifier(value.transitionId, 'transitionId');
   validateIdentifier(value.deviceId, 'peerDeviceId');
   validateDigest(value.keyId, 'peerKeyId');
+  validateTimestamp(value.nextCommitAttemptAtUnixMs, 'nextCommitAttemptAtUnixMs');
+  if (!Number.isSafeInteger(value.commitAttemptCount) || value.commitAttemptCount < 0) {
+    throw new Error('Stored local identity transition commit attempt count is invalid');
+  }
   if (value.tuple !== peerTuple(value.transitionId, value.deviceId)) {
     throw new Error('Stored local identity transition peer tuple is invalid');
   }
@@ -404,6 +541,8 @@ function copyPeer(value: LocalIdentityTransitionPeerState): LocalIdentityTransit
     canonicalAck: value.canonicalAck?.slice(),
     ackSha256: value.ackSha256?.slice(),
     canonicalCommit: value.canonicalCommit?.slice(),
+    nextCommitAttemptAtUnixMs: value.nextCommitAttemptAtUnixMs,
+    commitAttemptCount: value.commitAttemptCount,
     phase: value.phase,
   };
 }
