@@ -8,6 +8,10 @@ import { decodeEncryptedEnvelopeV1 } from '../protocol/encrypted-envelope';
 import { decodeIdentityKeyLifecyclePayload } from '../protocol/identity-key-transition-payload';
 import type { IdentityKeyTransitionAck } from '../protocol/generated/notification/v1/payload_pb';
 import type { RoutingHeaderV1 } from '../protocol/routing-header';
+import type {
+  AcceptPeerIdentityTransitionResult,
+  IndexedDbTrustedPeerStore,
+} from './indexeddb-trusted-peer-store';
 
 export interface ReplayLedgerWriter {
   checkAndRecord(
@@ -44,6 +48,11 @@ export interface OpenedPendingIdentityAck {
   canonicalPayload: Uint8Array;
 }
 
+export interface AcceptedPeerIdentityTransitionEnvelope {
+  header: RoutingHeaderV1;
+  accepted: AcceptPeerIdentityTransitionResult;
+}
+
 export class EnvelopeRejectedError extends Error {
   constructor(
     readonly code:
@@ -53,6 +62,7 @@ export class EnvelopeRejectedError extends Error {
       | 'RECIPIENT_KEY_MISMATCH'
       | 'SENDER_KEY_MISMATCH'
       | 'PENDING_IDENTITY_PAYLOAD_MISMATCH'
+      | 'IDENTITY_TRANSITION_PAYLOAD_MISMATCH'
       | 'TRANSITION_BINDING_MISMATCH'
       | 'DUPLICATE'
       | 'EXPIRED'
@@ -76,6 +86,40 @@ export async function openEnvelopeOnce(
   const opened = await authenticateAndOpen(frameBytes, context, nowUnixMs);
   await consumeReplay(opened.header, replayLedger, nowUnixMs);
   return opened;
+}
+
+/**
+ * Persists the successor and exact ACK intent before replay consumption. A
+ * crash or replay failure therefore cannot lose an authenticated transition.
+ */
+export async function receiveIdentityTransitionOnce(
+  frameBytes: Uint8Array,
+  context: EnvelopeRecipientContext,
+  trustedPeers: IndexedDbTrustedPeerStore,
+  replayLedger: ReplayLedgerWriter,
+  nowUnixMs: number,
+): Promise<AcceptedPeerIdentityTransitionEnvelope> {
+  const opened = await authenticateAndOpen(frameBytes, context, nowUnixMs);
+  let payload;
+  try {
+    payload = await decodeIdentityKeyLifecyclePayload(opened.plaintext);
+  } catch {
+    throw new EnvelopeRejectedError('IDENTITY_TRANSITION_PAYLOAD_MISMATCH');
+  }
+  if (payload.body.case !== 'identityKeyTransition') {
+    throw new EnvelopeRejectedError('IDENTITY_TRANSITION_PAYLOAD_MISMATCH');
+  }
+  if (!arraysEqual(payload.body.value.previousKeyId, opened.header.senderKeyId)) {
+    throw new EnvelopeRejectedError('TRANSITION_BINDING_MISMATCH');
+  }
+  const accepted = await trustedPeers.acceptIdentityTransition(
+    opened.header.workspaceId,
+    opened.header.senderDeviceId,
+    opened.plaintext,
+    nowUnixMs,
+  );
+  await consumeReplay(opened.header, replayLedger, nowUnixMs);
+  return { header: opened.header, accepted };
 }
 
 /**
