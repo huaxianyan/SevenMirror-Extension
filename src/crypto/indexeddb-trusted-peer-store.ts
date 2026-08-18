@@ -6,7 +6,7 @@ import {
 
 const STORE_NAME = 'approved-peer';
 const TRANSITION_STORE_NAME = 'peer-identity-transition';
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 3;
 const IDENTIFIER_BYTES = 16;
 const KEY_ID_BYTES = 32;
 const P256_PUBLIC_KEY_BYTES = 65;
@@ -32,6 +32,8 @@ export interface PeerIdentityTransitionState {
   ackSha256: Uint8Array;
   acceptedAtUnixMs: number;
   expiresAtUnixMs: number;
+  nextAckAttemptAtUnixMs: number;
+  ackAttemptCount: number;
   phase: 'pending-commit' | 'blocked';
 }
 
@@ -196,6 +198,8 @@ export class IndexedDbTrustedPeerStore {
       ackSha256,
       acceptedAtUnixMs: nowUnixMs,
       expiresAtUnixMs,
+      nextAckAttemptAtUnixMs: nowUnixMs,
+      ackAttemptCount: 0,
       phase: 'pending-commit',
     };
 
@@ -233,8 +237,17 @@ export class IndexedDbTrustedPeerStore {
           await completed;
           throw new Error('A different identity successor is already pending for this peer');
         }
+        const reactivated = existing.ackAttemptCount === 0 &&
+          existing.nextAckAttemptAtUnixMs <= nowUnixMs
+          ? existing
+          : {
+              ...existing,
+              nextAckAttemptAtUnixMs: nowUnixMs,
+              ackAttemptCount: 0,
+            };
+        if (reactivated !== existing) await requestResult(transitionStore.put(reactivated));
         await completed;
-        return { disposition: 'already-accepted', state: copyTransition(existing) };
+        return { disposition: 'already-accepted', state: copyTransition(reactivated) };
       }
       await requestResult(transitionStore.add(proposed));
       await completed;
@@ -278,6 +291,97 @@ export class IndexedDbTrustedPeerStore {
     return copyTransition(record);
   }
 
+  async dueIdentityTransitionAcks(
+    workspaceId: Uint8Array,
+    nowUnixMs: number,
+    limit = 16,
+  ): Promise<PeerIdentityTransitionState[]> {
+    validateIdentifier(workspaceId, 'workspaceId');
+    validateTimestamp(nowUnixMs, 'nowUnixMs');
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 128) {
+      throw new Error('limit must be 1..128');
+    }
+    const database = await this.openDatabase();
+    const due: StoredPeerIdentityTransition[] = [];
+    try {
+      const transaction = database.transaction(TRANSITION_STORE_NAME, 'readwrite');
+      const completed = transactionCompleted(transaction);
+      const store = transaction.objectStore(TRANSITION_STORE_NAME);
+      const records = await requestResult<StoredPeerIdentityTransition[]>(store.getAll());
+      for (const value of records) {
+        validateStoredTransition(value);
+        let record = value;
+        if (record.phase === 'pending-commit' && nowUnixMs >= record.expiresAtUnixMs) {
+          record = { ...record, phase: 'blocked' };
+          await requestResult(store.put(record));
+        }
+        if (record.phase === 'pending-commit' &&
+            bytesEqual(record.workspaceId, workspaceId) &&
+            record.nextAckAttemptAtUnixMs <= nowUnixMs) {
+          due.push(record);
+        }
+      }
+      await completed;
+    } finally {
+      database.close();
+    }
+    due.sort((left, right) =>
+      left.nextAckAttemptAtUnixMs - right.nextAckAttemptAtUnixMs ||
+      left.tuple.localeCompare(right.tuple));
+    const selected = due.slice(0, limit);
+    for (const record of selected) await validateStoredTransitionCryptography(record);
+    return selected.map(copyTransition);
+  }
+
+  async recordIdentityTransitionAckSendAttempt(
+    workspaceId: Uint8Array,
+    peerDeviceId: Uint8Array,
+    transitionId: Uint8Array,
+    ackSha256: Uint8Array,
+    nextAttemptAtUnixMs: number,
+    maximumAttempts = 5,
+  ): Promise<void> {
+    validateIdentifier(workspaceId, 'workspaceId');
+    validateIdentifier(peerDeviceId, 'peerDeviceId');
+    validateIdentifier(transitionId, 'transitionId');
+    validateKeyId(ackSha256);
+    validateTimestamp(nextAttemptAtUnixMs, 'nextAttemptAtUnixMs');
+    if (!Number.isSafeInteger(maximumAttempts) || maximumAttempts < 1) {
+      throw new Error('maximumAttempts must be positive');
+    }
+    const database = await this.openDatabase();
+    try {
+      const transaction = database.transaction(TRANSITION_STORE_NAME, 'readwrite');
+      const completed = transactionCompleted(transaction);
+      const store = transaction.objectStore(TRANSITION_STORE_NAME);
+      const record = await requestResult<StoredPeerIdentityTransition | undefined>(
+        store.get(peerTuple(workspaceId, peerDeviceId)),
+      );
+      if (record !== undefined) {
+        validateStoredTransition(record);
+        if (!bytesEqual(record.transitionId, transitionId) ||
+            !bytesEqual(record.ackSha256, ackSha256)) {
+          transaction.abort();
+          await completed.catch(() => undefined);
+          throw new Error('Identity transition ACK attempt binding changed');
+        }
+        if (record.phase === 'pending-commit') {
+          const attemptCount = record.ackAttemptCount + 1;
+          await requestResult(store.put({
+            ...record,
+            ackAttemptCount: attemptCount,
+            nextAckAttemptAtUnixMs: attemptCount >= maximumAttempts
+              ? record.expiresAtUnixMs
+              : Math.min(nextAttemptAtUnixMs, record.expiresAtUnixMs),
+          }));
+        }
+      }
+      await completed;
+    } finally {
+      database.close();
+    }
+  }
+
   async remove(workspaceId: Uint8Array, deviceId: Uint8Array): Promise<void> {
     validateIdentifier(workspaceId, 'workspaceId');
     validateIdentifier(deviceId, 'deviceId');
@@ -309,12 +413,25 @@ export class IndexedDbTrustedPeerStore {
   private openDatabase(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(this.databaseName, DATABASE_VERSION);
-      request.onupgradeneeded = () => {
+      request.onupgradeneeded = (event) => {
         if (!request.result.objectStoreNames.contains(STORE_NAME)) {
           request.result.createObjectStore(STORE_NAME, { keyPath: 'tuple' });
         }
         if (!request.result.objectStoreNames.contains(TRANSITION_STORE_NAME)) {
           request.result.createObjectStore(TRANSITION_STORE_NAME, { keyPath: 'tuple' });
+        } else if ((event as IDBVersionChangeEvent).oldVersion < 3) {
+          const store = request.transaction!.objectStore(TRANSITION_STORE_NAME);
+          store.openCursor().onsuccess = (event) => {
+            const cursor = (event.target as IDBRequest<IDBCursorWithValue | null>).result;
+            if (cursor === null) return;
+            const record = cursor.value as StoredPeerIdentityTransition;
+            cursor.update({
+              ...record,
+              nextAckAttemptAtUnixMs: record.acceptedAtUnixMs,
+              ackAttemptCount: 0,
+            });
+            cursor.continue();
+          };
         }
       };
       request.onsuccess = () => resolve(request.result);
@@ -335,6 +452,10 @@ function validateStoredTransition(record: StoredPeerIdentityTransition): void {
   validateKeyId(record.ackSha256);
   validateTimestamp(record.acceptedAtUnixMs, 'acceptedAtUnixMs');
   validateTimestamp(record.expiresAtUnixMs, 'expiresAtUnixMs');
+  validateTimestamp(record.nextAckAttemptAtUnixMs, 'nextAckAttemptAtUnixMs');
+  if (!Number.isSafeInteger(record.ackAttemptCount) || record.ackAttemptCount < 0) {
+    throw new Error('Stored identity transition ACK attempt count is invalid');
+  }
   if (record.expiresAtUnixMs !== safeAdd(record.acceptedAtUnixMs, IDENTITY_TRANSITION_RETENTION_MS)) {
     throw new Error('Stored identity transition expiry is invalid');
   }
@@ -407,6 +528,8 @@ function copyTransition(value: PeerIdentityTransitionState): PeerIdentityTransit
     ackSha256: value.ackSha256.slice(),
     acceptedAtUnixMs: value.acceptedAtUnixMs,
     expiresAtUnixMs: value.expiresAtUnixMs,
+    nextAckAttemptAtUnixMs: value.nextAckAttemptAtUnixMs,
+    ackAttemptCount: value.ackAttemptCount,
     phase: value.phase,
   };
 }

@@ -163,6 +163,10 @@ describe('IndexedDbTrustedPeerStore', () => {
         accepted.state.expiresAtUnixMs,
       );
       expect(blocked?.phase).toBe('blocked');
+      expect(await store.dueIdentityTransitionAcks(
+        workspaceId,
+        accepted.state.expiresAtUnixMs,
+      )).toEqual([]);
       expect(await store.findApproved(workspaceId, deviceId, previousKeyId))
         .toEqual(previousPublicKey);
       expect(await store.findApproved(workspaceId, deviceId, newKeyId)).toBeUndefined();
@@ -229,7 +233,7 @@ async function createLegacyApprovedPeerDatabase(
 
 async function corruptStoredKeyId(databaseName: string): Promise<void> {
   const database = await new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(databaseName, 2);
+    const request = indexedDB.open(databaseName, 3);
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
