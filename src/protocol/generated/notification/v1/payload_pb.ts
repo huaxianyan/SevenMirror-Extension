@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file notification/v1/payload.proto.
  */
 export const file_notification_v1_payload: GenFile = /*@__PURE__*/
-  fileDesc("Ch1ub3RpZmljYXRpb24vdjEvcGF5bG9hZC5wcm90bxIZbm90aWZpY2F0aW9uLm1pcnJvcmluZy52MSL/AQoQRW5jcnlwdGVkUGF5bG9hZBIWCg5zY2hlbWFfdmVyc2lvbhgBIAEoDRJACg1hY3Rpb25faW52b2tlGAogASgLMicubm90aWZpY2F0aW9uLm1pcnJvcmluZy52MS5BY3Rpb25JbnZva2VIABJACg1hY3Rpb25fcmVzdWx0GAsgASgLMicubm90aWZpY2F0aW9uLm1pcnJvcmluZy52MS5BY3Rpb25SZXN1bHRIABJHChFhY3Rpb25fcmVzdWx0X2FjaxgMIAEoCzIqLm5vdGlmaWNhdGlvbi5taXJyb3JpbmcudjEuQWN0aW9uUmVzdWx0QWNrSABCBgoEYm9keSKaAQoMQWN0aW9uSW52b2tlEhcKD25vdGlmaWNhdGlvbl9pZBgBIAEoCRIdChVub3RpZmljYXRpb25fcmV2aXNpb24YAiABKAQSEQoJYWN0aW9uX2lkGAMgASgMEhcKD2lkZW1wb3RlbmN5X2tleRgEIAEoDBIXCgpyZXBseV90ZXh0GAUgASgJSACIAQFCDQoLX3JlcGx5X3RleHQihgEKDEFjdGlvblJlc3VsdBIXCg9pZGVtcG90ZW5jeV9rZXkYASABKAwSPQoGc3RhdHVzGAIgASgOMi0ubm90aWZpY2F0aW9uLm1pcnJvcmluZy52MS5BY3Rpb25SZXN1bHRTdGF0dXMSEwoGZGV0YWlsGAMgASgJSACIAQFCCQoHX2RldGFpbCJBCg9BY3Rpb25SZXN1bHRBY2sSFwoPaWRlbXBvdGVuY3lfa2V5GAEgASgMEhUKDXJlc3VsdF9zaGEyNTYYAiABKAwqygMKEkFjdGlvblJlc3VsdFN0YXR1cxIkCiBBQ1RJT05fUkVTVUxUX1NUQVRVU19VTlNQRUNJRklFRBAAEiIKHkFDVElPTl9SRVNVTFRfU1RBVFVTX1NVQ0NFRURFRBABEi8KK0FDVElPTl9SRVNVTFRfU1RBVFVTX05PVElGSUNBVElPTl9OT1RfRk9VTkQQAhIzCi9BQ1RJT05fUkVTVUxUX1NUQVRVU19TVEFMRV9OT1RJRklDQVRJT05fVkVSU0lPThADEikKJUFDVElPTl9SRVNVTFRfU1RBVFVTX0FDVElPTl9OT1RfRk9VTkQQBBImCiJBQ1RJT05fUkVTVUxUX1NUQVRVU19URVhUX1JFUVVJUkVEEAUSKwonQUNUSU9OX1JFU1VMVF9TVEFUVVNfVEVYVF9OT1RfU1VQUE9SVEVEEAYSMQotQUNUSU9OX1JFU1VMVF9TVEFUVVNfUEVORElOR19JTlRFTlRfQ0FOQ0VMTEVEEAcSJwojQUNUSU9OX1JFU1VMVF9TVEFUVVNfSU5URVJOQUxfRVJST1IQCBIoCiRBQ1RJT05fUkVTVUxUX1NUQVRVU19PVVRDT01FX1VOS05PV04QCUKjAQovZGV2Lm5vdGlmaWNhdGlvbm1pcnJvcmluZy5wcm90b2NvbC5nZW5lcmF0ZWQudjFCDFBheWxvYWRQcm90b1ABWmBnaXRodWIuY29tL2h1YXhpYW55YW4vU3luY05vdGlmaWNhdGlvbnMtU2VydmVyL3Byb3RvY29sL2dlbmVyYXRlZC9ub3RpZmljYXRpb24vdjE7bm90aWZpY2F0aW9udjFiBnByb3RvMw");
+  fileDesc("Ch1ub3RpZmljYXRpb24vdjEvcGF5bG9hZC5wcm90bxIZbm90aWZpY2F0aW9uLm1pcnJvcmluZy52MSKSBAoQRW5jcnlwdGVkUGF5bG9hZBIWCg5zY2hlbWFfdmVyc2lvbhgBIAEoDRJACg1hY3Rpb25faW52b2tlGAogASgLMicubm90aWZpY2F0aW9uLm1pcnJvcmluZy52MS5BY3Rpb25JbnZva2VIABJACg1hY3Rpb25fcmVzdWx0GAsgASgLMicubm90aWZpY2F0aW9uLm1pcnJvcmluZy52MS5BY3Rpb25SZXN1bHRIABJHChFhY3Rpb25fcmVzdWx0X2FjaxgMIAEoCzIqLm5vdGlmaWNhdGlvbi5taXJyb3JpbmcudjEuQWN0aW9uUmVzdWx0QWNrSAASUwoXaWRlbnRpdHlfa2V5X3RyYW5zaXRpb24YDSABKAsyMC5ub3RpZmljYXRpb24ubWlycm9yaW5nLnYxLklkZW50aXR5S2V5VHJhbnNpdGlvbkgAEloKG2lkZW50aXR5X2tleV90cmFuc2l0aW9uX2FjaxgOIAEoCzIzLm5vdGlmaWNhdGlvbi5taXJyb3JpbmcudjEuSWRlbnRpdHlLZXlUcmFuc2l0aW9uQWNrSAASYAoeaWRlbnRpdHlfa2V5X3RyYW5zaXRpb25fY29tbWl0GA8gASgLMjYubm90aWZpY2F0aW9uLm1pcnJvcmluZy52MS5JZGVudGl0eUtleVRyYW5zaXRpb25Db21taXRIAEIGCgRib2R5IpoBCgxBY3Rpb25JbnZva2USFwoPbm90aWZpY2F0aW9uX2lkGAEgASgJEh0KFW5vdGlmaWNhdGlvbl9yZXZpc2lvbhgCIAEoBBIRCglhY3Rpb25faWQYAyABKAwSFwoPaWRlbXBvdGVuY3lfa2V5GAQgASgMEhcKCnJlcGx5X3RleHQYBSABKAlIAIgBAUINCgtfcmVwbHlfdGV4dCKGAQoMQWN0aW9uUmVzdWx0EhcKD2lkZW1wb3RlbmN5X2tleRgBIAEoDBI9CgZzdGF0dXMYAiABKA4yLS5ub3RpZmljYXRpb24ubWlycm9yaW5nLnYxLkFjdGlvblJlc3VsdFN0YXR1cxITCgZkZXRhaWwYAyABKAlIAIgBAUIJCgdfZGV0YWlsIkEKD0FjdGlvblJlc3VsdEFjaxIXCg9pZGVtcG90ZW5jeV9rZXkYASABKAwSFQoNcmVzdWx0X3NoYTI1NhgCIAEoDCJzChVJZGVudGl0eUtleVRyYW5zaXRpb24SFQoNdHJhbnNpdGlvbl9pZBgBIAEoDBIXCg9wcmV2aW91c19rZXlfaWQYAiABKAwSFgoObmV3X3B1YmxpY19rZXkYAyABKAwSEgoKbmV3X2tleV9pZBgEIAEoDCJ5ChhJZGVudGl0eUtleVRyYW5zaXRpb25BY2sSFQoNdHJhbnNpdGlvbl9pZBgBIAEoDBIXCg9wcmV2aW91c19rZXlfaWQYAiABKAwSEgoKbmV3X2tleV9pZBgDIAEoDBIZChF0cmFuc2l0aW9uX3NoYTI1NhgEIAEoDCKQAQobSWRlbnRpdHlLZXlUcmFuc2l0aW9uQ29tbWl0EhUKDXRyYW5zaXRpb25faWQYASABKAwSFwoPcHJldmlvdXNfa2V5X2lkGAIgASgMEhIKCm5ld19rZXlfaWQYAyABKAwSGQoRdHJhbnNpdGlvbl9zaGEyNTYYBCABKAwSEgoKYWNrX3NoYTI1NhgFIAEoDCrKAwoSQWN0aW9uUmVzdWx0U3RhdHVzEiQKIEFDVElPTl9SRVNVTFRfU1RBVFVTX1VOU1BFQ0lGSUVEEAASIgoeQUNUSU9OX1JFU1VMVF9TVEFUVVNfU1VDQ0VFREVEEAESLworQUNUSU9OX1JFU1VMVF9TVEFUVVNfTk9USUZJQ0FUSU9OX05PVF9GT1VORBACEjMKL0FDVElPTl9SRVNVTFRfU1RBVFVTX1NUQUxFX05PVElGSUNBVElPTl9WRVJTSU9OEAMSKQolQUNUSU9OX1JFU1VMVF9TVEFUVVNfQUNUSU9OX05PVF9GT1VORBAEEiYKIkFDVElPTl9SRVNVTFRfU1RBVFVTX1RFWFRfUkVRVUlSRUQQBRIrCidBQ1RJT05fUkVTVUxUX1NUQVRVU19URVhUX05PVF9TVVBQT1JURUQQBhIxCi1BQ1RJT05fUkVTVUxUX1NUQVRVU19QRU5ESU5HX0lOVEVOVF9DQU5DRUxMRUQQBxInCiNBQ1RJT05fUkVTVUxUX1NUQVRVU19JTlRFUk5BTF9FUlJPUhAIEigKJEFDVElPTl9SRVNVTFRfU1RBVFVTX09VVENPTUVfVU5LTk9XThAJQqMBCi9kZXYubm90aWZpY2F0aW9ubWlycm9yaW5nLnByb3RvY29sLmdlbmVyYXRlZC52MUIMUGF5bG9hZFByb3RvUAFaYGdpdGh1Yi5jb20vaHVheGlhbnlhbi9TeW5jTm90aWZpY2F0aW9ucy1TZXJ2ZXIvcHJvdG9jb2wvZ2VuZXJhdGVkL25vdGlmaWNhdGlvbi92MTtub3RpZmljYXRpb252MWIGcHJvdG8z");
 
 /**
  * EncryptedPayload is serialized before HPKE sealing. Its type and every
@@ -45,6 +45,24 @@ export type EncryptedPayload = Message<"notification.mirroring.v1.EncryptedPaylo
      */
     value: ActionResultAck;
     case: "actionResultAck";
+  } | {
+    /**
+     * @generated from field: notification.mirroring.v1.IdentityKeyTransition identity_key_transition = 13;
+     */
+    value: IdentityKeyTransition;
+    case: "identityKeyTransition";
+  } | {
+    /**
+     * @generated from field: notification.mirroring.v1.IdentityKeyTransitionAck identity_key_transition_ack = 14;
+     */
+    value: IdentityKeyTransitionAck;
+    case: "identityKeyTransitionAck";
+  } | {
+    /**
+     * @generated from field: notification.mirroring.v1.IdentityKeyTransitionCommit identity_key_transition_commit = 15;
+     */
+    value: IdentityKeyTransitionCommit;
+    case: "identityKeyTransitionCommit";
   } | { case: undefined; value?: undefined };
 };
 
@@ -149,6 +167,116 @@ export type ActionResultAck = Message<"notification.mirroring.v1.ActionResultAck
  */
 export const ActionResultAckSchema: GenMessage<ActionResultAck> = /*@__PURE__*/
   messageDesc(file_notification_v1_payload, 3);
+
+/**
+ * IdentityKeyTransition proposes one successor while the previous approved
+ * sender key is still available. It is valid only under payload schema v2.
+ *
+ * @generated from message notification.mirroring.v1.IdentityKeyTransition
+ */
+export type IdentityKeyTransition = Message<"notification.mirroring.v1.IdentityKeyTransition"> & {
+  /**
+   * @generated from field: bytes transition_id = 1;
+   */
+  transitionId: Uint8Array;
+
+  /**
+   * @generated from field: bytes previous_key_id = 2;
+   */
+  previousKeyId: Uint8Array;
+
+  /**
+   * @generated from field: bytes new_public_key = 3;
+   */
+  newPublicKey: Uint8Array;
+
+  /**
+   * @generated from field: bytes new_key_id = 4;
+   */
+  newKeyId: Uint8Array;
+};
+
+/**
+ * Describes the message notification.mirroring.v1.IdentityKeyTransition.
+ * Use `create(IdentityKeyTransitionSchema)` to create a new message.
+ */
+export const IdentityKeyTransitionSchema: GenMessage<IdentityKeyTransition> = /*@__PURE__*/
+  messageDesc(file_notification_v1_payload, 4);
+
+/**
+ * IdentityKeyTransitionAck binds a peer to the exact canonical transition and
+ * is encrypted to the proposed new recipient key.
+ *
+ * @generated from message notification.mirroring.v1.IdentityKeyTransitionAck
+ */
+export type IdentityKeyTransitionAck = Message<"notification.mirroring.v1.IdentityKeyTransitionAck"> & {
+  /**
+   * @generated from field: bytes transition_id = 1;
+   */
+  transitionId: Uint8Array;
+
+  /**
+   * @generated from field: bytes previous_key_id = 2;
+   */
+  previousKeyId: Uint8Array;
+
+  /**
+   * @generated from field: bytes new_key_id = 3;
+   */
+  newKeyId: Uint8Array;
+
+  /**
+   * @generated from field: bytes transition_sha256 = 4;
+   */
+  transitionSha256: Uint8Array;
+};
+
+/**
+ * Describes the message notification.mirroring.v1.IdentityKeyTransitionAck.
+ * Use `create(IdentityKeyTransitionAckSchema)` to create a new message.
+ */
+export const IdentityKeyTransitionAckSchema: GenMessage<IdentityKeyTransitionAck> = /*@__PURE__*/
+  messageDesc(file_notification_v1_payload, 5);
+
+/**
+ * IdentityKeyTransitionCommit proves possession of the proposed new private
+ * key and binds the exact acknowledgement created by this peer.
+ *
+ * @generated from message notification.mirroring.v1.IdentityKeyTransitionCommit
+ */
+export type IdentityKeyTransitionCommit = Message<"notification.mirroring.v1.IdentityKeyTransitionCommit"> & {
+  /**
+   * @generated from field: bytes transition_id = 1;
+   */
+  transitionId: Uint8Array;
+
+  /**
+   * @generated from field: bytes previous_key_id = 2;
+   */
+  previousKeyId: Uint8Array;
+
+  /**
+   * @generated from field: bytes new_key_id = 3;
+   */
+  newKeyId: Uint8Array;
+
+  /**
+   * @generated from field: bytes transition_sha256 = 4;
+   */
+  transitionSha256: Uint8Array;
+
+  /**
+   * @generated from field: bytes ack_sha256 = 5;
+   */
+  ackSha256: Uint8Array;
+};
+
+/**
+ * Describes the message notification.mirroring.v1.IdentityKeyTransitionCommit.
+ * Use `create(IdentityKeyTransitionCommitSchema)` to create a new message.
+ */
+export const IdentityKeyTransitionCommitSchema: GenMessage<IdentityKeyTransitionCommit> = /*@__PURE__*/
+  messageDesc(file_notification_v1_payload, 6);
 
 /**
  * @generated from enum notification.mirroring.v1.ActionResultStatus

@@ -16,6 +16,9 @@ message EncryptedPayload {
     ActionInvoke action_invoke = 10;
     ActionResult action_result = 11;
     ActionResultAck action_result_ack = 12;
+    IdentityKeyTransition identity_key_transition = 13;
+    IdentityKeyTransitionAck identity_key_transition_ack = 14;
+    IdentityKeyTransitionCommit identity_key_transition_commit = 15;
   }
 }
 
@@ -42,6 +45,34 @@ message ActionResult {
 message ActionResultAck {
   bytes idempotency_key = 1;
   bytes result_sha256 = 2;
+}
+
+// IdentityKeyTransition proposes one successor while the previous approved
+// sender key is still available. It is valid only under payload schema v2.
+message IdentityKeyTransition {
+  bytes transition_id = 1;
+  bytes previous_key_id = 2;
+  bytes new_public_key = 3;
+  bytes new_key_id = 4;
+}
+
+// IdentityKeyTransitionAck binds a peer to the exact canonical transition and
+// is encrypted to the proposed new recipient key.
+message IdentityKeyTransitionAck {
+  bytes transition_id = 1;
+  bytes previous_key_id = 2;
+  bytes new_key_id = 3;
+  bytes transition_sha256 = 4;
+}
+
+// IdentityKeyTransitionCommit proves possession of the proposed new private
+// key and binds the exact acknowledgement created by this peer.
+message IdentityKeyTransitionCommit {
+  bytes transition_id = 1;
+  bytes previous_key_id = 2;
+  bytes new_key_id = 3;
+  bytes transition_sha256 = 4;
+  bytes ack_sha256 = 5;
 }
 
 enum ActionResultStatus {

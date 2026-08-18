@@ -14,16 +14,19 @@ Receivers MUST reject a plaintext unless all of the following hold:
    16-byte AES-GCM tag);
 2. protobuf parsing succeeds;
 3. no unknown fields occur at any message level;
-4. `schema_version` is exactly `1`;
-5. exactly one supported `body` (`action_invoke`, `action_result`, or
-   `action_result_ack`) is present;
-6. every message-specific semantic constraint below holds; and
+4. `schema_version` matches the body: version `1` for `action_invoke`,
+   `action_result`, or `action_result_ack`; version `2` for the E2EE identity
+   lifecycle bodies defined by `e2ee-identity-key-transition-v1.md`;
+5. exactly one supported `body` is present;
+6. every message-specific semantic constraint below or in the identity
+   lifecycle specification holds; and
 7. deterministic re-encoding produces exactly the received bytes.
 
 The final check rejects duplicate fields, alternate field ordering and other
 non-canonical wire encodings rather than relying on parser-specific behavior.
 Protocol evolution must add an explicitly supported schema version before new
-fields are emitted.
+fields are emitted. Schema version `2` does not permit action bodies, and
+schema version `1` does not permit identity lifecycle bodies.
 
 ## `action_invoke`
 
@@ -93,3 +96,16 @@ ACK delivery itself has no ACK. Chrome retains a bounded durable ACK intent and
 may retry it or reactivate it when another identical result arrives. General
 relay stream cursors remain a separate protocol concern and MUST NOT be inferred
 from this per-operation acknowledgement.
+
+## E2EE identity lifecycle bodies
+
+`identity_key_transition`, `identity_key_transition_ack`, and
+`identity_key_transition_commit` use `schema_version = 2`. Their field limits,
+key/digest bindings, envelope requirements, durable state transitions, and
+lost-key boundary are defined in `e2ee-identity-key-transition-v1.md`.
+
+The canonical payload decoder validates non-zero fixed-width identifiers,
+P-256 point encoding, `SHA-256(new_public_key) == new_key_id`, distinct old/new
+key IDs, digest lengths, unknown fields, and deterministic wire bytes. The
+stateful receiver must additionally bind the authenticated envelope tuple and
+constant-time exact transition/ACK digests before changing trust state.

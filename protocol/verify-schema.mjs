@@ -40,6 +40,14 @@ await verify(
   './TRANSPORT_CREDENTIAL_ROTATION_SPEC_SHA256',
 );
 await verify(
+  './e2ee-identity-key-transition-v1.md',
+  './E2EE_IDENTITY_TRANSITION_SPEC_SHA256',
+);
+await verify(
+  './test-vectors/e2ee-identity-key-transition-v1.json',
+  './E2EE_IDENTITY_TRANSITION_VECTOR_SHA256',
+);
+await verify(
   './test-vectors/device-auth-frame-v1.json',
   './DEVICE_AUTH_VECTOR_SHA256',
 );

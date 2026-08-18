@@ -14,6 +14,8 @@ Run `npm run protocol:verify` after updating the schema. Do not edit the vendore
 
 `encrypted-payload-v1.md`, `vendor/notification/v1/payload.proto`, and their vector define canonical encrypted `action.invoke`, `action.result`, and per-operation `action_result_ack` payloads.
 
+`e2ee-identity-key-transition-v1.md` and its vector define schema-v2 old-key transition, new-key-addressed peer ACK, new-key commit, durable dual-key state, and the lost-identity recovery boundary. `E2EE_IDENTITY_TRANSITION_SPEC_SHA256` and `E2EE_IDENTITY_TRANSITION_VECTOR_SHA256` pin these server-owned assets.
+
 `encrypted-envelope-v1.md` and its vector define the bounded binary frame carrying the exact AAD, P-256 encapsulated key, and ciphertext. The canonical envelope plaintext is the payload vector.
 
 `device-auth-frame-v1.md` and `test-vectors/device-auth-frame-v1.json` define the fixed 68-byte first WebSocket authentication message and fixed 4-byte `SNO1` server success acknowledgement. `DEVICE_AUTH_SPEC_SHA256` and `DEVICE_AUTH_VECTOR_SHA256` pin the server-owned copies. The fixture credential is public test material and must never be used for a real device.
