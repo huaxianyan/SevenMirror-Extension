@@ -11,6 +11,11 @@ import { IndexedDbIdentityStore } from '../crypto/indexeddb-identity-store';
 import { IdentityTransitionAckOutbox } from '../crypto/identity-transition-ack-outbox';
 import { IdentityTransitionCommitOutbox } from '../crypto/identity-transition-commit-outbox';
 import { IdentityTransitionDispatcher } from '../crypto/identity-transition-dispatcher';
+import { IdentityTransitionOutbox } from '../crypto/identity-transition-outbox';
+import {
+  IdentityTransitionInitiator,
+  IdentityTransitionPreconditionError,
+} from '../crypto/identity-transition-initiator';
 import {
   IdentityPromotionCoordinator,
   IndexedDbIdentityPromotionJournal,
@@ -31,6 +36,7 @@ const CONNECTION_STATE_KEY = 'connectionState';
 const TRANSPORT_RECONNECT_ALARM = 'transport-reconnect-v1';
 const ACTION_INVOKE_RETRY_ALARM = 'action-invoke-retry-v1';
 const ACTION_RESULT_ACK_RETRY_ALARM = 'action-result-ack-retry-v1';
+const IDENTITY_TRANSITION_RETRY_ALARM = 'identity-transition-retry-v1';
 const IDENTITY_TRANSITION_ACK_RETRY_ALARM = 'identity-transition-ack-retry-v1';
 const IDENTITY_TRANSITION_COMMIT_RETRY_ALARM = 'identity-transition-commit-retry-v1';
 const SYNTHETIC_ACK_HOLD_MAX_MS = 10 * 60_000;
@@ -70,6 +76,20 @@ const actionResultAckOutbox = new ActionResultAckOutbox(
   identityStore,
   trustedPeerStore,
   pendingActionStore,
+  outboundSequenceStore,
+  (frame) => transportRuntime.sendEnvelope(frame),
+);
+const identityTransitionInitiator = new IdentityTransitionInitiator(
+  credentialStore,
+  identityStore,
+  trustedPeerStore,
+  localIdentityTransitionStore,
+);
+const identityTransitionOutbox = new IdentityTransitionOutbox(
+  credentialStore,
+  identityStore,
+  localIdentityTransitionStore,
+  trustedPeerStore,
   outboundSequenceStore,
   (frame) => transportRuntime.sendEnvelope(frame),
 );
@@ -129,6 +149,7 @@ transportRuntime = new TransportRuntime(
       void chrome.alarms.clear(TRANSPORT_RECONNECT_ALARM);
       void drainActionInvokes();
       void drainActionResultAcks();
+      void drainIdentityTransitions();
       void drainIdentityTransitionAcks();
       void drainIdentityTransitionCommits();
     },
@@ -156,6 +177,8 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     void drainActionInvokes();
   } else if (alarm.name === ACTION_RESULT_ACK_RETRY_ALARM) {
     void drainActionResultAcks();
+  } else if (alarm.name === IDENTITY_TRANSITION_RETRY_ALARM) {
+    void drainIdentityTransitions();
   } else if (alarm.name === IDENTITY_TRANSITION_ACK_RETRY_ALARM) {
     void drainIdentityTransitionAcks();
   } else if (alarm.name === IDENTITY_TRANSITION_COMMIT_RETRY_ALARM) {
@@ -201,6 +224,24 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
       void connectTransportWithWatchdog().then(
         () => sendResponse({ started: true }),
         () => sendResponse({ started: false }),
+      );
+      return true;
+
+    case 'start-identity-transition':
+      void identityTransitionInitiator.prepare().then(
+        async (session) => {
+          await drainIdentityTransitions();
+          sendResponse({ started: true });
+        },
+        async (error: unknown) => {
+          if (!(error instanceof IdentityTransitionPreconditionError)) {
+            await transportRuntime.failClosed();
+          }
+          sendResponse({
+            started: false,
+            error: error instanceof Error ? error.message : 'Identity transition failed closed',
+          });
+        },
       );
       return true;
 
@@ -368,6 +409,19 @@ async function drainActionResultAcks(): Promise<void> {
     await transportRuntime.failClosed();
   } finally {
     excludedKey?.fill(0);
+  }
+}
+
+async function drainIdentityTransitions(): Promise<void> {
+  try {
+    const result = await identityTransitionOutbox.drainDue();
+    await scheduleIdentityTransitionRetry(
+      IDENTITY_TRANSITION_RETRY_ALARM,
+      result.nextWakeDelayMs,
+      result.attemptedEntries > result.acceptedSends,
+    );
+  } catch {
+    await transportRuntime.failClosed();
   }
 }
 

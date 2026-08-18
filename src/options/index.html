@@ -53,6 +53,17 @@
         <p id="credential-rotation-status" role="status" aria-live="polite"></p>
       </section>
 
+      <section id="identity-rotation" hidden>
+        <h2>Rotate E2EE identity</h2>
+        <p class="boundary">
+          This is separate from the transport credential. Every currently approved peer must
+          acknowledge the exact transition. After the first acknowledgement, the old identity
+          cannot be silently restored; unreachable peers must be explicitly removed.
+        </p>
+        <button id="rotate-identity" type="button">Start E2EE identity transition</button>
+        <p id="identity-rotation-status" role="status" aria-live="polite"></p>
+      </section>
+
       <section id="trust-pairing" hidden>
         <h2>Trusted E2EE device</h2>
         <p class="boundary">

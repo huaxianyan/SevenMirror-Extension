@@ -22,6 +22,14 @@ export interface IdentityTransitionEnvelopeContext {
   expiresAtUnixMs: number;
 }
 
+/** Encrypts one exact durable old-key-authenticated transition under a fresh envelope tuple. */
+export async function createIdentityTransitionEnvelopeFromPayload(
+  context: IdentityTransitionEnvelopeContext,
+  canonicalTransition: Uint8Array,
+): Promise<Uint8Array> {
+  return createIdentityTransitionEnvelope(context, canonicalTransition, 'identityKeyTransition');
+}
+
 /** Encrypts one exact durable identity-transition ACK under a fresh envelope tuple. */
 export async function createIdentityTransitionAckEnvelopeFromPayload(
   context: IdentityTransitionEnvelopeContext,
@@ -41,7 +49,8 @@ export async function createIdentityTransitionCommitEnvelopeFromPayload(
 async function createIdentityTransitionEnvelope(
   context: IdentityTransitionEnvelopeContext,
   canonicalPayload: Uint8Array,
-  expectedBody: 'identityKeyTransitionAck' | 'identityKeyTransitionCommit',
+  expectedBody:
+    'identityKeyTransition' | 'identityKeyTransitionAck' | 'identityKeyTransitionCommit',
 ): Promise<Uint8Array> {
   const payload = await decodeIdentityKeyLifecyclePayload(canonicalPayload);
   if (payload.body.case !== expectedBody) {

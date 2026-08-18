@@ -36,6 +36,9 @@ const rotationForm = document.querySelector<HTMLFormElement>('#credential-rotati
 const rotationCodeInput = document.querySelector<HTMLInputElement>('#credential-rotation-code');
 const rotateCredentialButton = document.querySelector<HTMLButtonElement>('#rotate-credential');
 const rotationStatus = document.querySelector<HTMLElement>('#credential-rotation-status');
+const identityRotationSection = document.querySelector<HTMLElement>('#identity-rotation');
+const rotateIdentityButton = document.querySelector<HTMLButtonElement>('#rotate-identity');
+const identityRotationStatus = document.querySelector<HTMLElement>('#identity-rotation-status');
 const pairingSection = document.querySelector<HTMLElement>('#trust-pairing');
 const pairingStage = document.querySelector<HTMLElement>('#trust-pairing-stage');
 const createOfferButton = document.querySelector<HTMLButtonElement>('#create-trust-offer');
@@ -79,6 +82,7 @@ async function render(): Promise<void> {
     reconnectTransportButton?.removeAttribute('hidden');
     rotationSection?.removeAttribute('hidden');
     await renderCredentialRotation();
+    identityRotationSection?.removeAttribute('hidden');
     pairingSection?.removeAttribute('hidden');
     await renderPairing();
     await renderApprovedPeerControl();
@@ -110,6 +114,30 @@ rotationForm?.addEventListener('submit', (event) => {
   }).finally(() => {
     rotateCredentialButton.disabled = false;
   });
+});
+
+rotateIdentityButton?.addEventListener('click', () => {
+  const confirmed = window.confirm(
+    'Start E2EE identity transition? Every approved peer must acknowledge it. ' +
+      'After the first acknowledgement, the old identity cannot be silently restored.',
+  );
+  if (!confirmed || !rotateIdentityButton) return;
+  rotateIdentityButton.disabled = true;
+  if (identityRotationStatus) {
+    identityRotationStatus.textContent = 'Preparing a durable peer snapshot and pending identity…';
+  }
+  void chrome.runtime.sendMessage({ type: 'start-identity-transition' }).then(
+    (response: { started?: boolean; error?: string }) => {
+      if (identityRotationStatus) {
+        identityRotationStatus.textContent = response.started
+          ? 'Transition started. Exact lifecycle messages retry until every approved peer converges.'
+          : (response.error ?? 'Identity transition failed closed.');
+      }
+    },
+    () => {
+      if (identityRotationStatus) identityRotationStatus.textContent = 'Identity transition request failed.';
+    },
+  ).finally(() => { rotateIdentityButton.disabled = false; });
 });
 
 reconnectTransportButton?.addEventListener('click', () => {
@@ -167,6 +195,7 @@ form?.addEventListener('submit', async (event) => {
     reconnectTransportButton?.removeAttribute('hidden');
     rotationSection?.removeAttribute('hidden');
     await renderCredentialRotation();
+    identityRotationSection?.removeAttribute('hidden');
     pairingSection?.removeAttribute('hidden');
     await renderPairing();
     await renderApprovedPeerControl();

@@ -68,6 +68,11 @@ export interface DueLocalIdentityCommit {
   peer: LocalIdentityTransitionPeerState;
 }
 
+export interface DueLocalIdentityTransition {
+  session: LocalIdentityTransitionSession;
+  peer: LocalIdentityTransitionPeerState;
+}
+
 /** One rotating-device transition and its immutable peer snapshot. */
 export class IndexedDbLocalIdentityTransitionStore {
   constructor(private readonly databaseName = 'syncnotifications-local-identity-transition-v1') {}
@@ -139,6 +144,31 @@ export class IndexedDbLocalIdentityTransitionStore {
     } finally {
       database.close();
     }
+  }
+
+  async loadSession(nowUnixMs: number): Promise<LocalIdentityTransitionSession | undefined> {
+    validateTimestamp(nowUnixMs, 'nowUnixMs');
+    const database = await this.openDatabase();
+    let session: StoredSession | undefined;
+    try {
+      const transaction = database.transaction(SESSION_STORE, 'readwrite');
+      const completed = transactionCompleted(transaction);
+      const store = transaction.objectStore(SESSION_STORE);
+      session = await requestResult<StoredSession | undefined>(store.get(SESSION_ID));
+      if (session !== undefined) {
+        validateSession(session);
+        if (session.phase === 'awaiting-acks' && nowUnixMs >= session.expiresAtUnixMs) {
+          session = { ...session, phase: 'blocked' };
+          await requestResult(store.put(session));
+        }
+      }
+      await completed;
+    } finally {
+      database.close();
+    }
+    if (session === undefined) return undefined;
+    await validateStoredTransitionCryptography(session);
+    return copySession(session);
   }
 
   async expectedAckBinding(
@@ -259,6 +289,118 @@ export class IndexedDbLocalIdentityTransitionStore {
       await requestResult(peers.put(committed));
       await completed;
       return { disposition: 'accepted', peer: copyPeer(committed) };
+    } finally {
+      database.close();
+    }
+  }
+
+  private async dueByPeerPhase(
+    workspaceId: Uint8Array,
+    nowUnixMs: number,
+    peerPhase: LocalIdentityTransitionPeerState['phase'],
+    limit: number,
+  ): Promise<DueLocalIdentityTransition[]> {
+    validateIdentifier(workspaceId, 'workspaceId');
+    validateTimestamp(nowUnixMs, 'nowUnixMs');
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 128) {
+      throw new Error('limit must be 1..128');
+    }
+    const database = await this.openDatabase();
+    let session: StoredSession | undefined;
+    const due: StoredPeer[] = [];
+    try {
+      const transaction = database.transaction([SESSION_STORE, PEER_STORE], 'readwrite');
+      const completed = transactionCompleted(transaction);
+      const sessions = transaction.objectStore(SESSION_STORE);
+      session = await requestResult<StoredSession | undefined>(sessions.get(SESSION_ID));
+      if (session !== undefined) {
+        validateSession(session);
+        if (session.phase === 'awaiting-acks' && nowUnixMs >= session.expiresAtUnixMs) {
+          session = { ...session, phase: 'blocked' };
+          await requestResult(sessions.put(session));
+        }
+        if (session.phase === 'awaiting-acks' && bytesEqual(session.workspaceId, workspaceId)) {
+          const peers = await requestResult<StoredPeer[]>(
+            transaction.objectStore(PEER_STORE).getAll(),
+          );
+          for (const peer of peers) {
+            validatePeer(peer);
+            if (peer.phase === peerPhase && bytesEqual(peer.transitionId, session.transitionId) &&
+                peer.nextCommitAttemptAtUnixMs <= nowUnixMs) due.push(peer);
+          }
+        }
+      }
+      await completed;
+    } finally {
+      database.close();
+    }
+    if (session === undefined || session.phase !== 'awaiting-acks') return [];
+    due.sort((left, right) => left.nextCommitAttemptAtUnixMs - right.nextCommitAttemptAtUnixMs ||
+      left.tuple.localeCompare(right.tuple));
+    const selected = due.slice(0, limit);
+    for (const peer of selected) await validateStoredCryptography(session, peer);
+    return selected.map((peer) => ({
+      session: copySession(session!),
+      peer: copyPeer(peer),
+    }));
+  }
+
+  async dueTransitions(
+    workspaceId: Uint8Array,
+    nowUnixMs: number,
+    limit = 16,
+  ): Promise<DueLocalIdentityTransition[]> {
+    return this.dueByPeerPhase(workspaceId, nowUnixMs, 'awaiting-ack', limit);
+  }
+
+  async recordTransitionSendAttempt(
+    peerDeviceId: Uint8Array,
+    transitionId: Uint8Array,
+    transitionSha256: Uint8Array,
+    nextAttemptAtUnixMs: number,
+    maximumAttempts = 5,
+  ): Promise<void> {
+    validateIdentifier(peerDeviceId, 'peerDeviceId');
+    validateIdentifier(transitionId, 'transitionId');
+    validateDigest(transitionSha256, 'transitionSha256');
+    validateTimestamp(nextAttemptAtUnixMs, 'nextAttemptAtUnixMs');
+    if (!Number.isSafeInteger(maximumAttempts) || maximumAttempts < 1) {
+      throw new Error('maximumAttempts must be positive');
+    }
+    const database = await this.openDatabase();
+    try {
+      const transaction = database.transaction([SESSION_STORE, PEER_STORE], 'readwrite');
+      const completed = transactionCompleted(transaction);
+      const session = await requestResult<StoredSession | undefined>(
+        transaction.objectStore(SESSION_STORE).get(SESSION_ID),
+      );
+      if (session !== undefined) {
+        validateSession(session);
+        if (!bytesEqual(session.transitionId, transitionId) ||
+            !bytesEqual(session.transitionSha256, transitionSha256)) {
+          transaction.abort();
+          await completed.catch(() => undefined);
+          throw new Error('Identity transition delivery attempt binding changed');
+        }
+        const peers = transaction.objectStore(PEER_STORE);
+        const peer = await requestResult<StoredPeer | undefined>(
+          peers.get(peerTuple(session.transitionId, peerDeviceId)),
+        );
+        if (peer !== undefined) {
+          validatePeer(peer);
+          if (session.phase === 'awaiting-acks' && peer.phase === 'awaiting-ack') {
+            const attemptCount = peer.commitAttemptCount + 1;
+            await requestResult(peers.put({
+              ...peer,
+              commitAttemptCount: attemptCount,
+              nextCommitAttemptAtUnixMs: attemptCount >= maximumAttempts
+                ? session.expiresAtUnixMs
+                : Math.min(nextAttemptAtUnixMs, session.expiresAtUnixMs),
+            }));
+          }
+        }
+      }
+      await completed;
     } finally {
       database.close();
     }
@@ -531,7 +673,7 @@ function validateSession(value: StoredSession): void {
   }
 }
 
-async function validateStoredCryptography(session: StoredSession, peer: StoredPeer): Promise<void> {
+async function validateStoredTransitionCryptography(session: StoredSession): Promise<void> {
   const transition = await decodeIdentityKeyLifecyclePayload(session.canonicalTransition);
   if (transition.body.case !== 'identityKeyTransition' ||
       !bytesEqual(await sha256(session.canonicalTransition), session.transitionSha256) ||
@@ -541,6 +683,10 @@ async function validateStoredCryptography(session: StoredSession, peer: StoredPe
       !bytesEqual(transition.body.value.newPublicKey, session.newPublicKey)) {
     throw new Error('Stored local identity transition binding is corrupt');
   }
+}
+
+async function validateStoredCryptography(session: StoredSession, peer: StoredPeer): Promise<void> {
+  await validateStoredTransitionCryptography(session);
   if (peer.phase !== 'commit-queued') return;
   const canonicalAck = requireBytes(peer.canonicalAck, 'acknowledgement');
   const ackSha256 = requireBytes(peer.ackSha256, 'acknowledgement digest');
