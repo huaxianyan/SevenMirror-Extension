@@ -1,29 +1,38 @@
 import {
   generateNonExtractableIdentity,
+  serializeIdentityPublicKey,
   type HpkeIdentity,
 } from './auth-hpke';
 
 const STORE_NAME = 'identities';
 const RECORD_ID = 'primary-hpke-auth-v1';
+const RECORD_FORMAT_VERSION = 1;
 
-/** Persists a non-extractable WebCrypto identity by IndexedDB structured clone. */
+interface IdentityRotationRecord {
+  formatVersion: number;
+  current: HpkeIdentity;
+  pending?: HpkeIdentity;
+}
+
+export interface StoredIdentityRotation {
+  current: HpkeIdentity;
+  pending: HpkeIdentity;
+}
+
+type StoredIdentityRecord = HpkeIdentity | IdentityRotationRecord;
+
+/** Persists current and at most one pending non-extractable WebCrypto identity. */
 export class IndexedDbIdentityStore {
   constructor(private readonly databaseName = 'syncnotifications-crypto-v1') {}
 
   async loadExisting(): Promise<HpkeIdentity | undefined> {
-    const database = await this.openDatabase();
-    try {
-      const transaction = database.transaction(STORE_NAME, 'readonly');
-      const completed = transactionCompleted(transaction);
-      const existing = await requestResult<HpkeIdentity | undefined>(
-        transaction.objectStore(STORE_NAME).get(RECORD_ID),
-      );
-      await completed;
-      if (existing !== undefined) validateIdentity(existing);
-      return existing;
-    } finally {
-      database.close();
-    }
+    return (await this.loadState())?.current;
+  }
+
+  async loadRotation(): Promise<StoredIdentityRotation | undefined> {
+    const state = await this.loadState();
+    if (state?.pending === undefined) return undefined;
+    return { current: state.current, pending: state.pending };
   }
 
   async loadOrCreate(): Promise<HpkeIdentity> {
@@ -38,19 +47,62 @@ export class IndexedDbIdentityStore {
       const transaction = database.transaction(STORE_NAME, 'readwrite');
       const completed = transactionCompleted(transaction);
       const store = transaction.objectStore(STORE_NAME);
-      const concurrentlyCreated = await requestResult<HpkeIdentity | undefined>(
+      const concurrentlyCreated = await requestResult<StoredIdentityRecord | undefined>(
         store.get(RECORD_ID),
       );
       if (concurrentlyCreated !== undefined) {
         await completed;
-        validateIdentity(concurrentlyCreated);
-        return concurrentlyCreated;
+        return (await normalizeAndValidateRecord(concurrentlyCreated)).current;
       }
 
       await requestResult(store.add(generated, RECORD_ID));
       await completed;
       validateIdentity(generated);
       return generated;
+    } finally {
+      database.close();
+    }
+  }
+
+  /** Creates one pending identity without replacing current; reconstruction reuses it exactly. */
+  async prepareRotation(): Promise<StoredIdentityRotation> {
+    const existing = await this.loadState();
+    if (existing === undefined) throw new Error('HPKE identity is not configured');
+    if (existing.pending !== undefined) {
+      return { current: existing.current, pending: existing.pending };
+    }
+
+    const generated = await generateNonExtractableIdentity();
+    validateIdentity(generated);
+    if (await identitiesEqual(existing.current, generated)) {
+      throw new Error('Pending HPKE identity must differ from current');
+    }
+
+    const database = await this.openDatabase();
+    try {
+      const transaction = database.transaction(STORE_NAME, 'readwrite');
+      const completed = transactionCompleted(transaction);
+      const store = transaction.objectStore(STORE_NAME);
+      const stored = await requestResult<StoredIdentityRecord | undefined>(store.get(RECORD_ID));
+      if (stored === undefined) {
+        transaction.abort();
+        await completed.catch(() => undefined);
+        throw new Error('HPKE identity is not configured');
+      }
+      const state = normalizeRecord(stored);
+      validateIdentity(state.current);
+      if (state.pending !== undefined) {
+        await completed;
+        const validated = await validateRotationState(state);
+        return { current: validated.current, pending: validated.pending! };
+      }
+      await requestResult(store.put({
+        formatVersion: RECORD_FORMAT_VERSION,
+        current: state.current,
+        pending: generated,
+      } satisfies IdentityRotationRecord, RECORD_ID));
+      await completed;
+      return { current: state.current, pending: generated };
     } finally {
       database.close();
     }
@@ -63,6 +115,21 @@ export class IndexedDbIdentityStore {
       const completed = transactionCompleted(transaction);
       await requestResult(transaction.objectStore(STORE_NAME).delete(RECORD_ID));
       await completed;
+    } finally {
+      database.close();
+    }
+  }
+
+  private async loadState(): Promise<IdentityRotationRecord | undefined> {
+    const database = await this.openDatabase();
+    try {
+      const transaction = database.transaction(STORE_NAME, 'readonly');
+      const completed = transactionCompleted(transaction);
+      const stored = await requestResult<StoredIdentityRecord | undefined>(
+        transaction.objectStore(STORE_NAME).get(RECORD_ID),
+      );
+      await completed;
+      return stored === undefined ? undefined : normalizeAndValidateRecord(stored);
     } finally {
       database.close();
     }
@@ -81,6 +148,40 @@ export class IndexedDbIdentityStore {
       request.onblocked = () => reject(new Error('Identity database upgrade was blocked'));
     });
   }
+}
+
+function normalizeRecord(stored: StoredIdentityRecord): IdentityRotationRecord {
+  if ('current' in stored) {
+    if (stored.formatVersion !== RECORD_FORMAT_VERSION) {
+      throw new Error('Stored HPKE identity record version is unsupported');
+    }
+    return stored;
+  }
+  return { formatVersion: RECORD_FORMAT_VERSION, current: stored };
+}
+
+async function normalizeAndValidateRecord(
+  stored: StoredIdentityRecord,
+): Promise<IdentityRotationRecord> {
+  return validateRotationState(normalizeRecord(stored));
+}
+
+async function validateRotationState(state: IdentityRotationRecord): Promise<IdentityRotationRecord> {
+  validateIdentity(state.current);
+  if (state.pending !== undefined) {
+    validateIdentity(state.pending);
+    if (await identitiesEqual(state.current, state.pending)) {
+      throw new Error('Pending HPKE identity must differ from current');
+    }
+  }
+  return state;
+}
+
+async function identitiesEqual(left: HpkeIdentity, right: HpkeIdentity): Promise<boolean> {
+  const leftPublic = await serializeIdentityPublicKey(left);
+  const rightPublic = await serializeIdentityPublicKey(right);
+  return leftPublic.byteLength === rightPublic.byteLength &&
+    leftPublic.every((value, index) => value === rightPublic[index]);
 }
 
 function validateIdentity(identity: HpkeIdentity): void {
