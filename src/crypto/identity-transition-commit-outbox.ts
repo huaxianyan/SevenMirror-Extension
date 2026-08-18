@@ -17,6 +17,7 @@ interface CredentialStore {
 }
 
 interface IdentityRotationStore {
+  loadExisting(): Promise<HpkeIdentity | undefined>;
   loadRotation(): Promise<{ current: HpkeIdentity; pending: HpkeIdentity } | undefined>;
 }
 
@@ -116,15 +117,18 @@ export class IdentityTransitionCommitOutbox {
         !bytesEqual(entry.session.workspaceId, credential.workspaceId)) {
       throw new Error('Local identity transition transport tuple does not match');
     }
-    if (!bytesEqual(entry.session.previousKeyId, rotation.currentKeyId) ||
-        !bytesEqual(entry.session.newKeyId, rotation.pendingKeyId)) {
+    if (rotation.mode === 'dual' &&
+        (!bytesEqual(entry.session.previousKeyId, rotation.currentKeyId) ||
+         !bytesEqual(entry.session.newKeyId, rotation.senderKeyId)) ||
+        rotation.mode === 'promoted' &&
+        !bytesEqual(entry.session.newKeyId, rotation.senderKeyId)) {
       throw new Error('Local identity transition does not match current/pending identity slots');
     }
     return createIdentityTransitionCommitEnvelopeFromPayload({
       workspaceId: credential.workspaceId,
       senderDeviceId: credential.deviceId,
       recipientDeviceId: entry.peer.deviceId,
-      senderIdentity: rotation.pending,
+      senderIdentity: rotation.senderIdentity,
       recipientPublicKey,
       messageId: this.nextMessageId(),
       sequence: await this.sequences.allocate(entry.peer.keyId),
@@ -137,17 +141,35 @@ export class IdentityTransitionCommitOutbox {
     credential: StoredTransportCredential,
   ): Promise<BoundIdentityRotation> {
     const rotation = await this.identityStore.loadRotation();
-    if (rotation === undefined) throw new Error('Pending E2EE identity is not configured');
-    const currentKeyId = await deriveIdentityKeyId(
-      await serializeIdentityPublicKey(rotation.current),
-    );
-    const pendingKeyId = await deriveIdentityKeyId(
-      await serializeIdentityPublicKey(rotation.pending),
-    );
+    if (rotation !== undefined) {
+      const currentKeyId = await deriveIdentityKeyId(
+        await serializeIdentityPublicKey(rotation.current),
+      );
+      const pendingKeyId = await deriveIdentityKeyId(
+        await serializeIdentityPublicKey(rotation.pending),
+      );
+      if (!bytesEqual(currentKeyId, credential.identityKeyId)) {
+        throw new Error('Transport credential E2EE identity binding does not match current identity');
+      }
+      return {
+        mode: 'dual',
+        senderIdentity: rotation.pending,
+        currentKeyId,
+        senderKeyId: pendingKeyId,
+      };
+    }
+    const current = await this.identityStore.loadExisting();
+    if (current === undefined) throw new Error('E2EE identity is not configured');
+    const currentKeyId = await deriveIdentityKeyId(await serializeIdentityPublicKey(current));
     if (!bytesEqual(currentKeyId, credential.identityKeyId)) {
       throw new Error('Transport credential E2EE identity binding does not match current identity');
     }
-    return { ...rotation, currentKeyId, pendingKeyId };
+    return {
+      mode: 'promoted',
+      senderIdentity: current,
+      currentKeyId,
+      senderKeyId: currentKeyId,
+    };
   }
 
   private nextMessageId(): Uint8Array {
@@ -166,10 +188,10 @@ export class IdentityTransitionCommitOutbox {
 }
 
 interface BoundIdentityRotation {
-  current: HpkeIdentity;
-  pending: HpkeIdentity;
+  mode: 'dual' | 'promoted';
+  senderIdentity: HpkeIdentity;
   currentKeyId: Uint8Array;
-  pendingKeyId: Uint8Array;
+  senderKeyId: Uint8Array;
 }
 
 const ENVELOPE_TTL_MS = 60_000;

@@ -26,7 +26,7 @@ export interface LocalIdentityTransitionSession {
   transitionSha256: Uint8Array;
   createdAtUnixMs: number;
   expiresAtUnixMs: number;
-  phase: 'awaiting-acks' | 'blocked';
+  phase: 'awaiting-acks' | 'promotion-completed' | 'blocked';
 }
 
 export interface LocalIdentityTransitionPeerState extends LocalIdentityTransitionPeerSnapshot {
@@ -206,8 +206,11 @@ export class IndexedDbLocalIdentityTransitionStore {
         throw new Error('No active local identity transition exists');
       }
       validateSession(session);
-      if (session.phase === 'blocked' || nowUnixMs >= session.expiresAtUnixMs) {
-        if (session.phase !== 'blocked') await requestResult(sessionStore.put({ ...session, phase: 'blocked' }));
+      if (session.phase === 'blocked' ||
+          session.phase === 'awaiting-acks' && nowUnixMs >= session.expiresAtUnixMs) {
+        if (session.phase === 'awaiting-acks') {
+          await requestResult(sessionStore.put({ ...session, phase: 'blocked' }));
+        }
         await completed;
         throw new Error('Local identity transition is blocked after expiry');
       }
@@ -285,7 +288,7 @@ export class IndexedDbLocalIdentityTransitionStore {
           session = { ...session, phase: 'blocked' };
           await requestResult(sessions.put(session));
         }
-        if (session.phase === 'awaiting-acks' && bytesEqual(session.workspaceId, workspaceId)) {
+        if (session.phase !== 'blocked' && bytesEqual(session.workspaceId, workspaceId)) {
           const peers = await requestResult<StoredPeer[]>(
             transaction.objectStore(PEER_STORE).getAll(),
           );
@@ -346,7 +349,7 @@ export class IndexedDbLocalIdentityTransitionStore {
             await completed.catch(() => undefined);
             throw new Error('Identity transition commit attempt binding changed');
           }
-          if (session.phase === 'awaiting-acks' && peer.phase === 'commit-queued') {
+          if (session.phase !== 'blocked' && peer.phase === 'commit-queued') {
             const attemptCount = peer.commitAttemptCount + 1;
             await requestResult(peers.put({
               ...peer,
@@ -357,6 +360,71 @@ export class IndexedDbLocalIdentityTransitionStore {
             }));
           }
         }
+      }
+      await completed;
+    } finally {
+      database.close();
+    }
+  }
+
+  async promotionReadiness(nowUnixMs: number): Promise<LocalIdentityTransitionSession | undefined> {
+    validateTimestamp(nowUnixMs, 'nowUnixMs');
+    const database = await this.openDatabase();
+    let ready: StoredSession | undefined;
+    try {
+      const transaction = database.transaction([SESSION_STORE, PEER_STORE], 'readwrite');
+      const completed = transactionCompleted(transaction);
+      const sessions = transaction.objectStore(SESSION_STORE);
+      let session = await requestResult<StoredSession | undefined>(sessions.get(SESSION_ID));
+      if (session !== undefined) {
+        validateSession(session);
+        if (session.phase === 'awaiting-acks' && nowUnixMs >= session.expiresAtUnixMs) {
+          session = { ...session, phase: 'blocked' };
+          await requestResult(sessions.put(session));
+        }
+        if (session.phase === 'awaiting-acks') {
+          const peers = await requestResult<StoredPeer[]>(
+            transaction.objectStore(PEER_STORE).getAll(),
+          );
+          if (peers.length > 0 && peers.every((peer) => {
+            validatePeer(peer);
+            return bytesEqual(peer.transitionId, session!.transitionId) &&
+              peer.phase === 'commit-queued';
+          })) ready = session;
+        }
+      }
+      await completed;
+    } finally {
+      database.close();
+    }
+    return ready === undefined ? undefined : copySession(ready);
+  }
+
+  async markPromotionCompleted(
+    transitionId: Uint8Array,
+    previousKeyId: Uint8Array,
+    newKeyId: Uint8Array,
+  ): Promise<void> {
+    validateIdentifier(transitionId, 'transitionId');
+    validateDigest(previousKeyId, 'previousKeyId');
+    validateDigest(newKeyId, 'newKeyId');
+    const database = await this.openDatabase();
+    try {
+      const transaction = database.transaction(SESSION_STORE, 'readwrite');
+      const completed = transactionCompleted(transaction);
+      const store = transaction.objectStore(SESSION_STORE);
+      const session = await requestResult<StoredSession | undefined>(store.get(SESSION_ID));
+      if (session === undefined ||
+          !bytesEqual(session.transitionId, transitionId) ||
+          !bytesEqual(session.previousKeyId, previousKeyId) ||
+          !bytesEqual(session.newKeyId, newKeyId) ||
+          session.phase === 'blocked') {
+        transaction.abort();
+        await completed.catch(() => undefined);
+        throw new Error('Local identity promotion completion binding does not match');
+      }
+      if (session.phase !== 'promotion-completed') {
+        await requestResult(store.put({ ...session, phase: 'promotion-completed' }));
       }
       await completed;
     } finally {
@@ -457,7 +525,8 @@ function validateSession(value: StoredSession): void {
   if (value.expiresAtUnixMs !== safeAdd(value.createdAtUnixMs, RETENTION_MS)) {
     throw new Error('Stored local identity transition expiry is invalid');
   }
-  if (value.phase !== 'awaiting-acks' && value.phase !== 'blocked') {
+  if (value.phase !== 'awaiting-acks' &&
+      value.phase !== 'promotion-completed' && value.phase !== 'blocked') {
     throw new Error('Stored local identity transition phase is invalid');
   }
 }

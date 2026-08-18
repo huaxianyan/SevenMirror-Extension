@@ -187,6 +187,54 @@ export class IndexedDbTransportCredentialStore {
     }
   }
 
+  /** Idempotently rebinds only identity metadata; requires no credential rotation in progress. */
+  async rebindIdentityKey(
+    expectedCurrentKeyId: Uint8Array,
+    newIdentityKeyId: Uint8Array,
+  ): Promise<StoredTransportCredential> {
+    validateBytes(expectedCurrentKeyId, 32, 'expectedCurrentKeyId', true);
+    validateBytes(newIdentityKeyId, 32, 'newIdentityKeyId', true);
+    if (bytesEqual(expectedCurrentKeyId, newIdentityKeyId)) {
+      throw new Error('Transport identity rebind keys must differ');
+    }
+    const database = await this.openDatabase();
+    try {
+      const transaction = database.transaction(STORE_NAME, 'readwrite');
+      const completed = transactionCompleted(transaction);
+      const store = transaction.objectStore(STORE_NAME);
+      const record = await requestResult<CredentialRecord | undefined>(store.get(RECORD_ID));
+      if (record === undefined) {
+        transaction.abort();
+        await completed.catch(() => undefined);
+        throw new Error('Transport credential is not configured');
+      }
+      validateRecord(record);
+      if (bytesEqual(record.identityKeyId, newIdentityKeyId)) {
+        await completed;
+        return copyCredential(record);
+      }
+      if (record.pendingAuthToken !== undefined || record.rotationPhase !== undefined) {
+        transaction.abort();
+        await completed.catch(() => undefined);
+        throw new Error('Transport credential rotation must finish before identity promotion');
+      }
+      if (!bytesEqual(record.identityKeyId, expectedCurrentKeyId)) {
+        transaction.abort();
+        await completed.catch(() => undefined);
+        throw new Error('Transport identity rebind binding does not match');
+      }
+      const rebound: CredentialRecord = {
+        ...record,
+        identityKeyId: newIdentityKeyId.slice(),
+      };
+      await requestResult(store.put(rebound));
+      await completed;
+      return copyCredential(rebound);
+    } finally {
+      database.close();
+    }
+  }
+
   async clear(): Promise<void> {
     const database = await this.openDatabase();
     try {

@@ -110,7 +110,7 @@ describe('IdentityTransitionCommitOutbox', () => {
       let randomByte = 10;
       const rejectedDrain = await new IdentityTransitionCommitOutbox(
         { load: async () => credential(previousKeyId) },
-        { loadRotation: async () => ({ current, pending }) },
+        { loadExisting: async () => current, loadRotation: async () => ({ current, pending }) },
         localTransitions,
         senderPeers,
         sequences,
@@ -123,7 +123,7 @@ describe('IdentityTransitionCommitOutbox', () => {
 
       const outbox = new IdentityTransitionCommitOutbox(
         { load: async () => credential(previousKeyId) },
-        { loadRotation: async () => ({ current, pending }) },
+        { loadExisting: async () => current, loadRotation: async () => ({ current, pending }) },
         localTransitions,
         senderPeers,
         sequences,
@@ -159,7 +159,7 @@ describe('IdentityTransitionCommitOutbox', () => {
       );
       const secondDrain = await new IdentityTransitionCommitOutbox(
         { load: async () => credential(previousKeyId) },
-        { loadRotation: async () => ({ current, pending }) },
+        { loadExisting: async () => current, loadRotation: async () => ({ current, pending }) },
         new IndexedDbLocalIdentityTransitionStore(localDatabase),
         senderPeers,
         new IndexedDbOutboundSequenceStore(sequenceDatabase),

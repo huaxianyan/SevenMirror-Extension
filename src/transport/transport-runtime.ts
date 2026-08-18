@@ -40,6 +40,7 @@ export interface TransportReconnectOptions {
   setTimer?: (callback: () => void, delayMs: number) => TimerHandle;
   clearTimer?: (handle: TimerHandle) => void;
   onAuthenticated?: () => void;
+  beforeConnect?: () => Promise<void>;
 }
 
 interface ReconnectPolicy {
@@ -73,6 +74,7 @@ export class TransportRuntime {
   private sno1Generation?: number;
   private preferCurrentFallback = false;
   private readonly onAuthenticated: () => void;
+  private readonly beforeConnect: () => Promise<void>;
   private readonly reconnectPolicy: ReconnectPolicy;
 
   constructor(
@@ -84,7 +86,12 @@ export class TransportRuntime {
     reconnectOptions: TransportReconnectOptions = {},
   ) {
     this.onAuthenticated = reconnectOptions.onAuthenticated ?? (() => undefined);
-    const { onAuthenticated: _onAuthenticated, ...policyOptions } = reconnectOptions;
+    this.beforeConnect = reconnectOptions.beforeConnect ?? (async () => undefined);
+    const {
+      onAuthenticated: _onAuthenticated,
+      beforeConnect: _beforeConnect,
+      ...policyOptions
+    } = reconnectOptions;
     this.reconnectPolicy = validateReconnectPolicy({
       ...DEFAULT_RECONNECT_POLICY,
       ...policyOptions,
@@ -174,6 +181,14 @@ export class TransportRuntime {
     this.sno1Generation = undefined;
     this.socket?.close(1000, 'replaced by new connection');
     this.socket = undefined;
+
+    try {
+      await this.beforeConnect();
+    } catch (error) {
+      if (generation === this.generation) await this.writeState('offline');
+      throw error;
+    }
+    if (generation !== this.generation) return;
 
     const candidate = this.credentialStore.loadConnectionCandidate === undefined
       ? await this.loadCurrentCandidate()

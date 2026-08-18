@@ -108,6 +108,63 @@ export class IndexedDbIdentityStore {
     }
   }
 
+  /** Idempotently promotes the exact pending identity after a durable external journal exists. */
+  async promotePending(
+    expectedCurrentKeyId: Uint8Array,
+    expectedPendingKeyId: Uint8Array,
+  ): Promise<HpkeIdentity> {
+    validateKeyId(expectedCurrentKeyId, 'expectedCurrentKeyId');
+    validateKeyId(expectedPendingKeyId, 'expectedPendingKeyId');
+    if (bytesEqual(expectedCurrentKeyId, expectedPendingKeyId)) {
+      throw new Error('Identity promotion keys must differ');
+    }
+    const existing = await this.loadState();
+    if (existing === undefined) throw new Error('HPKE identity is not configured');
+    const currentKeyId = await identityKeyId(existing.current);
+    if (existing.pending === undefined) {
+      if (!bytesEqual(currentKeyId, expectedPendingKeyId)) {
+        throw new Error('HPKE identity has no exact pending key to promote');
+      }
+      return existing.current;
+    }
+    const pendingKeyId = await identityKeyId(existing.pending);
+    if (!bytesEqual(currentKeyId, expectedCurrentKeyId) ||
+        !bytesEqual(pendingKeyId, expectedPendingKeyId)) {
+      throw new Error('HPKE identity promotion binding does not match');
+    }
+
+    const database = await this.openDatabase();
+    try {
+      const transaction = database.transaction(STORE_NAME, 'readwrite');
+      const completed = transactionCompleted(transaction);
+      const store = transaction.objectStore(STORE_NAME);
+      const stored = await requestResult<StoredIdentityRecord | undefined>(store.get(RECORD_ID));
+      if (stored === undefined) {
+        transaction.abort();
+        await completed.catch(() => undefined);
+        throw new Error('HPKE identity is not configured');
+      }
+      const state = normalizeRecord(stored);
+      if (state.pending === undefined) {
+        await completed;
+        const recovered = await this.loadState();
+        if (recovered === undefined ||
+            !bytesEqual(await identityKeyId(recovered.current), expectedPendingKeyId)) {
+          throw new Error('HPKE identity promotion raced with different state');
+        }
+        return recovered.current;
+      }
+      await requestResult(store.put({
+        formatVersion: RECORD_FORMAT_VERSION,
+        current: state.pending,
+      } satisfies IdentityRotationRecord, RECORD_ID));
+      await completed;
+      return existing.pending;
+    } finally {
+      database.close();
+    }
+  }
+
   async clear(): Promise<void> {
     const database = await this.openDatabase();
     try {
@@ -175,6 +232,27 @@ async function validateRotationState(state: IdentityRotationRecord): Promise<Ide
     }
   }
   return state;
+}
+
+async function identityKeyId(identity: HpkeIdentity): Promise<Uint8Array> {
+  const publicKey = await serializeIdentityPublicKey(identity);
+  return new Uint8Array(await crypto.subtle.digest('SHA-256', publicKey.slice().buffer));
+}
+
+function validateKeyId(value: Uint8Array, name: string): void {
+  if (!(value instanceof Uint8Array) || value.byteLength !== 32 ||
+      value.every((byte) => byte === 0)) {
+    throw new Error(`${name} must be a non-zero 32-byte value`);
+  }
+}
+
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.byteLength !== right.byteLength) return false;
+  let difference = 0;
+  for (let index = 0; index < left.byteLength; index += 1) {
+    difference |= left[index]! ^ right[index]!;
+  }
+  return difference === 0;
 }
 
 async function identitiesEqual(left: HpkeIdentity, right: HpkeIdentity): Promise<boolean> {

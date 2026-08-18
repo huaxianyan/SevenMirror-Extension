@@ -70,6 +70,52 @@ describe('TransportRuntime', () => {
     expect(states.at(-1)).toBe('offline');
   });
 
+  it('runs promotion recovery before reading any transport credential', async () => {
+    const events: string[] = [];
+    const runtime = new TransportRuntime(
+      {
+        load: async () => {
+          events.push('credential');
+          return undefined;
+        },
+      },
+      { loadExisting: async () => undefined },
+      async (state) => { events.push(state); },
+      undefined,
+      undefined,
+      {
+        beforeConnect: async () => { events.push('promotion'); },
+      },
+    );
+
+    await runtime.connect();
+    expect(events).toEqual(['promotion', 'credential', 'not-configured']);
+  });
+
+  it('fails closed before credential access when promotion recovery fails', async () => {
+    let credentialRead = false;
+    const states: ConnectionState[] = [];
+    const runtime = new TransportRuntime(
+      {
+        load: async () => {
+          credentialRead = true;
+          return undefined;
+        },
+      },
+      { loadExisting: async () => undefined },
+      async (state) => { states.push(state); },
+      undefined,
+      undefined,
+      {
+        beforeConnect: async () => { throw new Error('synthetic journal corruption'); },
+      },
+    );
+
+    await expect(runtime.connect()).rejects.toThrow('synthetic journal corruption');
+    expect(credentialRead).toBe(false);
+    expect(states).toEqual(['offline']);
+  });
+
   it('waits for SNO1 when an explicit resend wakes a suspended Worker', async () => {
     const identity = await generateNonExtractableIdentity();
     const credential = await credentialFor(identity);

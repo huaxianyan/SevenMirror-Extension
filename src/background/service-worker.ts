@@ -8,6 +8,11 @@ import {
 import { DEFAULT_CONNECTION_STATE } from '../shared/status';
 import { runE2eePersistenceSpike } from './e2ee-spike';
 import { IndexedDbIdentityStore } from '../crypto/indexeddb-identity-store';
+import {
+  IdentityPromotionCoordinator,
+  IndexedDbIdentityPromotionJournal,
+} from '../crypto/identity-promotion-journal';
+import { IndexedDbLocalIdentityTransitionStore } from '../crypto/indexeddb-local-identity-transition-store';
 import { ActionInvokeOutbox } from '../crypto/action-invoke-outbox';
 import { ActionResultAckOutbox } from '../crypto/action-result-ack-outbox';
 import { IndexedDbOutboundSequenceStore } from '../crypto/indexeddb-outbound-sequence-store';
@@ -31,6 +36,13 @@ const identityStore = new IndexedDbIdentityStore();
 const trustedPeerStore = new IndexedDbTrustedPeerStore();
 const pendingActionStore = new IndexedDbPendingActionStore();
 const outboundSequenceStore = new IndexedDbOutboundSequenceStore();
+const localIdentityTransitionStore = new IndexedDbLocalIdentityTransitionStore();
+const identityPromotionCoordinator = new IdentityPromotionCoordinator(
+  identityStore,
+  credentialStore,
+  localIdentityTransitionStore,
+  new IndexedDbIdentityPromotionJournal(),
+);
 const actionResultDispatcher = new ActionResultDispatcher(
   credentialStore,
   identityStore,
@@ -79,6 +91,10 @@ transportRuntime = new TransportRuntime(
       void chrome.alarms.clear(TRANSPORT_RECONNECT_ALARM);
       void drainActionInvokes();
       void drainActionResultAcks();
+    },
+    // No socket may observe a half-completed cross-database identity promotion.
+    beforeConnect: async () => {
+      await identityPromotionCoordinator.promoteReady();
     },
   },
 );
