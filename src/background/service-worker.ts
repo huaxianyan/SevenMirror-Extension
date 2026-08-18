@@ -8,6 +8,9 @@ import {
 import { DEFAULT_CONNECTION_STATE } from '../shared/status';
 import { runE2eePersistenceSpike } from './e2ee-spike';
 import { IndexedDbIdentityStore } from '../crypto/indexeddb-identity-store';
+import { IdentityTransitionAckOutbox } from '../crypto/identity-transition-ack-outbox';
+import { IdentityTransitionCommitOutbox } from '../crypto/identity-transition-commit-outbox';
+import { IdentityTransitionDispatcher } from '../crypto/identity-transition-dispatcher';
 import {
   IdentityPromotionCoordinator,
   IndexedDbIdentityPromotionJournal,
@@ -28,6 +31,8 @@ const CONNECTION_STATE_KEY = 'connectionState';
 const TRANSPORT_RECONNECT_ALARM = 'transport-reconnect-v1';
 const ACTION_INVOKE_RETRY_ALARM = 'action-invoke-retry-v1';
 const ACTION_RESULT_ACK_RETRY_ALARM = 'action-result-ack-retry-v1';
+const IDENTITY_TRANSITION_ACK_RETRY_ALARM = 'identity-transition-ack-retry-v1';
+const IDENTITY_TRANSITION_COMMIT_RETRY_ALARM = 'identity-transition-commit-retry-v1';
 const SYNTHETIC_ACK_HOLD_MAX_MS = 10 * 60_000;
 const TRANSPORT_AUTH_WATCHDOG_MS = 60_000;
 let syntheticAckHold: { idempotencyKeyHex: string; expiresAtUnixMs: number } | undefined;
@@ -43,11 +48,12 @@ const identityPromotionCoordinator = new IdentityPromotionCoordinator(
   localIdentityTransitionStore,
   new IndexedDbIdentityPromotionJournal(),
 );
+const inboundReplayLedger = new IndexedDbReplayLedger('action-results');
 const actionResultDispatcher = new ActionResultDispatcher(
   credentialStore,
   identityStore,
   trustedPeerStore,
-  new IndexedDbReplayLedger('action-results'),
+  inboundReplayLedger,
   pendingActionStore,
 );
 let transportRuntime: TransportRuntime;
@@ -67,13 +73,45 @@ const actionResultAckOutbox = new ActionResultAckOutbox(
   outboundSequenceStore,
   (frame) => transportRuntime.sendEnvelope(frame),
 );
+const identityTransitionAckOutbox = new IdentityTransitionAckOutbox(
+  credentialStore,
+  identityStore,
+  trustedPeerStore,
+  outboundSequenceStore,
+  (frame) => transportRuntime.sendEnvelope(frame),
+);
+const identityTransitionCommitOutbox = new IdentityTransitionCommitOutbox(
+  credentialStore,
+  identityStore,
+  localIdentityTransitionStore,
+  trustedPeerStore,
+  outboundSequenceStore,
+  (frame) => transportRuntime.sendEnvelope(frame),
+);
+const identityTransitionDispatcher = new IdentityTransitionDispatcher(
+  credentialStore,
+  identityStore,
+  trustedPeerStore,
+  localIdentityTransitionStore,
+  inboundReplayLedger,
+  async (frame) => {
+    await actionResultDispatcher.receive(frame.slice().buffer as ArrayBuffer);
+  },
+);
 transportRuntime = new TransportRuntime(
   credentialStore,
   identityStore,
   async (state) => chrome.storage.local.set({ [CONNECTION_STATE_KEY]: state }),
   async (frame) => {
-    await actionResultDispatcher.receive(frame);
-    await drainActionResultAcks();
+    const result = await identityTransitionDispatcher.receive(new Uint8Array(frame));
+    if (result === 'peer-transition') {
+      await drainIdentityTransitionAcks();
+    } else if (result === 'local-ack') {
+      await identityPromotionCoordinator.promoteReady();
+      await drainIdentityTransitionCommits();
+    } else if (result === 'business-fallback') {
+      await drainActionResultAcks();
+    }
   },
   undefined,
   {
@@ -91,6 +129,8 @@ transportRuntime = new TransportRuntime(
       void chrome.alarms.clear(TRANSPORT_RECONNECT_ALARM);
       void drainActionInvokes();
       void drainActionResultAcks();
+      void drainIdentityTransitionAcks();
+      void drainIdentityTransitionCommits();
     },
     // No socket may observe a half-completed cross-database identity promotion.
     beforeConnect: async () => {
@@ -116,6 +156,10 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     void drainActionInvokes();
   } else if (alarm.name === ACTION_RESULT_ACK_RETRY_ALARM) {
     void drainActionResultAcks();
+  } else if (alarm.name === IDENTITY_TRANSITION_ACK_RETRY_ALARM) {
+    void drainIdentityTransitionAcks();
+  } else if (alarm.name === IDENTITY_TRANSITION_COMMIT_RETRY_ALARM) {
+    void drainIdentityTransitionCommits();
   }
 });
 
@@ -324,6 +368,47 @@ async function drainActionResultAcks(): Promise<void> {
     await transportRuntime.failClosed();
   } finally {
     excludedKey?.fill(0);
+  }
+}
+
+async function drainIdentityTransitionAcks(): Promise<void> {
+  try {
+    const result = await identityTransitionAckOutbox.drainDue();
+    await scheduleIdentityTransitionRetry(
+      IDENTITY_TRANSITION_ACK_RETRY_ALARM,
+      result.nextWakeDelayMs,
+      result.attemptedEntries > result.acceptedSends,
+    );
+  } catch {
+    await transportRuntime.failClosed();
+  }
+}
+
+async function drainIdentityTransitionCommits(): Promise<void> {
+  try {
+    const result = await identityTransitionCommitOutbox.drainDue();
+    await scheduleIdentityTransitionRetry(
+      IDENTITY_TRANSITION_COMMIT_RETRY_ALARM,
+      result.nextWakeDelayMs,
+      result.attemptedEntries > result.acceptedSends,
+    );
+  } catch {
+    await transportRuntime.failClosed();
+  }
+}
+
+async function scheduleIdentityTransitionRetry(
+  alarmName: string,
+  nextWakeDelayMs: number | undefined,
+  sendRejected: boolean,
+): Promise<void> {
+  const delayMs = nextWakeDelayMs ?? (sendRejected ? 1_000 : undefined);
+  if (delayMs === undefined) {
+    await chrome.alarms.clear(alarmName);
+  } else {
+    await chrome.alarms.create(alarmName, {
+      when: Date.now() + Math.max(1_000, delayMs),
+    });
   }
 }
 
