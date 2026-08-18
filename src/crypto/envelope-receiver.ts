@@ -9,6 +9,10 @@ import { decodeIdentityKeyLifecyclePayload } from '../protocol/identity-key-tran
 import type { IdentityKeyTransitionAck } from '../protocol/generated/notification/v1/payload_pb';
 import type { RoutingHeaderV1 } from '../protocol/routing-header';
 import type {
+  AcceptedLocalIdentityAck,
+  IndexedDbLocalIdentityTransitionStore,
+} from './indexeddb-local-identity-transition-store';
+import type {
   AcceptPeerIdentityTransitionResult,
   IndexedDbTrustedPeerStore,
 } from './indexeddb-trusted-peer-store';
@@ -51,6 +55,11 @@ export interface OpenedPendingIdentityAck {
 export interface AcceptedPeerIdentityTransitionEnvelope {
   header: RoutingHeaderV1;
   accepted: AcceptPeerIdentityTransitionResult;
+}
+
+export interface AcceptedLocalIdentityAckEnvelope {
+  header: RoutingHeaderV1;
+  accepted: AcceptedLocalIdentityAck;
 }
 
 export class EnvelopeRejectedError extends Error {
@@ -123,6 +132,48 @@ export async function receiveIdentityTransitionOnce(
 }
 
 /**
+ * Persists an exact ACK and its derived commit before replay consumption.
+ */
+export async function receivePendingIdentityAckOnce(
+  frameBytes: Uint8Array,
+  context: EnvelopeRecipientContext,
+  localTransitions: IndexedDbLocalIdentityTransitionStore,
+  replayLedger: ReplayLedgerWriter,
+  nowUnixMs: number,
+): Promise<AcceptedLocalIdentityAckEnvelope> {
+  const opened = await authenticateAndOpen(frameBytes, context, nowUnixMs);
+  const binding = await localTransitions.expectedAckBinding(
+    opened.header.senderDeviceId,
+    nowUnixMs,
+  );
+  if (binding === undefined) throw new EnvelopeRejectedError('TRANSITION_BINDING_MISMATCH');
+  if (!arraysEqual(binding.workspaceId, opened.header.workspaceId) ||
+      !arraysEqual(binding.localDeviceId, opened.header.recipientDeviceId) ||
+      !arraysEqual(binding.senderKeyId, opened.header.senderKeyId) ||
+      !arraysEqual(binding.newKeyId, opened.header.recipientKeyId)) {
+    throw new EnvelopeRejectedError('TRANSITION_BINDING_MISMATCH');
+  }
+  const acknowledgement = await decodePendingIdentityAck(opened.plaintext, {
+    senderDeviceId: binding.senderDeviceId,
+    transitionId: binding.transitionId,
+    previousKeyId: binding.previousKeyId,
+    newKeyId: binding.newKeyId,
+    transitionSha256: binding.transitionSha256,
+  }, opened.header);
+  const accepted = await localTransitions.acceptAck(
+    opened.header.senderDeviceId,
+    opened.header.senderKeyId,
+    opened.plaintext,
+    nowUnixMs,
+  );
+  if (!arraysEqual(acknowledgement.transitionId, accepted.peer.transitionId)) {
+    throw new EnvelopeRejectedError('TRANSITION_BINDING_MISMATCH');
+  }
+  await consumeReplay(opened.header, replayLedger, nowUnixMs);
+  return { header: opened.header, accepted };
+}
+
+/**
  * The proposed local identity is not an active business recipient. It may only
  * open the exact peer acknowledgement bound to caller-validated state.
  */
@@ -141,9 +192,27 @@ export async function openPendingIdentityAckOnce(
     throw new EnvelopeRejectedError('TRANSITION_BINDING_MISMATCH');
   }
 
+  const acknowledgement = await decodePendingIdentityAck(
+    opened.plaintext,
+    binding,
+    opened.header,
+  );
+  await consumeReplay(opened.header, replayLedger, nowUnixMs);
+  return { header: opened.header, acknowledgement, canonicalPayload: opened.plaintext };
+}
+
+async function decodePendingIdentityAck(
+  plaintext: Uint8Array,
+  binding: PendingIdentityAckBinding,
+  header: RoutingHeaderV1,
+): Promise<IdentityKeyTransitionAck> {
+  if (!arraysEqual(header.senderDeviceId, binding.senderDeviceId) ||
+      !arraysEqual(header.recipientKeyId, binding.newKeyId)) {
+    throw new EnvelopeRejectedError('TRANSITION_BINDING_MISMATCH');
+  }
   let payload;
   try {
-    payload = await decodeIdentityKeyLifecyclePayload(opened.plaintext);
+    payload = await decodeIdentityKeyLifecyclePayload(plaintext);
   } catch {
     throw new EnvelopeRejectedError('PENDING_IDENTITY_PAYLOAD_MISMATCH');
   }
@@ -151,16 +220,13 @@ export async function openPendingIdentityAckOnce(
     throw new EnvelopeRejectedError('PENDING_IDENTITY_PAYLOAD_MISMATCH');
   }
   const acknowledgement = payload.body.value;
-  if (
-    !arraysEqual(acknowledgement.transitionId, binding.transitionId) ||
-    !arraysEqual(acknowledgement.previousKeyId, binding.previousKeyId) ||
-    !arraysEqual(acknowledgement.newKeyId, binding.newKeyId) ||
-    !arraysEqual(acknowledgement.transitionSha256, binding.transitionSha256)
-  ) {
+  if (!arraysEqual(acknowledgement.transitionId, binding.transitionId) ||
+      !arraysEqual(acknowledgement.previousKeyId, binding.previousKeyId) ||
+      !arraysEqual(acknowledgement.newKeyId, binding.newKeyId) ||
+      !arraysEqual(acknowledgement.transitionSha256, binding.transitionSha256)) {
     throw new EnvelopeRejectedError('TRANSITION_BINDING_MISMATCH');
   }
-  await consumeReplay(opened.header, replayLedger, nowUnixMs);
-  return { header: opened.header, acknowledgement, canonicalPayload: opened.plaintext };
+  return acknowledgement;
 }
 
 async function authenticateAndOpen(
