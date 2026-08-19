@@ -3,37 +3,38 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Notification Mirroring Settings</title>
+    <title data-i18n="settingsTitle">Notification Mirroring Settings</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
     <main>
-      <h1>Notification Mirroring</h1>
-      <p id="extension-version">Extension version: checking…</p>
-      <p class="boundary">
+      <h1 data-i18n="appName">Notification Mirroring</h1>
+      <p id="extension-version" data-i18n="extensionVersionChecking">Extension version: checking…</p>
+      <p class="boundary" data-i18n="registrationBoundary">
         Registration grants access to a private instance. It does not trust other devices for E2EE.
         Real notification synchronization remains disabled until trusted-device approval and relay validation are complete.
       </p>
       <form id="registration-form" autocomplete="off">
         <label>
-          Server origin
+          <span data-i18n="serverOrigin">Server origin</span>
           <input id="server-origin" name="server-origin" type="url"
-                 placeholder="https://notify.example" required spellcheck="false" />
+                 placeholder="https://notify.example" data-i18n-placeholder="serverOriginPlaceholder"
+                 required spellcheck="false" />
         </label>
         <label>
-          One-time pairing code
+          <span data-i18n="oneTimePairingCode">One-time pairing code</span>
           <input id="pairing-code" name="pairing-code" type="password"
                  minlength="32" maxlength="32" required autocomplete="new-password" />
         </label>
         <label>
-          Device name
+          <span data-i18n="deviceName">Device name</span>
           <input id="device-name" name="device-name" type="text"
                  value="Chrome" maxlength="100" required />
         </label>
-        <button id="register" type="submit">Register this Chrome profile</button>
+        <button id="register" type="submit" data-i18n="registerChromeProfile">Register this Chrome profile</button>
       </form>
-      <p id="registration-status" role="status" aria-live="polite">Checking registration state…</p>
-      <button id="reconnect-transport" type="button" hidden>Reconnect authenticated transport</button>
+      <p id="registration-status" role="status" aria-live="polite" data-i18n="checkingRegistration">Checking registration state…</p>
+      <button id="reconnect-transport" type="button" hidden data-i18n="reconnectTransport">Reconnect authenticated transport</button>
 
       <section id="credential-rotation" hidden>
         <h2>Rotate transport credential</h2>
@@ -67,39 +68,40 @@
       </section>
 
       <section id="trust-pairing" hidden>
-        <h2>Trusted E2EE device</h2>
-        <p class="boundary">
-          Synthetic testing only. Exchange the QR payload out of band and compare the complete
+        <h2 data-i18n="trustedDeviceTitle">Trusted E2EE device</h2>
+        <p class="boundary" data-i18n="trustedDeviceBoundary">
+          Synthetic testing only. Exchange the pairing payload out of band and compare the complete
           safety code on both devices. Importing a payload alone never approves a peer.
         </p>
-        <h3 id="trust-pairing-stage">Step 1 — Create or import an offer</h3>
+        <h3 id="trust-pairing-stage" data-i18n="pairingStepCreate">Step 1 — Create or import an offer</h3>
         <div id="pairing-actions">
-          <button id="create-trust-offer" type="button">Create offer on this Chrome device</button>
+          <button id="create-trust-offer" type="button" data-i18n="createOffer">Create offer on this Chrome device</button>
           <label>
-            Payload received from the other device
+            <span data-i18n="receivedPayload">Payload received from the other device</span>
             <textarea id="trust-payload-input" rows="5" maxlength="512"
-                      placeholder="sntrust1:…" spellcheck="false"></textarea>
+                      placeholder="sntrust1:…" data-i18n-placeholder="pairingPayloadPlaceholder"
+                      spellcheck="false"></textarea>
           </label>
-          <button id="import-trust-payload" type="button">Import received payload</button>
+          <button id="import-trust-payload" type="button" data-i18n="importPayload">Import received payload</button>
         </div>
         <div id="pairing-output" hidden>
           <label>
-            <span id="trust-payload-output-label">Payload to transfer to the other device</span>
+            <span id="trust-payload-output-label" data-i18n="transferPayload">Payload to transfer to the other device</span>
             <textarea id="trust-payload-output" rows="5" readonly spellcheck="false"></textarea>
           </label>
-          <button id="copy-trust-payload" type="button">Copy payload</button>
+          <button id="copy-trust-payload" type="button" data-i18n="copyPayload">Copy payload</button>
         </div>
         <div id="safety-confirmation" hidden>
-          <p>Safety code</p>
+          <p data-i18n="safetyCode">Safety code</p>
           <output id="trust-safety-code"></output>
           <label class="confirmation">
             <input id="trust-code-confirmed" type="checkbox" />
-            I compared the complete code on both devices and it matches
+            <span data-i18n="safetyCodeConfirmed">I compared the complete code on both devices and it matches</span>
           </label>
-          <button id="approve-trust-peer" type="button" disabled>Approve this peer</button>
+          <button id="approve-trust-peer" type="button" disabled data-i18n="approvePeer">Approve this peer</button>
         </div>
-        <button id="cancel-trust-pairing" type="button" hidden>Reject and cancel pairing</button>
-        <button id="remove-approved-peer" type="button" hidden>Remove approved Android peer</button>
+        <button id="cancel-trust-pairing" type="button" hidden data-i18n="cancelPairing">Reject and cancel pairing</button>
+        <button id="remove-approved-peer" type="button" hidden data-i18n="removeApprovedPeer">Remove approved Android peer</button>
         <p id="trust-pairing-status" role="status" aria-live="polite"></p>
       </section>
 

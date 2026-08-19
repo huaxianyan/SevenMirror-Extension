@@ -1,5 +1,6 @@
-import { connectionLabel, type ConnectionState } from '../shared/status';
+import type { ConnectionState } from '../shared/status';
 import type { CloseAudit } from '../background/lifecycle-spike';
+import { localizeDocument, message } from '../shared/i18n';
 
 interface StatusResponse {
   state: ConnectionState;
@@ -18,13 +19,18 @@ const clearTest = document.querySelector<HTMLButtonElement>('#clear-test');
 const runE2eeTest = document.querySelector<HTMLButtonElement>('#run-e2ee-test');
 const e2eeResult = document.querySelector<HTMLElement>('#e2ee-result');
 
+localizeDocument();
+
 async function renderStatus(): Promise<void> {
   const response = (await chrome.runtime.sendMessage({ type: 'get-status' })) as StatusResponse;
   if (status) {
-    status.textContent = `Status: ${connectionLabel(response.state)}`;
+    status.textContent = message('statusValue', connectionStateLabel(response.state));
   }
   if (workerStarts) {
-    workerStarts.textContent = `Worker starts observed: ${response.lifecycle.workerStartCount}`;
+    workerStarts.textContent = message(
+      'workerStartsValue',
+      response.lifecycle.workerStartCount.toLocaleString(chrome.i18n.getUILanguage()),
+    );
   }
   if (closeAudit && response.lifecycle.lastCloseAudit) {
     const audit = response.lifecycle.lastCloseAudit;
@@ -49,7 +55,7 @@ clearTest?.addEventListener('click', async () => {
 runE2eeTest?.addEventListener('click', async () => {
   if (!e2eeResult || !runE2eeTest) return;
   runE2eeTest.disabled = true;
-  e2eeResult.textContent = 'Running…';
+  e2eeResult.textContent = message('running');
   const response = (await chrome.runtime.sendMessage({
     type: 'run-e2ee-persistence-test',
   })) as {
@@ -73,3 +79,16 @@ runE2eeTest?.addEventListener('click', async () => {
 });
 
 void renderStatus();
+
+function connectionStateLabel(state: ConnectionState): string {
+  switch (state) {
+    case 'not-configured':
+      return message('connectionNotConfigured');
+    case 'offline':
+      return message('connectionOffline');
+    case 'connecting':
+      return message('connectionConnecting');
+    case 'online':
+      return message('connectionOnline');
+  }
+}

@@ -17,6 +17,7 @@ import {
   normalizeServerOrigin,
 } from '../transport/indexeddb-transport-credential-store';
 import { presentActionResultStatus } from './action-result-status';
+import { localizeDocument, message } from '../shared/i18n';
 
 const identityStore = new IndexedDbIdentityStore();
 const credentialStore = new IndexedDbTransportCredentialStore();
@@ -75,9 +76,14 @@ let pairingFailed = false;
 let pairingBusy = false;
 const SYNTHETIC_OPERATION_SELECTION_KEY = 'syntheticOperationSelectionV1';
 
+localizeDocument();
+
 async function render(): Promise<void> {
   if (versionOutput) {
-    versionOutput.textContent = `Extension version: ${chrome.runtime.getManifest().version}`;
+    versionOutput.textContent = message(
+      'extensionVersionValue',
+      chrome.runtime.getManifest().version,
+    );
   }
   const existing = await credentialStore.load();
   if (existing !== undefined) {
