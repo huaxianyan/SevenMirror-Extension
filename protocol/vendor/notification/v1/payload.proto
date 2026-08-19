@@ -19,6 +19,8 @@ message EncryptedPayload {
     IdentityKeyTransition identity_key_transition = 13;
     IdentityKeyTransitionAck identity_key_transition_ack = 14;
     IdentityKeyTransitionCommit identity_key_transition_commit = 15;
+    NotificationUpsert notification_upsert = 16;
+    NotificationRemoved notification_removed = 17;
   }
 }
 
@@ -73,6 +75,22 @@ message IdentityKeyTransitionCommit {
   bytes new_key_id = 3;
   bytes transition_sha256 = 4;
   bytes ack_sha256 = 5;
+}
+
+// NotificationUpsert carries the current text state of one source-device
+// notification. The authenticated envelope sender supplies sourceDeviceId.
+message NotificationUpsert {
+  string notification_id = 1;
+  uint64 notification_revision = 2;
+  optional string title = 3;
+  optional string body = 4;
+}
+
+// NotificationRemoved is authoritative for one notification revision. Chrome
+// retains this revision so a delayed older upsert cannot resurrect the item.
+message NotificationRemoved {
+  string notification_id = 1;
+  uint64 notification_revision = 2;
 }
 
 enum ActionResultStatus {

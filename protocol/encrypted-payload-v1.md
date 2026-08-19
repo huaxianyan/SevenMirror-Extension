@@ -16,7 +16,8 @@ Receivers MUST reject a plaintext unless all of the following hold:
 3. no unknown fields occur at any message level;
 4. `schema_version` matches the body: version `1` for `action_invoke`,
    `action_result`, or `action_result_ack`; version `2` for the E2EE identity
-   lifecycle bodies defined by `e2ee-identity-key-transition-v1.md`;
+   lifecycle bodies defined by `e2ee-identity-key-transition-v1.md`; or version
+   `3` for `notification_upsert` and `notification_removed`;
 5. exactly one supported `body` is present;
 6. every message-specific semantic constraint below or in the identity
    lifecycle specification holds; and
@@ -25,8 +26,46 @@ Receivers MUST reject a plaintext unless all of the following hold:
 The final check rejects duplicate fields, alternate field ordering and other
 non-canonical wire encodings rather than relying on parser-specific behavior.
 Protocol evolution must add an explicitly supported schema version before new
-fields are emitted. Schema version `2` does not permit action bodies, and
-schema version `1` does not permit identity lifecycle bodies.
+fields are emitted. A body is accepted only under its version above; schema
+versions are not interchangeable.
+
+## Notification identity and revisions
+
+The notification business key is `(authenticated sourceDeviceId,
+notification_id)`. `sourceDeviceId` comes exclusively from the authenticated
+envelope routing header and is therefore not duplicated inside the encrypted
+payload. Receivers MUST NOT key notifications by `notification_id` alone.
+
+For both notification bodies:
+
+- `notification_id`: valid UTF-8, 1..512 encoded bytes;
+- `notification_revision`: `1..2^63-1`.
+
+A receiver stores the greatest accepted revision for each business key. A body
+with a lower revision is stale and cannot change visible state. Repeating the
+same revision and same state is idempotent; assigning different semantics to an
+already accepted revision is invalid application behavior and MUST NOT roll
+state backward. Envelope replay protection remains a separate security guard.
+
+## `notification_upsert`
+
+`notification_upsert` carries the current text state of one notification. At
+least one of `title` and `body` MUST be present. When present:
+
+- `title`: valid UTF-8, 1..512 encoded bytes;
+- `body`: valid UTF-8, 1..4000 encoded bytes.
+
+The internal alpha sends only application-owned synthetic notification text.
+It does not send icons, avatars, rich media, action capabilities, package-private
+tokens, or third-party notification content.
+
+## `notification_removed`
+
+`notification_removed` declares the notification absent at its revision. A
+receiver retains this revision even after closing the visible notification so
+a delayed older `notification_upsert` cannot resurrect it. This per-item state
+rule does not define a relay cursor, delivery acknowledgement, snapshot, or
+offline queue.
 
 ## `action_invoke`
 

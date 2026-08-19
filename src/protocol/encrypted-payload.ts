@@ -5,16 +5,23 @@ import {
   ActionResultAckSchema,
   ActionResultStatus,
   EncryptedPayloadSchema,
+  NotificationRemovedSchema,
+  NotificationUpsertSchema,
   type ActionInvoke,
   type ActionResult,
   type ActionResultAck,
   type EncryptedPayload,
+  type NotificationRemoved,
+  type NotificationUpsert,
 } from './generated/notification/v1/payload_pb';
 
 export const ENCRYPTED_PAYLOAD_LIMITS = {
   schemaVersion: 1,
+  notificationSchemaVersion: 3,
   maxPlaintextSize: 524_272,
   maxNotificationIdBytes: 512,
+  maxNotificationTitleBytes: 512,
+  maxNotificationBodyBytes: 4_000,
   maxReplyTextBytes: 4_000,
   maxResultDetailBytes: 256,
   identifierSize: 16,
@@ -23,6 +30,30 @@ export const ENCRYPTED_PAYLOAD_LIMITS = {
 } as const;
 
 const encoder = new TextEncoder();
+
+export function createNotificationUpsertPayload(
+  notification: Omit<NotificationUpsert, '$typeName'>,
+): EncryptedPayload {
+  return create(EncryptedPayloadSchema, {
+    schemaVersion: ENCRYPTED_PAYLOAD_LIMITS.notificationSchemaVersion,
+    body: {
+      case: 'notificationUpsert',
+      value: create(NotificationUpsertSchema, notification),
+    },
+  });
+}
+
+export function createNotificationRemovedPayload(
+  notification: Omit<NotificationRemoved, '$typeName'>,
+): EncryptedPayload {
+  return create(EncryptedPayloadSchema, {
+    schemaVersion: ENCRYPTED_PAYLOAD_LIMITS.notificationSchemaVersion,
+    body: {
+      case: 'notificationRemoved',
+      value: create(NotificationRemovedSchema, notification),
+    },
+  });
+}
 
 export function createActionInvokePayload(
   action: Omit<ActionInvoke, '$typeName'>,
@@ -84,21 +115,75 @@ export function validateEncryptedPayloadV1(payload: EncryptedPayload): void {
   if (payload.$unknown?.length) {
     throw new Error('Encrypted payload contains unknown fields');
   }
-  if (payload.schemaVersion !== ENCRYPTED_PAYLOAD_LIMITS.schemaVersion) {
-    throw new Error('Unsupported encrypted payload schema version');
-  }
   switch (payload.body.case) {
     case 'actionInvoke':
+      requireSchema(payload, ENCRYPTED_PAYLOAD_LIMITS.schemaVersion);
       validateAction(payload.body.value);
       return;
     case 'actionResult':
+      requireSchema(payload, ENCRYPTED_PAYLOAD_LIMITS.schemaVersion);
       validateResult(payload.body.value);
       return;
     case 'actionResultAck':
+      requireSchema(payload, ENCRYPTED_PAYLOAD_LIMITS.schemaVersion);
       validateResultAck(payload.body.value);
+      return;
+    case 'notificationUpsert':
+      requireSchema(payload, ENCRYPTED_PAYLOAD_LIMITS.notificationSchemaVersion);
+      validateNotificationUpsert(payload.body.value);
+      return;
+    case 'notificationRemoved':
+      requireSchema(payload, ENCRYPTED_PAYLOAD_LIMITS.notificationSchemaVersion);
+      validateNotificationRemoved(payload.body.value);
       return;
     default:
       throw new Error('Exactly one supported encrypted payload body is required');
+  }
+}
+
+function requireSchema(payload: EncryptedPayload, expected: number): void {
+  if (payload.schemaVersion !== expected) {
+    throw new Error('Encrypted payload schema version does not match body');
+  }
+}
+
+function validateNotificationUpsert(notification: NotificationUpsert): void {
+  if (notification.$unknown?.length) {
+    throw new Error('Notification upsert contains unknown fields');
+  }
+  validateNotificationBinding(notification.notificationId, notification.notificationRevision);
+  if (notification.title === undefined && notification.body === undefined) {
+    throw new Error('Notification upsert requires title or body');
+  }
+  if (notification.title !== undefined) {
+    validateText(notification.title, ENCRYPTED_PAYLOAD_LIMITS.maxNotificationTitleBytes, 'Notification title');
+  }
+  if (notification.body !== undefined) {
+    validateText(notification.body, ENCRYPTED_PAYLOAD_LIMITS.maxNotificationBodyBytes, 'Notification body');
+  }
+}
+
+function validateNotificationRemoved(notification: NotificationRemoved): void {
+  if (notification.$unknown?.length) {
+    throw new Error('Notification removed contains unknown fields');
+  }
+  validateNotificationBinding(notification.notificationId, notification.notificationRevision);
+}
+
+function validateNotificationBinding(notificationId: string, revision: bigint): void {
+  const notificationIdSize = encoder.encode(notificationId).byteLength;
+  if (notificationIdSize < 1 || notificationIdSize > ENCRYPTED_PAYLOAD_LIMITS.maxNotificationIdBytes) {
+    throw new Error('Notification id is out of range');
+  }
+  if (revision < 1n || revision > ENCRYPTED_PAYLOAD_LIMITS.maxNotificationRevision) {
+    throw new Error('Notification revision is out of range');
+  }
+}
+
+function validateText(value: string, maximumBytes: number, name: string): void {
+  const size = encoder.encode(value).byteLength;
+  if (size < 1 || size > maximumBytes) {
+    throw new Error(`${name} is out of range`);
   }
 }
 
@@ -106,14 +191,7 @@ function validateAction(action: ActionInvoke): void {
   if (action.$unknown?.length) {
     throw new Error('Action invocation contains unknown fields');
   }
-  const notificationIdSize = encoder.encode(action.notificationId).byteLength;
-  if (notificationIdSize < 1 || notificationIdSize > ENCRYPTED_PAYLOAD_LIMITS.maxNotificationIdBytes) {
-    throw new Error('Notification id is out of range');
-  }
-  if (action.notificationRevision < 1n ||
-      action.notificationRevision > ENCRYPTED_PAYLOAD_LIMITS.maxNotificationRevision) {
-    throw new Error('Notification revision is out of range');
-  }
+  validateNotificationBinding(action.notificationId, action.notificationRevision);
   if (action.actionId.byteLength !== ENCRYPTED_PAYLOAD_LIMITS.identifierSize) {
     throw new Error('Action id must be 16 bytes');
   }

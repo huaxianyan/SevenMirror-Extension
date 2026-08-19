@@ -4,6 +4,8 @@ import {
   createActionInvokePayload,
   createActionResultPayload,
   createActionResultAckPayload,
+  createNotificationRemovedPayload,
+  createNotificationUpsertPayload,
   decodeEncryptedPayloadV1,
   encodeEncryptedPayloadV1,
 } from './encrypted-payload';
@@ -65,6 +67,42 @@ describe('Encrypted Payload v1', () => {
       payload.body.value.resultSha256 = new Uint8Array(32);
     }
     expect(() => encodeEncryptedPayloadV1(payload)).toThrow(/SHA-256/i);
+  });
+
+  it('matches the canonical notification upsert and removed vectors', () => {
+    const upsert = createNotificationUpsertPayload({
+      notificationId: vector.notificationPayloadId,
+      notificationRevision: BigInt(vector.notificationUpsertRevision),
+      title: vector.notificationTitle,
+      body: vector.notificationBody,
+    });
+    const encodedUpsert = encodeEncryptedPayloadV1(upsert);
+    expect(encodedUpsert).toEqual(fromHex(vector.notificationUpsertEncodedHex));
+    const decodedUpsert = decodeEncryptedPayloadV1(encodedUpsert);
+    expect(decodedUpsert.body.case).toBe('notificationUpsert');
+
+    const removed = createNotificationRemovedPayload({
+      notificationId: vector.notificationPayloadId,
+      notificationRevision: BigInt(vector.notificationRemovedRevision),
+    });
+    const encodedRemoved = encodeEncryptedPayloadV1(removed);
+    expect(encodedRemoved).toEqual(fromHex(vector.notificationRemovedEncodedHex));
+    expect(decodeEncryptedPayloadV1(encodedRemoved).body.case).toBe('notificationRemoved');
+  });
+
+  it('rejects invalid notification fields and schema mismatch', () => {
+    const missingText = createNotificationUpsertPayload({
+      notificationId: vector.notificationPayloadId,
+      notificationRevision: 7n,
+    });
+    expect(() => encodeEncryptedPayloadV1(missingText)).toThrow(/title or body/i);
+
+    const wrongSchema = createNotificationRemovedPayload({
+      notificationId: vector.notificationPayloadId,
+      notificationRevision: 8n,
+    });
+    wrongSchema.schemaVersion = 1;
+    expect(() => encodeEncryptedPayloadV1(wrongSchema)).toThrow(/schema version/i);
   });
 
   it('rejects duplicate, unknown and invalid semantic fields', () => {

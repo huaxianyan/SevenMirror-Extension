@@ -1,5 +1,5 @@
 {
-  "description": "Canonical EncryptedPayload v1 action.invoke vector; identifiers and reply are public test material only.",
+  "description": "Canonical EncryptedPayload vectors for actions and synthetic text notifications; all values are public test material only.",
   "schemaVersion": 1,
   "messageType": "action.invoke",
   "notificationId": "test.notification/42",
@@ -12,5 +12,13 @@
   "actionResultDetail": "revision changed",
   "actionResultEncodedHex": "08015a260a10b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b210031a107265766973696f6e206368616e676564",
   "actionResultSha256Hex": "478b3b4397b6efe048f2dd1f8dec75d84d7458c821c7b9c9989eff584445fc16",
-  "actionResultAckEncodedHex": "080162340a10b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b21220478b3b4397b6efe048f2dd1f8dec75d84d7458c821c7b9c9989eff584445fc16"
+  "actionResultAckEncodedHex": "080162340a10b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b21220478b3b4397b6efe048f2dd1f8dec75d84d7458c821c7b9c9989eff584445fc16",
+  "notificationSchemaVersion": 3,
+  "notificationPayloadId": "synthetic.notification/42",
+  "notificationUpsertRevision": "7",
+  "notificationRemovedRevision": "8",
+  "notificationTitle": "Synthetic notification",
+  "notificationBody": "Encrypted test notification",
+  "notificationUpsertEncodedHex": "08038201520a1973796e7468657469632e6e6f74696669636174696f6e2f343210071a1653796e746865746963206e6f74696669636174696f6e221b456e637279707465642074657374206e6f74696669636174696f6e",
+  "notificationRemovedEncodedHex": "08038a011d0a1973796e7468657469632e6e6f74696669636174696f6e2f34321008"
 }
