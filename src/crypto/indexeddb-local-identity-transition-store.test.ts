@@ -115,6 +115,54 @@ describe('IndexedDbLocalIdentityTransitionStore', () => {
     }
   });
 
+  it('requires explicit peer exclusion before an expired transition can recover', async () => {
+    const fixture = await createFixture();
+    const store = new IndexedDbLocalIdentityTransitionStore(uniqueName());
+    const unavailableDeviceId = new Uint8Array(16).fill(8);
+    const unavailableKeyId = new Uint8Array(32).fill(9);
+    try {
+      const session = await store.create(
+        workspaceId,
+        localDeviceId,
+        fixture.canonicalTransition,
+        [
+          { deviceId: peerDeviceId, keyId: fixture.peerKeyId },
+          { deviceId: unavailableDeviceId, keyId: unavailableKeyId },
+        ],
+        now,
+      );
+      await store.acceptAck(peerDeviceId, fixture.peerKeyId, fixture.canonicalAck, now + 1);
+      expect(await store.promotionReadiness(session.expiresAtUnixMs)).toBeUndefined();
+      expect((await store.loadSession(session.expiresAtUnixMs))?.phase).toBe('blocked');
+
+      expect(await store.removePeerFromSnapshot(
+        unavailableDeviceId,
+        unavailableKeyId,
+        transitionId,
+      )).toBe('removed');
+      expect((await store.loadSession(session.expiresAtUnixMs + 1))?.phase)
+        .toBe('recovery-authorized');
+      expect((await store.promotionReadiness(session.expiresAtUnixMs + 1))?.transitionId)
+        .toEqual(transitionId);
+      const acknowledged = await store.loadPeer(peerDeviceId, session.expiresAtUnixMs + 1);
+      await store.recordCommitSendAttempt(
+        peerDeviceId,
+        transitionId,
+        acknowledged!.ackSha256!,
+        session.expiresAtUnixMs + 5_000,
+      );
+      expect((await store.loadPeer(peerDeviceId, session.expiresAtUnixMs + 1))
+        ?.nextCommitAttemptAtUnixMs).toBe(session.expiresAtUnixMs + 5_000);
+      expect(await store.removePeerFromSnapshot(
+        unavailableDeviceId,
+        unavailableKeyId,
+        transitionId,
+      )).toBe('already-removed');
+    } finally {
+      await store.clear();
+    }
+  });
+
   it('persists ACK and commit before replay consumption', async () => {
     const fixture = await createFixture();
     const databaseName = uniqueName();

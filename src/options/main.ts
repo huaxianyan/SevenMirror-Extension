@@ -39,6 +39,10 @@ const rotationStatus = document.querySelector<HTMLElement>('#credential-rotation
 const identityRotationSection = document.querySelector<HTMLElement>('#identity-rotation');
 const rotateIdentityButton = document.querySelector<HTMLButtonElement>('#rotate-identity');
 const identityRotationStatus = document.querySelector<HTMLElement>('#identity-rotation-status');
+const refreshIdentityTransitionButton = document.querySelector<HTMLButtonElement>(
+  '#refresh-identity-transition',
+);
+const identityTransitionPeers = document.querySelector<HTMLElement>('#identity-transition-peers');
 const pairingSection = document.querySelector<HTMLElement>('#trust-pairing');
 const pairingStage = document.querySelector<HTMLElement>('#trust-pairing-stage');
 const createOfferButton = document.querySelector<HTMLButtonElement>('#create-trust-offer');
@@ -83,6 +87,7 @@ async function render(): Promise<void> {
     rotationSection?.removeAttribute('hidden');
     await renderCredentialRotation();
     identityRotationSection?.removeAttribute('hidden');
+    await renderIdentityTransitionStatus();
     pairingSection?.removeAttribute('hidden');
     await renderPairing();
     await renderApprovedPeerControl();
@@ -116,6 +121,10 @@ rotationForm?.addEventListener('submit', (event) => {
   });
 });
 
+refreshIdentityTransitionButton?.addEventListener('click', () => {
+  void renderIdentityTransitionStatus();
+});
+
 rotateIdentityButton?.addEventListener('click', () => {
   const confirmed = window.confirm(
     'Start E2EE identity transition? Every approved peer must acknowledge it. ' +
@@ -137,7 +146,7 @@ rotateIdentityButton?.addEventListener('click', () => {
     () => {
       if (identityRotationStatus) identityRotationStatus.textContent = 'Identity transition request failed.';
     },
-  ).finally(() => { rotateIdentityButton.disabled = false; });
+  ).finally(() => { void renderIdentityTransitionStatus(); });
 });
 
 reconnectTransportButton?.addEventListener('click', () => {
@@ -196,6 +205,7 @@ form?.addEventListener('submit', async (event) => {
     rotationSection?.removeAttribute('hidden');
     await renderCredentialRotation();
     identityRotationSection?.removeAttribute('hidden');
+    await renderIdentityTransitionStatus();
     pairingSection?.removeAttribute('hidden');
     await renderPairing();
     await renderApprovedPeerControl();
@@ -291,12 +301,82 @@ cancelPairingButton?.addEventListener('click', () => {
     });
 });
 
+interface IdentityTransitionStatusResponse {
+  active?: boolean;
+  phase?: string;
+  expiresAtUnixMs?: number;
+  error?: string;
+  peers?: Array<{
+    deviceId: string;
+    deviceRef: string;
+    keyRef: string;
+    phase: string;
+  }>;
+}
+
+async function renderIdentityTransitionStatus(): Promise<void> {
+  if (!identityRotationStatus || !identityTransitionPeers) return;
+  const response = await chrome.runtime.sendMessage({
+    type: 'get-identity-transition-status',
+  }) as IdentityTransitionStatusResponse;
+  identityTransitionPeers.replaceChildren();
+  if (!response.active) {
+    rotateIdentityButton?.removeAttribute('disabled');
+    identityRotationStatus.textContent = response.error ?? 'No active E2EE identity transition.';
+    return;
+  }
+  if (rotateIdentityButton) rotateIdentityButton.disabled = true;
+  const expires = response.expiresAtUnixMs === undefined
+    ? 'unknown'
+    : new Date(response.expiresAtUnixMs).toLocaleString();
+  identityRotationStatus.textContent =
+    `Transition phase: ${response.phase ?? 'unknown'}. Original deadline: ${expires}.`;
+  if ((response.peers ?? []).length === 0) {
+    const warning = document.createElement('p');
+    warning.textContent =
+      'No snapshot peers remain. Automatic promotion is forbidden; use explicit lost-device recovery.';
+    identityTransitionPeers.append(warning);
+  }
+  for (const peer of response.peers ?? []) {
+    const row = document.createElement('p');
+    row.textContent = `Peer ${peer.deviceRef}, key ${peer.keyRef}: ${peer.phase}. `;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.textContent = 'Remove trust and exclude peer';
+    remove.addEventListener('click', () => {
+      if (!window.confirm(
+        `Explicitly remove peer ${peer.deviceRef} from local trust and this transition? ` +
+          'This device must complete a fresh safety-code approval to regain trust.',
+      )) return;
+      remove.disabled = true;
+      void chrome.runtime.sendMessage({
+        type: 'remove-identity-transition-peer',
+        peerDeviceId: peer.deviceId,
+      }).then((result: { removed?: boolean; error?: string }) => {
+        identityRotationStatus.textContent = result.removed
+          ? 'Peer explicitly removed. Rechecking transition promotion readiness…'
+          : (result.error ?? 'Peer removal failed closed.');
+        return renderIdentityTransitionStatus();
+      }).catch(() => {
+        identityRotationStatus.textContent = 'Peer removal request failed closed.';
+      }).finally(() => { remove.disabled = false; });
+    });
+    row.append(remove);
+    identityTransitionPeers.append(row);
+  }
+}
+
 async function renderApprovedPeerControl(): Promise<void> {
   const credential = await credentialStore.load();
   if (credential === undefined) return;
   try {
     const approved = await trustedPeers.listApproved(credential.workspaceId);
-    if (removeApprovedPeerButton) removeApprovedPeerButton.hidden = approved.length !== 1;
+    const transition = await chrome.runtime.sendMessage({
+      type: 'get-identity-transition-status',
+    }) as IdentityTransitionStatusResponse;
+    if (removeApprovedPeerButton) {
+      removeApprovedPeerButton.hidden = approved.length !== 1 || transition.active === true;
+    }
     for (const peer of approved) {
       peer.deviceId.fill(0);
       peer.keyId.fill(0);

@@ -12,6 +12,7 @@ import { IdentityTransitionAckOutbox } from '../crypto/identity-transition-ack-o
 import { IdentityTransitionCommitOutbox } from '../crypto/identity-transition-commit-outbox';
 import { IdentityTransitionDispatcher } from '../crypto/identity-transition-dispatcher';
 import { IdentityTransitionOutbox } from '../crypto/identity-transition-outbox';
+import { IdentityTransitionPeerRemovalCoordinator } from '../crypto/identity-transition-peer-removal';
 import {
   IdentityTransitionInitiator,
   IdentityTransitionPreconditionError,
@@ -82,6 +83,11 @@ const actionResultAckOutbox = new ActionResultAckOutbox(
 const identityTransitionInitiator = new IdentityTransitionInitiator(
   credentialStore,
   identityStore,
+  trustedPeerStore,
+  localIdentityTransitionStore,
+);
+const identityTransitionPeerRemoval = new IdentityTransitionPeerRemovalCoordinator(
+  credentialStore,
   trustedPeerStore,
   localIdentityTransitionStore,
 );
@@ -224,6 +230,23 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
       void connectTransportWithWatchdog().then(
         () => sendResponse({ started: true }),
         () => sendResponse({ started: false }),
+      );
+      return true;
+
+    case 'get-identity-transition-status':
+      void getIdentityTransitionStatus().then(
+        (status) => sendResponse(status),
+        () => sendResponse({ active: false, error: 'Identity transition status failed closed' }),
+      );
+      return true;
+
+    case 'remove-identity-transition-peer':
+      void removeIdentityTransitionPeer(message).then(
+        (result) => sendResponse(result),
+        (error: unknown) => sendResponse({
+          removed: false,
+          error: error instanceof Error ? error.message : 'Peer removal failed closed',
+        }),
       );
       return true;
 
@@ -412,6 +435,38 @@ async function drainActionResultAcks(): Promise<void> {
   }
 }
 
+async function getIdentityTransitionStatus(): Promise<Record<string, unknown>> {
+  const session = await localIdentityTransitionStore.loadSession(Date.now());
+  if (session === undefined) return { active: false };
+  const peers = await localIdentityTransitionStore.listPeers(Date.now());
+  return {
+    active: true,
+    phase: session.phase,
+    expiresAtUnixMs: session.expiresAtUnixMs,
+    peers: peers.map((peer) => ({
+      deviceId: encodeBase64Url(peer.deviceId),
+      deviceRef: encodeHex(peer.deviceId).slice(0, 12),
+      keyRef: encodeHex(peer.keyId).slice(0, 12),
+      phase: peer.phase,
+    })),
+  };
+}
+
+async function removeIdentityTransitionPeer(
+  message: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  if (typeof message.peerDeviceId !== 'string') throw new Error('Peer device ID is required');
+  const peerDeviceId = decodeBase64Url(message.peerDeviceId, 16);
+  try {
+    const disposition = await identityTransitionPeerRemoval.remove(peerDeviceId);
+    const promotion = await identityPromotionCoordinator.promoteReady();
+    await drainIdentityTransitionCommits();
+    return { removed: true, disposition, promotion };
+  } finally {
+    peerDeviceId.fill(0);
+  }
+}
+
 async function drainIdentityTransitions(): Promise<void> {
   try {
     const result = await identityTransitionOutbox.drainDue();
@@ -579,6 +634,27 @@ function parseHex(value: unknown, bytes: number, name: string): Uint8Array {
 
 function toHex(value: Uint8Array): string {
   return Array.from(value, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function encodeBase64Url(value: Uint8Array): string {
+  let binary = '';
+  for (const byte of value) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function decodeBase64Url(value: string, expectedLength: number): Uint8Array {
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new Error('Peer device ID is not canonical base64url');
+  const padded = value.replace(/-/g, '+').replace(/_/g, '/') +
+    '='.repeat((4 - value.length % 4) % 4);
+  const decoded = Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
+  if (decoded.byteLength !== expectedLength || encodeBase64Url(decoded) !== value) {
+    throw new Error('Peer device ID has wrong length or encoding');
+  }
+  return decoded;
+}
+
+function encodeHex(value: Uint8Array): string {
+  return [...value].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function isMessage(value: unknown): value is Record<string, unknown> & { type: string } {

@@ -26,7 +26,7 @@ export interface LocalIdentityTransitionSession {
   transitionSha256: Uint8Array;
   createdAtUnixMs: number;
   expiresAtUnixMs: number;
-  phase: 'awaiting-acks' | 'promotion-completed' | 'blocked';
+  phase: 'awaiting-acks' | 'recovery-authorized' | 'promotion-completed' | 'blocked';
 }
 
 export interface LocalIdentityTransitionPeerState extends LocalIdentityTransitionPeerSnapshot {
@@ -496,9 +496,11 @@ export class IndexedDbLocalIdentityTransitionStore {
             await requestResult(peers.put({
               ...peer,
               commitAttemptCount: attemptCount,
-              nextCommitAttemptAtUnixMs: attemptCount >= maximumAttempts
-                ? session.expiresAtUnixMs
-                : Math.min(nextAttemptAtUnixMs, session.expiresAtUnixMs),
+              nextCommitAttemptAtUnixMs: session.phase === 'recovery-authorized'
+                ? (attemptCount >= maximumAttempts ? Number.MAX_SAFE_INTEGER : nextAttemptAtUnixMs)
+                : (attemptCount >= maximumAttempts
+                  ? session.expiresAtUnixMs
+                  : Math.min(nextAttemptAtUnixMs, session.expiresAtUnixMs)),
             }));
           }
         }
@@ -524,7 +526,7 @@ export class IndexedDbLocalIdentityTransitionStore {
           session = { ...session, phase: 'blocked' };
           await requestResult(sessions.put(session));
         }
-        if (session.phase === 'awaiting-acks') {
+        if (session.phase === 'awaiting-acks' || session.phase === 'recovery-authorized') {
           const peers = await requestResult<StoredPeer[]>(
             transaction.objectStore(PEER_STORE).getAll(),
           );
@@ -580,6 +582,84 @@ export class IndexedDbLocalIdentityTransitionStore {
   ): Promise<LocalIdentityTransitionPeerState | undefined> {
     const state = await this.loadSessionAndPeer(senderDeviceId, nowUnixMs);
     return state === undefined ? undefined : copyPeer(state.peer);
+  }
+
+  async listPeers(nowUnixMs: number): Promise<LocalIdentityTransitionPeerState[]> {
+    validateTimestamp(nowUnixMs, 'nowUnixMs');
+    const session = await this.loadSession(nowUnixMs);
+    if (session === undefined) return [];
+    const database = await this.openDatabase();
+    let peers: StoredPeer[];
+    try {
+      const transaction = database.transaction(PEER_STORE, 'readonly');
+      const completed = transactionCompleted(transaction);
+      peers = await requestResult<StoredPeer[]>(transaction.objectStore(PEER_STORE).getAll());
+      await completed;
+    } finally {
+      database.close();
+    }
+    const selected = peers.filter((peer) => bytesEqual(peer.transitionId, session.transitionId));
+    for (const peer of selected) {
+      validatePeer(peer);
+      await validateStoredCryptography(session, peer);
+    }
+    selected.sort((left, right) => left.tuple.localeCompare(right.tuple));
+    return selected.map(copyPeer);
+  }
+
+  async removePeerFromSnapshot(
+    peerDeviceId: Uint8Array,
+    peerKeyId: Uint8Array,
+    transitionId: Uint8Array,
+  ): Promise<'removed' | 'already-removed'> {
+    validateIdentifier(peerDeviceId, 'peerDeviceId');
+    validateDigest(peerKeyId, 'peerKeyId');
+    validateIdentifier(transitionId, 'transitionId');
+    const database = await this.openDatabase();
+    let result: 'removed' | 'already-removed' = 'already-removed';
+    try {
+      const transaction = database.transaction([SESSION_STORE, PEER_STORE], 'readwrite');
+      const completed = transactionCompleted(transaction);
+      const sessions = transaction.objectStore(SESSION_STORE);
+      const session = await requestResult<StoredSession | undefined>(sessions.get(SESSION_ID));
+      if (session === undefined || !bytesEqual(session.transitionId, transitionId)) {
+        transaction.abort();
+        await completed.catch(() => undefined);
+        throw new Error('Identity transition peer removal binding does not match');
+      }
+      validateSession(session);
+      if (session.phase === 'promotion-completed') {
+        transaction.abort();
+        await completed.catch(() => undefined);
+        throw new Error('Completed identity transition snapshot cannot be changed');
+      }
+      const peers = transaction.objectStore(PEER_STORE);
+      const tuple = peerTuple(transitionId, peerDeviceId);
+      const peer = await requestResult<StoredPeer | undefined>(peers.get(tuple));
+      if (peer !== undefined) {
+        validatePeer(peer);
+        if (!bytesEqual(peer.keyId, peerKeyId)) {
+          transaction.abort();
+          await completed.catch(() => undefined);
+          throw new Error('Identity transition peer removal key binding does not match');
+        }
+        await requestResult(peers.delete(tuple));
+        result = 'removed';
+      }
+      const remaining = (await requestResult<StoredPeer[]>(peers.getAll()))
+        .filter((candidate) => bytesEqual(candidate.transitionId, transitionId));
+      for (const candidate of remaining) validatePeer(candidate);
+      if (remaining.length === 0 && session.phase !== 'blocked') {
+        await requestResult(sessions.put({ ...session, phase: 'blocked' }));
+      } else if (session.phase === 'blocked' && remaining.length > 0 &&
+          remaining.every((candidate) => candidate.phase === 'commit-queued')) {
+        await requestResult(sessions.put({ ...session, phase: 'recovery-authorized' }));
+      }
+      await completed;
+    } finally {
+      database.close();
+    }
+    return result;
   }
 
   async clear(): Promise<void> {
@@ -667,13 +747,15 @@ function validateSession(value: StoredSession): void {
   if (value.expiresAtUnixMs !== safeAdd(value.createdAtUnixMs, RETENTION_MS)) {
     throw new Error('Stored local identity transition expiry is invalid');
   }
-  if (value.phase !== 'awaiting-acks' &&
+  if (value.phase !== 'awaiting-acks' && value.phase !== 'recovery-authorized' &&
       value.phase !== 'promotion-completed' && value.phase !== 'blocked') {
     throw new Error('Stored local identity transition phase is invalid');
   }
 }
 
-async function validateStoredTransitionCryptography(session: StoredSession): Promise<void> {
+async function validateStoredTransitionCryptography(
+  session: LocalIdentityTransitionSession,
+): Promise<void> {
   const transition = await decodeIdentityKeyLifecyclePayload(session.canonicalTransition);
   if (transition.body.case !== 'identityKeyTransition' ||
       !bytesEqual(await sha256(session.canonicalTransition), session.transitionSha256) ||
@@ -685,7 +767,10 @@ async function validateStoredTransitionCryptography(session: StoredSession): Pro
   }
 }
 
-async function validateStoredCryptography(session: StoredSession, peer: StoredPeer): Promise<void> {
+async function validateStoredCryptography(
+  session: LocalIdentityTransitionSession,
+  peer: LocalIdentityTransitionPeerState,
+): Promise<void> {
   await validateStoredTransitionCryptography(session);
   if (peer.phase !== 'commit-queued') return;
   const canonicalAck = requireBytes(peer.canonicalAck, 'acknowledgement');
