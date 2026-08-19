@@ -28,15 +28,17 @@ export class NotificationPresenter {
   ) {}
 
   async present(receipt: NotificationReceipt): Promise<void> {
+    if (receipt.kind === 'snapshot') {
+      for (const state of receipt.reconciliation.closedStates) {
+        await this.closeProgrammatically(state.chromeNotificationId, 'snapshot-reconciliation');
+      }
+      return;
+    }
+
     const { disposition, state } = receipt.reconciliation;
     if (disposition === 'stale') return;
     if (state.phase === 'removed') {
-      await this.markProgrammatic(state.chromeNotificationId, 'source-notification-removed');
-      const cleared = await this.clear(state.chromeNotificationId);
-      if (!cleared) {
-        // No onClosed event will consume this marker when the notification is already absent.
-        await this.consumeProgrammatic(state.chromeNotificationId);
-      }
+      await this.closeProgrammatically(state.chromeNotificationId, 'source-notification-removed');
       return;
     }
 
@@ -54,6 +56,15 @@ export class NotificationPresenter {
       if (!updated) await this.create(state.chromeNotificationId, options);
     } else {
       await this.create(state.chromeNotificationId, options);
+    }
+  }
+
+  private async closeProgrammatically(notificationId: string, reason: string): Promise<void> {
+    await this.markProgrammatic(notificationId, reason);
+    const cleared = await this.clear(notificationId);
+    if (!cleared) {
+      // No onClosed event will consume this marker when the notification is already absent.
+      await this.consumeProgrammatic(notificationId);
     }
   }
 

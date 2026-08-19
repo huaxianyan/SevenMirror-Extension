@@ -5,6 +5,7 @@ import { encodeEncryptedEnvelopeV1 } from '../protocol/encrypted-envelope';
 import {
   createActionResultPayload,
   createNotificationRemovedPayload,
+  createNotificationSnapshotManifestPayload,
   createNotificationUpsertPayload,
   encodeEncryptedPayloadV1,
 } from '../protocol/encrypted-payload';
@@ -56,7 +57,7 @@ describe('ActionResultDispatcher', () => {
     }
   });
 
-  it('shows, updates and removes an authenticated Android notification without stale resurrection', async () => {
+  it('reconciles authenticated updates, removals and reconnect snapshots without stale resurrection', async () => {
     const fixture = await createFixture();
     const visible = new Map<string, chrome.notifications.NotificationOptions<true>>();
     const programmaticMarkers: string[] = [];
@@ -99,6 +100,18 @@ describe('ActionResultDispatcher', () => {
       if (update.kind === 'notification') await presenter.present(update.receipt);
       expect([...visible.values()][0]?.message).toBe('updated body');
 
+      const activeSnapshot = await fixture.dispatcher.receiveBusiness(toArrayBuffer(await snapshotFrame(
+        fixture.androidIdentity,
+        fixture.androidPublicKey,
+        fixture.chromePublicKey,
+        8n,
+        [{ notificationId: 'synthetic.notification/42', notificationRevision: 8n }],
+        8,
+      )));
+      if (activeSnapshot.kind === 'notification') await presenter.present(activeSnapshot.receipt);
+      expect(visible.size).toBe(1);
+      expect(programmaticMarkers).toHaveLength(0);
+
       const removed = await fixture.dispatcher.receiveBusiness(toArrayBuffer(await notificationFrame(
         fixture.androidIdentity,
         fixture.androidPublicKey,
@@ -106,7 +119,7 @@ describe('ActionResultDispatcher', () => {
         9n,
         undefined,
         true,
-        8,
+        9,
       )));
       if (removed.kind === 'notification') await presenter.present(removed.receipt);
       expect(visible.size).toBe(0);
@@ -119,9 +132,49 @@ describe('ActionResultDispatcher', () => {
         8n,
         'delayed body',
         false,
-        9,
+        10,
       )));
       if (stale.kind === 'notification') await presenter.present(stale.receipt);
+      expect(visible.size).toBe(0);
+
+      const restored = await fixture.dispatcher.receiveBusiness(toArrayBuffer(await notificationFrame(
+        fixture.androidIdentity,
+        fixture.androidPublicKey,
+        fixture.chromePublicKey,
+        10n,
+        'restored body',
+        false,
+        11,
+      )));
+      if (restored.kind === 'notification') await presenter.present(restored.receipt);
+      expect([...visible.values()][0]?.message).toBe('restored body');
+
+      const emptySnapshot = await fixture.dispatcher.receiveBusiness(toArrayBuffer(await snapshotFrame(
+        fixture.androidIdentity,
+        fixture.androidPublicKey,
+        fixture.chromePublicKey,
+        11n,
+        [],
+        12,
+      )));
+      if (emptySnapshot.kind === 'notification') await presenter.present(emptySnapshot.receipt);
+      expect(visible.size).toBe(0);
+      expect(programmaticMarkers).toHaveLength(2);
+
+      const delayedAfterSnapshot = await fixture.dispatcher.receiveBusiness(toArrayBuffer(
+        await notificationFrame(
+          fixture.androidIdentity,
+          fixture.androidPublicKey,
+          fixture.chromePublicKey,
+          10n,
+          'delayed after snapshot',
+          false,
+          13,
+        ),
+      ));
+      if (delayedAfterSnapshot.kind === 'notification') {
+        await presenter.present(delayedAfterSnapshot.receipt);
+      }
       expect(visible.size).toBe(0);
     } finally {
       await fixture.clear();
@@ -259,6 +312,42 @@ async function notificationFrame(
       body,
     });
   const plaintext = encodeEncryptedPayloadV1(payload);
+  const encrypted = await sealWithIdentity(
+    recipientPublicKey,
+    senderIdentity,
+    plaintext,
+    routingHeader,
+  );
+  return encodeEncryptedEnvelopeV1({
+    routingHeader,
+    encapsulatedKey: encrypted.encapsulatedKey,
+    ciphertext: encrypted.ciphertext,
+  });
+}
+
+async function snapshotFrame(
+  senderIdentity: HpkeIdentity,
+  senderPublicKey: Uint8Array,
+  recipientPublicKey: Uint8Array,
+  highWaterRevision: bigint,
+  activeNotifications: Array<{ notificationId: string; notificationRevision: bigint }>,
+  messageByte: number,
+): Promise<Uint8Array> {
+  const routingHeader = encodeRoutingHeaderV1({
+    workspaceId,
+    senderDeviceId: androidDeviceId,
+    recipientDeviceId: chromeDeviceId,
+    senderKeyId: await sha256(senderPublicKey),
+    recipientKeyId: await sha256(recipientPublicKey),
+    messageId: new Uint8Array(16).fill(messageByte),
+    sequence: BigInt(messageByte),
+    createdAtUnixMs: now,
+    expiresAtUnixMs: now + 60_000,
+  });
+  const plaintext = encodeEncryptedPayloadV1(createNotificationSnapshotManifestPayload({
+    highWaterRevision,
+    activeNotifications,
+  }));
   const encrypted = await sealWithIdentity(
     recipientPublicKey,
     senderIdentity,

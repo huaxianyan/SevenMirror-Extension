@@ -7,12 +7,13 @@ import {
 } from './envelope-receiver';
 import type {
   IndexedDbNotificationStateStore,
+  NotificationSnapshotReconciliation,
   NotificationStateReconciliation,
 } from './indexeddb-notification-state-store';
 
-export interface NotificationReceipt {
-  reconciliation: NotificationStateReconciliation;
-}
+export type NotificationReceipt =
+  | { kind: 'item'; reconciliation: NotificationStateReconciliation }
+  | { kind: 'snapshot'; reconciliation: NotificationSnapshotReconciliation };
 
 export class NotificationRejectedError extends Error {
   constructor(readonly code: 'UNEXPECTED_PAYLOAD') {
@@ -31,25 +32,32 @@ export async function receiveNotificationOnce(
 ): Promise<NotificationReceipt> {
   const opened = await authenticateAndOpen(frameBytes, context, nowUnixMs);
   const payload = decodeEncryptedPayloadV1(opened.plaintext);
-  let reconciliation: NotificationStateReconciliation;
+  let receipt: NotificationReceipt;
   switch (payload.body.case) {
     case 'notificationUpsert':
-      reconciliation = await notifications.reconcileUpsert(
+      receipt = { kind: 'item', reconciliation: await notifications.reconcileUpsert(
         opened.header.senderDeviceId,
         payload.body.value,
         opened.plaintext,
-      );
+      ) };
       break;
     case 'notificationRemoved':
-      reconciliation = await notifications.reconcileRemoved(
+      receipt = { kind: 'item', reconciliation: await notifications.reconcileRemoved(
         opened.header.senderDeviceId,
         payload.body.value,
         opened.plaintext,
-      );
+      ) };
+      break;
+    case 'notificationSnapshotManifest':
+      receipt = { kind: 'snapshot', reconciliation: await notifications.reconcileSnapshot(
+        opened.header.senderDeviceId,
+        payload.body.value,
+        opened.plaintext,
+      ) };
       break;
     default:
       throw new NotificationRejectedError('UNEXPECTED_PAYLOAD');
   }
   await consumeReplay(opened.header, replayLedger, nowUnixMs);
-  return { reconciliation };
+  return receipt;
 }
