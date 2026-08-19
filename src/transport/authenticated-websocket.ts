@@ -7,6 +7,7 @@ import {
   encodeTransportHeartbeatRequestV1,
   isTransportHeartbeatResponseV1,
 } from './transport-heartbeat';
+import { FAIL_CLOSED_WEBSOCKET_CODE } from './websocket-close-policy';
 
 export type TransportDiagnosticEvent =
   | 'socket-open'
@@ -55,13 +56,13 @@ export function openAuthenticatedWebSocket(
       socket.send(encodeTransportHeartbeatRequestV1());
     } catch {
       observe('socket-error');
-      socket.close(1008, 'heartbeat send failed');
+      socket.close(FAIL_CLOSED_WEBSOCKET_CODE, 'heartbeat send failed');
       return;
     }
     heartbeatResponseTimeout = setTimeout(() => {
       heartbeatResponseTimeout = undefined;
       observe('socket-error');
-      socket.close(1008, 'heartbeat response timeout');
+      socket.close(FAIL_CLOSED_WEBSOCKET_CODE, 'heartbeat response timeout');
     }, HEARTBEAT_RESPONSE_TIMEOUT_MS);
   };
   socket.addEventListener('message', (event) => {
@@ -71,7 +72,7 @@ export function openAuthenticatedWebSocket(
         if (acknowledgementTimeout !== undefined) clearTimeout(acknowledgementTimeout);
         acknowledgementTimeout = undefined;
         observe('socket-error');
-        socket.close(1008, 'authentication acknowledgement out of order');
+        socket.close(FAIL_CLOSED_WEBSOCKET_CODE, 'authentication acknowledgement out of order');
         return;
       }
       event.stopImmediatePropagation();
@@ -79,7 +80,7 @@ export function openAuthenticatedWebSocket(
         if (acknowledgementTimeout !== undefined) clearTimeout(acknowledgementTimeout);
         acknowledgementTimeout = undefined;
         observe('socket-error');
-        socket.close(1008, 'invalid authentication acknowledgement');
+        socket.close(FAIL_CLOSED_WEBSOCKET_CODE, 'invalid authentication acknowledgement');
         return;
       }
       authenticated = true;
@@ -98,7 +99,7 @@ export function openAuthenticatedWebSocket(
     if (isTransportAuthenticationSuccessV1(event.data)) {
       event.stopImmediatePropagation();
       observe('socket-error');
-      socket.close(1008, 'duplicate authentication acknowledgement');
+      socket.close(FAIL_CLOSED_WEBSOCKET_CODE, 'duplicate authentication acknowledgement');
     }
   });
   socket.addEventListener('open', () => {
@@ -106,7 +107,7 @@ export function openAuthenticatedWebSocket(
     if (socket.url !== relayUrl) {
       observe('socket-error');
       authenticationFrame.fill(0);
-      socket.close(1008, 'relay endpoint changed');
+      socket.close(FAIL_CLOSED_WEBSOCKET_CODE, 'relay endpoint changed');
       return;
     }
     try {
@@ -116,7 +117,7 @@ export function openAuthenticatedWebSocket(
       acknowledgementTimeout = setTimeout(() => {
         if (!authenticated) {
           observe('socket-error');
-          socket.close(1008, 'authentication acknowledgement timeout');
+          socket.close(FAIL_CLOSED_WEBSOCKET_CODE, 'authentication acknowledgement timeout');
         }
       }, 5_000);
     } finally {

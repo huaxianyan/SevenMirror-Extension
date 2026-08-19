@@ -12,6 +12,7 @@ import type {
   StoredTransportCredential,
   TransportCredentialCandidate,
 } from './indexeddb-transport-credential-store';
+import { FAIL_CLOSED_WEBSOCKET_CODE } from './websocket-close-policy';
 
 interface CredentialStore {
   load(): Promise<StoredTransportCredential | undefined>;
@@ -157,7 +158,7 @@ export class TransportRuntime {
     this.terminalGeneration = undefined;
     this.authenticatedGeneration = undefined;
     this.sno1Generation = undefined;
-    this.socket?.close(1008, 'encrypted message processing failed');
+    this.socket?.close(FAIL_CLOSED_WEBSOCKET_CODE, 'encrypted message processing failed');
     this.socket = undefined;
     await this.writeState('offline');
   }
@@ -249,12 +250,12 @@ export class TransportRuntime {
       if (generation !== this.generation || !acceptingFrames) return;
       if (!(event.data instanceof ArrayBuffer)) {
         acceptingFrames = false;
-        socket.close(1008, 'relay messages must be binary');
+        socket.close(FAIL_CLOSED_WEBSOCKET_CODE, 'relay messages must be binary');
         return;
       }
       if (this.onEnvelope === undefined) {
         acceptingFrames = false;
-        socket.close(1008, 'encrypted envelope handler unavailable');
+        socket.close(FAIL_CLOSED_WEBSOCKET_CODE, 'encrypted envelope handler unavailable');
         return;
       }
       const frame = event.data.slice(0);
@@ -264,7 +265,7 @@ export class TransportRuntime {
       }).catch(() => {
         if (generation !== this.generation) return;
         acceptingFrames = false;
-        socket.close(1008, 'encrypted envelope rejected');
+        socket.close(FAIL_CLOSED_WEBSOCKET_CODE, 'encrypted envelope rejected');
       });
     });
     this.socket = socket;
@@ -295,7 +296,7 @@ export class TransportRuntime {
         this.authenticatedGeneration = undefined;
         this.sno1Generation = undefined;
         if (this.socket === socket) this.socket = undefined;
-        socket.close(1008, 'pending credential promotion failed');
+        socket.close(FAIL_CLOSED_WEBSOCKET_CODE, 'pending credential promotion failed');
         await this.writeState('offline');
       }
       return;

@@ -23,6 +23,42 @@ class MemoryReplayLedger implements ReplayLedgerWriter {
 }
 
 describe('IdentityTransitionOutbox', () => {
+  it('keeps a normally configured connection online when no identity transition exists', async () => {
+    const suffix = `${Date.now()}-${Math.random()}`;
+    const identities = new IndexedDbIdentityStore(`transition-outbox-idle-identity-${suffix}`);
+    const credentials = new IndexedDbTransportCredentialStore(`transition-outbox-idle-credential-${suffix}`);
+    const local = new IndexedDbLocalIdentityTransitionStore(`transition-outbox-idle-local-${suffix}`);
+    const peers = new IndexedDbTrustedPeerStore(`transition-outbox-idle-peers-${suffix}`);
+    const sequences = new IndexedDbOutboundSequenceStore(`transition-outbox-idle-sequence-${suffix}`);
+    try {
+      const identity = await identities.loadOrCreate();
+      const publicKey = await serializeIdentityPublicKey(identity);
+      await credentials.saveNew({
+        serverOrigin: 'https://relay.example',
+        workspaceId,
+        deviceId: senderDeviceId,
+        authToken: new Uint8Array(32).fill(9),
+        identityKeyId: await sha256(publicKey),
+      });
+      const result = await new IdentityTransitionOutbox(
+        credentials,
+        identities,
+        local,
+        peers,
+        sequences,
+        () => { throw new Error('idle outbox must not send'); },
+        () => now,
+      ).drainDue();
+      expect(result).toEqual({ acceptedSends: 0, attemptedEntries: 0 });
+    } finally {
+      await sequences.clear();
+      await peers.clear();
+      await local.clear();
+      await credentials.clear();
+      await identities.clear();
+    }
+  });
+
   it('retries exact transition plaintext under fresh envelopes without advancing on send false', async () => {
     const suffix = `${Date.now()}-${Math.random()}`;
     const identities = new IndexedDbIdentityStore(`transition-outbox-identity-${suffix}`);

@@ -66,7 +66,7 @@ describe('TransportRuntime', () => {
     expect(socket.sent).toEqual([new Uint8Array([1, 2, 3])]);
     await runtime.failClosed();
     expect(runtime.sendEnvelope(new Uint8Array([4]))).toBe(false);
-    expect(socket.closeCode).toBe(1008);
+    expect(socket.closeCode).toBe(4008);
     expect(states.at(-1)).toBe('offline');
   });
 
@@ -204,7 +204,7 @@ describe('TransportRuntime', () => {
     await runtime.connect();
     observer?.('authenticated');
     await waitFor(() => socket.closed);
-    expect(socket.closeCode).toBe(1008);
+    expect(socket.closeCode).toBe(4008);
     expect(socket.closeReason).toBe('pending credential promotion failed');
     expect(runtime.hasAuthenticatedConnection()).toBe(false);
     expect(states).toEqual(['connecting', 'offline']);
@@ -444,7 +444,7 @@ describe('TransportRuntime', () => {
     await flushPromises();
     rejectFrame?.(new Error('synthetic rejected envelope'));
     await waitFor(() => socket.closed);
-    expect(socket.closeCode).toBe(1008);
+    expect(socket.closeCode).toBe(4008);
     expect(socket.closeReason).toBe('encrypted envelope rejected');
   });
 

@@ -33,6 +33,11 @@ export class IdentityTransitionOutbox {
       const credential = await this.credentials.load();
       if (credential === undefined) throw new Error('Transport is not configured');
       try {
+        const due = await this.localTransitions.dueTransitions(
+          credential.workspaceId,
+          nowUnixMs,
+        );
+        if (due.length === 0) return { acceptedSends: 0, attemptedEntries: 0 };
         const rotation = await this.identities.loadRotation();
         if (rotation === undefined) throw new Error('Pending E2EE identity is not configured');
         const currentKeyId = await deriveIdentityKeyId(
@@ -44,10 +49,6 @@ export class IdentityTransitionOutbox {
         if (!bytesEqual(currentKeyId, credential.identityKeyId)) {
           throw new Error('Transport credential E2EE identity binding does not match current identity');
         }
-        const due = await this.localTransitions.dueTransitions(
-          credential.workspaceId,
-          nowUnixMs,
-        );
         let acceptedSends = 0;
         let attemptedEntries = 0;
         let nextWakeDelayMs: number | undefined;
