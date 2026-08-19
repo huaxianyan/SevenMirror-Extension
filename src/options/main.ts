@@ -88,7 +88,7 @@ async function render(): Promise<void> {
   const existing = await credentialStore.load();
   if (existing !== undefined) {
     form?.setAttribute('hidden', '');
-    setStatus('This Chrome profile is registered. Connection status is available in the extension popup.');
+    setStatus(message('profileRegistered'));
     reconnectTransportButton?.removeAttribute('hidden');
     rotationSection?.removeAttribute('hidden');
     await renderCredentialRotation();
@@ -157,12 +157,12 @@ rotateIdentityButton?.addEventListener('click', () => {
 
 reconnectTransportButton?.addEventListener('click', () => {
   reconnectTransportButton.disabled = true;
-  setStatus('Restarting authenticated transport…');
+  setStatus(message('reconnectingTransport'));
   void chrome.runtime.sendMessage({ type: 'transport-connect' }).then(
     (response: { started?: boolean }) => setStatus(response.started
-      ? 'Authenticated transport restart requested; check the popup for Online status.'
-      : 'Authenticated transport restart was not accepted.'),
-    () => setStatus('Authenticated transport restart failed.'),
+      ? message('reconnectRequested')
+      : message('reconnectRejected')),
+    () => setStatus(message('reconnectFailed')),
   ).finally(() => { reconnectTransportButton.disabled = false; });
 });
 
@@ -170,7 +170,7 @@ form?.addEventListener('submit', async (event) => {
   event.preventDefault();
   if (!serverInput || !codeInput || !nameInput || !submit) return;
   submit.disabled = true;
-  setStatus('Validating registration…');
+  setStatus(message('validatingRegistration'));
   let originPermission: string | undefined;
   let permissionAlreadyGranted = false;
   let registered = false;
@@ -182,14 +182,14 @@ form?.addEventListener('submit', async (event) => {
       origins: [originPermission],
     });
     if (!permissionGranted) {
-      setStatus('Host access was not granted. Registration was not attempted.');
+      setStatus(message('hostPermissionDenied'));
       return;
     }
 
     const identity = await identityStore.loadOrCreate();
     const publicKey = await serializeIdentityPublicKey(identity);
     const identityKeyId = await deriveIdentityKeyId(publicKey);
-    setStatus('Registering…');
+    setStatus(message('registering'));
     await registerChromeDevice({
       serverOrigin,
       pairingCode: codeInput.value,
@@ -199,13 +199,13 @@ form?.addEventListener('submit', async (event) => {
     }, credentialStore);
     registered = true;
     codeInput.value = '';
-    setStatus('Registered. Starting authenticated connection…');
+    setStatus(message('registeredStartingConnection'));
     const response = await chrome.runtime.sendMessage({ type: 'transport-connect' }) as {
       started?: boolean;
     };
     setStatus(response.started
-      ? 'Registered. Connection authentication has started; check the popup for status.'
-      : 'Registered, but the connection could not start. The credential remains safely stored.');
+      ? message('registeredConnectionStarted')
+      : message('registeredConnectionStored'));
     form.setAttribute('hidden', '');
     reconnectTransportButton?.removeAttribute('hidden');
     rotationSection?.removeAttribute('hidden');
@@ -221,8 +221,8 @@ form?.addEventListener('submit', async (event) => {
       await chrome.permissions.remove({ origins: [originPermission] });
     }
     setStatus(registered
-      ? 'Registered, but the connection could not start. Reopen this page to retry.'
-      : 'Registration failed. Verify the HTTPS server, one-time code, and device name.');
+      ? message('registeredRetry')
+      : message('registrationFailed'));
   } finally {
     codeInput.value = '';
     submit.disabled = false;
@@ -233,7 +233,7 @@ createOfferButton?.addEventListener('click', () => {
   void runPairingOperation(async (local) => {
     const view = await pairingCoordinator.createOffer(local);
     renderPairingView(view);
-    setPairingStatus('Offer persisted. Transfer this payload to the other registered device.');
+    setPairingStatus(message('offerPersisted'));
   });
 });
 
@@ -248,8 +248,8 @@ importPayloadButton?.addEventListener('click', () => {
       : await pairingCoordinator.acceptOffer(payload, local);
     renderPairingView(view);
     setPairingStatus(view.role === 'approver'
-      ? 'Offer accepted. Android/this device created an approval response. Send that response back to the device that created the offer.'
-      : 'Approval response accepted. Both devices must now show the same safety code.');
+      ? message('offerAccepted')
+      : message('approvalAccepted'));
   });
 });
 
@@ -257,8 +257,8 @@ copyPayloadButton?.addEventListener('click', () => {
   const payload = payloadOutput?.value;
   if (!payload) return;
   void navigator.clipboard.writeText(payload)
-    .then(() => setPairingStatus('Pairing payload copied. It contains public identity metadata, not credentials.'))
-    .catch(() => setPairingStatus('Clipboard write failed. Select and copy the payload manually.'));
+    .then(() => setPairingStatus(message('pairingPayloadCopied')))
+    .catch(() => setPairingStatus(message('clipboardWriteFailed')));
 });
 
 safetyConfirmed?.addEventListener('change', () => {
@@ -272,22 +272,22 @@ approvePeerButton?.addEventListener('click', () => {
     await pairingCoordinator.confirmSafetyCode(safetyCode, local);
     renderPairingView(undefined);
     await renderApprovedPeerControl();
-    setPairingStatus('Peer approved locally. The other device must confirm independently.');
+    setPairingStatus(message('peerApprovedLocal'));
   });
 });
 
 removeApprovedPeerButton?.addEventListener('click', () => {
   if (!window.confirm(
-    'Remove the sole approved Android peer? Encrypted action delivery will fail closed until the devices complete safety-code approval again.',
+    message('removeApprovedPeerConfirm'),
   )) return;
   removeApprovedPeerButton.disabled = true;
   void removeSoleApprovedPeer()
     .then(() => {
       removeApprovedPeerButton.hidden = true;
-      setPairingStatus('Approved Android peer removed locally. Re-approval with a complete matching safety code is required.');
+      setPairingStatus(message('approvedPeerRemoved'));
       setSyntheticActionStatus('Exact resend is now expected to fail closed before encryption because the Android peer is not approved.');
     })
-    .catch(() => setPairingStatus('Approved-peer removal failed closed; the existing trust state was not reported as removed.'))
+    .catch(() => setPairingStatus(message('approvedPeerRemovalFailed')))
     .finally(() => { removeApprovedPeerButton.disabled = false; });
 });
 
@@ -298,9 +298,9 @@ cancelPairingButton?.addEventListener('click', () => {
   void pairingCoordinator.cancel()
     .then(() => {
       renderPairingView(undefined);
-      setPairingStatus('Pairing session cancelled. No peer was approved by this action.');
+      setPairingStatus(message('pairingCancelled'));
     })
-    .catch(() => setPairingStatus('Pairing cancellation failed closed. Reopen this page and retry.'))
+    .catch(() => setPairingStatus(message('pairingCancelFailed')))
     .finally(() => {
       pairingBusy = false;
       setPairingButtonsBusy(false);
@@ -417,11 +417,11 @@ async function renderPairing(): Promise<void> {
     const view = await pairingCoordinator.resume(local);
     renderPairingView(view);
     setPairingStatus(view === undefined
-      ? 'No active trust pairing session.'
-      : 'Durable pairing session restored.');
+      ? message('noPairingSession')
+      : message('pairingSessionRestored'));
   } catch {
     renderPairingView(undefined, true);
-    setPairingStatus('Pairing state failed security validation. Cancel it before starting again.');
+    setPairingStatus(message('pairingStateInvalid'));
   }
 }
 
@@ -436,10 +436,10 @@ function renderPairingView(view: TrustPairingView | undefined, failed = false): 
   if (cancelPairingButton) cancelPairingButton.hidden = view === undefined && !failed;
   if (pairingStage) {
     pairingStage.textContent = view === undefined
-      ? 'Step 1 — Create or import an offer'
+      ? message('pairingStepCreate')
       : view.stage === 'offer-created'
-        ? 'Step 2 — Send this offer, then import the approval response'
-        : 'Step 3 — Compare the complete safety code and approve independently';
+        ? message('pairingStepApproval')
+        : message('pairingStepSafetyCode');
   }
 
   const transferablePayload = view?.stage === 'offer-created'
@@ -450,8 +450,8 @@ function renderPairingView(view: TrustPairingView | undefined, failed = false): 
     payloadOutput.value = transferablePayload ?? '';
     if (payloadOutputLabel) {
       payloadOutputLabel.textContent = view?.stage === 'offer-created'
-        ? 'Offer — send this once to the other device'
-        : 'Approval response — send this back to the offer creator';
+        ? message('offerOutputLabel')
+        : message('approvalOutputLabel');
     }
   }
 
@@ -480,10 +480,10 @@ async function runPairingOperation(
       const local = await loadLocalTrustIdentity();
       const restored = await pairingCoordinator.resume(local);
       renderPairingView(restored);
-      setPairingStatus(`${failure} The previous durable session is still active.`);
+      setPairingStatus(message('pairingSessionStillActive', failure));
     } catch {
       renderPairingView(undefined, true);
-      setPairingStatus(`${failure} Pairing state could not be restored; cancel before retrying.`);
+      setPairingStatus(message('pairingStateRestoreFailed', failure));
     }
   } finally {
     pairingBusy = false;
@@ -718,24 +718,27 @@ function setSyntheticActionStatus(message: string, uncertain = false): void {
 }
 
 function pairingFailureMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : '';
-  if (message.includes('expired')) return 'Import rejected: this pairing payload expired. Cancel both sides and create a new offer.';
-  if (message.includes('different workspace')) return 'Import rejected: the devices are registered in different workspaces.';
-  if (message.includes('exact trust offer') || message.includes('does not match this approval')) {
-    return 'Import rejected: this approval response does not belong to the active Chrome offer.';
+  const errorMessage = error instanceof Error ? error.message : '';
+  if (errorMessage.includes('expired')) return message('pairingExpired');
+  if (errorMessage.includes('different workspace')) return message('pairingWorkspaceMismatch');
+  if (errorMessage.includes('exact trust offer') ||
+      errorMessage.includes('does not match this approval')) {
+    return message('pairingApprovalMismatch');
   }
-  if (message.includes('base64url') || message.includes('prefix') || message.includes('magic') ||
-      message.includes('bytes') || message.includes('length')) {
-    return 'Import rejected: the copied pairing payload is incomplete or malformed.';
+  if (errorMessage.includes('base64url') || errorMessage.includes('prefix') ||
+      errorMessage.includes('magic') || errorMessage.includes('bytes') ||
+      errorMessage.includes('length')) {
+    return message('pairingMalformed');
   }
-  if (message.includes('No offer is awaiting') || message.includes('No active trust pairing')) {
-    return 'Import rejected: Chrome no longer has the offer session required by this approval response.';
+  if (errorMessage.includes('No offer is awaiting') ||
+      errorMessage.includes('No active trust pairing')) {
+    return message('pairingOfferMissing');
   }
-  if (message.includes('already exists') || message.includes('Cancel the active')) {
-    return 'Import rejected: another pairing session is active. Cancel it explicitly before importing a new offer.';
+  if (errorMessage.includes('already exists') || errorMessage.includes('Cancel the active')) {
+    return message('pairingSessionConflict');
   }
-  if (message.includes('Safety code')) return 'Approval rejected: the safety code does not match the active transcript.';
-  return 'Pairing failed closed. Verify the payload, expiry, workspace, and active step.';
+  if (errorMessage.includes('Safety code')) return message('pairingSafetyMismatch');
+  return message('pairingFailed');
 }
 
 async function renderCredentialRotation(): Promise<void> {
@@ -770,4 +773,4 @@ function setStatus(message: string): void {
   if (status) status.textContent = message;
 }
 
-void render().catch(() => setStatus('Stored registration state could not be read.'));
+void render().catch(() => setStatus(message('registrationUnreadable')));

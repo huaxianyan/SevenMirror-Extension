@@ -28,6 +28,8 @@ describe('locale catalogs', () => {
       ...readText('../../public/manifest.json').matchAll(/__MSG_([A-Za-z0-9_]+)__/g),
       ...readText('../popup/index.html').matchAll(/data-i18n(?:-placeholder)?="([A-Za-z0-9_]+)"/g),
       ...readText('../options/index.html').matchAll(/data-i18n(?:-placeholder)?="([A-Za-z0-9_]+)"/g),
+      ...readText('../popup/main.ts').matchAll(/message\('([A-Za-z0-9_]+)'/g),
+      ...readText('../options/main.ts').matchAll(/message\('([A-Za-z0-9_]+)'/g),
     ].map((match) => match[1]!);
     expect(referencedKeys.length).toBeGreaterThan(0);
     for (const key of referencedKeys) expect(english[key]).toBeDefined();
