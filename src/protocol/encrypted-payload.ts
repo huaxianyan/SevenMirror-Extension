@@ -6,12 +6,14 @@ import {
   ActionResultStatus,
   EncryptedPayloadSchema,
   NotificationRemovedSchema,
+  NotificationSnapshotManifestSchema,
   NotificationUpsertSchema,
   type ActionInvoke,
   type ActionResult,
   type ActionResultAck,
   type EncryptedPayload,
   type NotificationRemoved,
+  type NotificationSnapshotManifest,
   type NotificationUpsert,
 } from './generated/notification/v1/payload_pb';
 
@@ -22,6 +24,7 @@ export const ENCRYPTED_PAYLOAD_LIMITS = {
   maxNotificationIdBytes: 512,
   maxNotificationTitleBytes: 512,
   maxNotificationBodyBytes: 4_000,
+  maxSnapshotEntries: 200,
   maxReplyTextBytes: 4_000,
   maxResultDetailBytes: 256,
   identifierSize: 16,
@@ -51,6 +54,21 @@ export function createNotificationRemovedPayload(
     body: {
       case: 'notificationRemoved',
       value: create(NotificationRemovedSchema, notification),
+    },
+  });
+}
+
+export function createNotificationSnapshotManifestPayload(
+  manifest: {
+    highWaterRevision: bigint;
+    activeNotifications: Array<{ notificationId: string; notificationRevision: bigint }>;
+  },
+): EncryptedPayload {
+  return create(EncryptedPayloadSchema, {
+    schemaVersion: ENCRYPTED_PAYLOAD_LIMITS.notificationSchemaVersion,
+    body: {
+      case: 'notificationSnapshotManifest',
+      value: create(NotificationSnapshotManifestSchema, manifest),
     },
   });
 }
@@ -136,6 +154,10 @@ export function validateEncryptedPayloadV1(payload: EncryptedPayload): void {
       requireSchema(payload, ENCRYPTED_PAYLOAD_LIMITS.notificationSchemaVersion);
       validateNotificationRemoved(payload.body.value);
       return;
+    case 'notificationSnapshotManifest':
+      requireSchema(payload, ENCRYPTED_PAYLOAD_LIMITS.notificationSchemaVersion);
+      validateNotificationSnapshotManifest(payload.body.value);
+      return;
     default:
       throw new Error('Exactly one supported encrypted payload body is required');
   }
@@ -168,6 +190,43 @@ function validateNotificationRemoved(notification: NotificationRemoved): void {
     throw new Error('Notification removed contains unknown fields');
   }
   validateNotificationBinding(notification.notificationId, notification.notificationRevision);
+}
+
+function validateNotificationSnapshotManifest(manifest: NotificationSnapshotManifest): void {
+  if (manifest.$unknown?.length) {
+    throw new Error('Notification snapshot manifest contains unknown fields');
+  }
+  if (manifest.highWaterRevision < 0n ||
+      manifest.highWaterRevision > ENCRYPTED_PAYLOAD_LIMITS.maxNotificationRevision) {
+    throw new Error('Notification snapshot high-water revision is out of range');
+  }
+  if (manifest.activeNotifications.length > ENCRYPTED_PAYLOAD_LIMITS.maxSnapshotEntries) {
+    throw new Error('Notification snapshot has too many active entries');
+  }
+  let previousId: Uint8Array | undefined;
+  for (const entry of manifest.activeNotifications) {
+    if (entry.$unknown?.length) {
+      throw new Error('Notification snapshot entry contains unknown fields');
+    }
+    validateNotificationBinding(entry.notificationId, entry.notificationRevision);
+    if (entry.notificationRevision > manifest.highWaterRevision) {
+      throw new Error('Notification snapshot entry exceeds high-water revision');
+    }
+    const id = encoder.encode(entry.notificationId);
+    if (previousId !== undefined && compareUnsigned(previousId, id) >= 0) {
+      throw new Error('Notification snapshot entries are not unique and strictly sorted');
+    }
+    previousId = id;
+  }
+}
+
+function compareUnsigned(left: Uint8Array, right: Uint8Array): number {
+  const commonLength = Math.min(left.byteLength, right.byteLength);
+  for (let index = 0; index < commonLength; index += 1) {
+    const difference = left[index] - right[index];
+    if (difference !== 0) return difference;
+  }
+  return left.byteLength - right.byteLength;
 }
 
 function validateNotificationBinding(notificationId: string, revision: bigint): void {

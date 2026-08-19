@@ -21,6 +21,7 @@ message EncryptedPayload {
     IdentityKeyTransitionCommit identity_key_transition_commit = 15;
     NotificationUpsert notification_upsert = 16;
     NotificationRemoved notification_removed = 17;
+    NotificationSnapshotManifest notification_snapshot_manifest = 18;
   }
 }
 
@@ -89,6 +90,19 @@ message NotificationUpsert {
 // NotificationRemoved is authoritative for one notification revision. Chrome
 // retains this revision so a delayed older upsert cannot resurrect the item.
 message NotificationRemoved {
+  string notification_id = 1;
+  uint64 notification_revision = 2;
+}
+
+// NotificationSnapshotManifest declares the complete active notification set
+// at one source-wide revision high-water mark. It carries no notification text;
+// matching upserts are delivered first in independent encrypted envelopes.
+message NotificationSnapshotManifest {
+  uint64 high_water_revision = 1;
+  repeated NotificationSnapshotEntry active_notifications = 2;
+}
+
+message NotificationSnapshotEntry {
   string notification_id = 1;
   uint64 notification_revision = 2;
 }

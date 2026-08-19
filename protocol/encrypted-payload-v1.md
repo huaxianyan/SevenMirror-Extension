@@ -17,7 +17,8 @@ Receivers MUST reject a plaintext unless all of the following hold:
 4. `schema_version` matches the body: version `1` for `action_invoke`,
    `action_result`, or `action_result_ack`; version `2` for the E2EE identity
    lifecycle bodies defined by `e2ee-identity-key-transition-v1.md`; or version
-   `3` for `notification_upsert` and `notification_removed`;
+   `3` for `notification_upsert`, `notification_removed`, and
+   `notification_snapshot_manifest`;
 5. exactly one supported `body` is present;
 6. every message-specific semantic constraint below or in the identity
    lifecycle specification holds; and
@@ -36,12 +37,13 @@ notification_id)`. `sourceDeviceId` comes exclusively from the authenticated
 envelope routing header and is therefore not duplicated inside the encrypted
 payload. Receivers MUST NOT key notifications by `notification_id` alone.
 
-For both notification bodies:
+For the per-item notification bodies and each snapshot entry:
 
 - `notification_id`: valid UTF-8, 1..512 encoded bytes;
 - `notification_revision`: `1..2^63-1`.
 
-A receiver stores the greatest accepted revision for each business key. A body
+Android allocates revisions from one durable, source-wide monotonic counter. A
+receiver stores the greatest accepted revision for each business key. A body
 with a lower revision is stale and cannot change visible state. Repeating the
 same revision and same state is idempotent; assigning different semantics to an
 already accepted revision is invalid application behavior and MUST NOT roll
@@ -63,9 +65,52 @@ tokens, or third-party notification content.
 
 `notification_removed` declares the notification absent at its revision. A
 receiver retains this revision even after closing the visible notification so
-a delayed older `notification_upsert` cannot resurrect it. This per-item state
-rule does not define a relay cursor, delivery acknowledgement, snapshot, or
-offline queue.
+a delayed older `notification_upsert` cannot resurrect it. This per-item state rule does not define a relay cursor, delivery
+acknowledgement, or offline queue.
+
+## `notification_snapshot_manifest`
+
+A snapshot manifest declares the complete active notification set for its
+authenticated Android source at `high_water_revision`. The source device ID is
+again taken only from the authenticated routing header. The manifest contains
+no title, body, action, media, or executable capability.
+
+Constraints:
+
+- `high_water_revision`: `0..2^63-1`; zero is valid only for an empty manifest
+  from a source that has not allocated a notification revision;
+- `active_notifications`: `0..200` entries;
+- every entry contains a valid `notification_id` and a
+  `notification_revision` in `1..high_water_revision`;
+- entries are unique and strictly ascending by the unsigned lexicographic order
+  of their UTF-8 `notification_id` bytes.
+
+The sender captures one internally consistent active set and high-water mark.
+It sends a current `notification_upsert` for each active entry, in the same
+entry order, before sending the manifest in a separate fresh encrypted
+envelope. If transport fails before the manifest is accepted, the sender retries
+the complete sequence after reconnect; the relay does not retain or interpret
+the snapshot.
+
+The receiver durably reconciles one source device atomically:
+
+1. a missing entry or a locally older entry means its preceding upsert was not
+   durably observed, so the manifest fails closed and performs no deletion;
+2. an entry at the same revision must be locally active; a locally newer state
+   wins and is not rolled back;
+3. a locally active item absent from the manifest is converted to a removed
+   tombstone at `high_water_revision` only when its current revision is strictly
+   lower than that high-water mark;
+4. an absent active item already at `high_water_revision` conflicts with the
+   supposedly complete manifest and fails closed;
+5. a manifest below the greatest accepted source snapshot high-water mark is
+   stale; repeating the same high-water mark is valid only with byte-identical
+   canonical manifest content.
+
+Snapshot-derived closes are programmatic reconciliation and MUST NOT emit a
+user-dismiss operation. Snapshot business reconciliation is independent from
+envelope replay tuples. This mechanism is not a relay cursor, per-delivery ACK,
+history queue, or proof that a system notification was visibly presented.
 
 ## `action_invoke`
 

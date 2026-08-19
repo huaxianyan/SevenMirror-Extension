@@ -1,5 +1,5 @@
 {
-  "description": "Canonical EncryptedPayload vectors for actions and synthetic text notifications; all values are public test material only.",
+  "description": "Canonical EncryptedPayload vectors for actions, synthetic text notifications, and active snapshot reconciliation; all values are public test material only.",
   "schemaVersion": 1,
   "messageType": "action.invoke",
   "notificationId": "test.notification/42",
@@ -20,5 +20,17 @@
   "notificationTitle": "Synthetic notification",
   "notificationBody": "Encrypted test notification",
   "notificationUpsertEncodedHex": "08038201520a1973796e7468657469632e6e6f74696669636174696f6e2f343210071a1653796e746865746963206e6f74696669636174696f6e221b456e637279707465642074657374206e6f74696669636174696f6e",
-  "notificationRemovedEncodedHex": "08038a011d0a1973796e7468657469632e6e6f74696669636174696f6e2f34321008"
+  "notificationRemovedEncodedHex": "08038a011d0a1973796e7468657469632e6e6f74696669636174696f6e2f34321008",
+  "notificationSnapshotHighWaterRevision": "9",
+  "notificationSnapshotEntries": [
+    {
+      "notificationId": "synthetic.notification/42",
+      "notificationRevision": "7"
+    },
+    {
+      "notificationId": "synthetic.notification/99",
+      "notificationRevision": "9"
+    }
+  ],
+  "notificationSnapshotManifestEncodedHex": "08039201400809121d0a1973796e7468657469632e6e6f74696669636174696f6e2f34321007121d0a1973796e7468657469632e6e6f74696669636174696f6e2f39391009"
 }

@@ -5,6 +5,7 @@ import {
   createActionResultPayload,
   createActionResultAckPayload,
   createNotificationRemovedPayload,
+  createNotificationSnapshotManifestPayload,
   createNotificationUpsertPayload,
   decodeEncryptedPayloadV1,
   encodeEncryptedPayloadV1,
@@ -69,7 +70,7 @@ describe('Encrypted Payload v1', () => {
     expect(() => encodeEncryptedPayloadV1(payload)).toThrow(/SHA-256/i);
   });
 
-  it('matches the canonical notification upsert and removed vectors', () => {
+  it('matches the canonical notification and snapshot vectors', () => {
     const upsert = createNotificationUpsertPayload({
       notificationId: vector.notificationPayloadId,
       notificationRevision: BigInt(vector.notificationUpsertRevision),
@@ -88,6 +89,53 @@ describe('Encrypted Payload v1', () => {
     const encodedRemoved = encodeEncryptedPayloadV1(removed);
     expect(encodedRemoved).toEqual(fromHex(vector.notificationRemovedEncodedHex));
     expect(decodeEncryptedPayloadV1(encodedRemoved).body.case).toBe('notificationRemoved');
+
+    const manifest = createNotificationSnapshotManifestPayload({
+      highWaterRevision: BigInt(vector.notificationSnapshotHighWaterRevision),
+      activeNotifications: vector.notificationSnapshotEntries.map((entry) => ({
+        notificationId: entry.notificationId,
+        notificationRevision: BigInt(entry.notificationRevision),
+      })),
+    });
+    const encodedManifest = encodeEncryptedPayloadV1(manifest);
+    expect(encodedManifest).toEqual(fromHex(vector.notificationSnapshotManifestEncodedHex));
+    expect(decodeEncryptedPayloadV1(encodedManifest).body.case)
+      .toBe('notificationSnapshotManifest');
+  });
+
+  it('rejects invalid notification snapshot manifests', () => {
+    const validManifest = () => createNotificationSnapshotManifestPayload({
+      highWaterRevision: 9n,
+      activeNotifications: [
+        { notificationId: 'synthetic.notification/42', notificationRevision: 7n },
+        { notificationId: 'synthetic.notification/99', notificationRevision: 9n },
+      ],
+    });
+
+    const aboveHighWater = validManifest();
+    if (aboveHighWater.body.case === 'notificationSnapshotManifest') {
+      aboveHighWater.body.value.highWaterRevision = 6n;
+    }
+    expect(() => encodeEncryptedPayloadV1(aboveHighWater)).toThrow(/high-water/i);
+
+    const duplicate = validManifest();
+    if (duplicate.body.case === 'notificationSnapshotManifest') {
+      duplicate.body.value.activeNotifications[1].notificationId = 'synthetic.notification/42';
+    }
+    expect(() => encodeEncryptedPayloadV1(duplicate)).toThrow(/sorted/i);
+
+    const unsorted = validManifest();
+    if (unsorted.body.case === 'notificationSnapshotManifest') {
+      unsorted.body.value.activeNotifications[0].notificationId = 'synthetic.notification/zz';
+    }
+    expect(() => encodeEncryptedPayloadV1(unsorted)).toThrow(/sorted/i);
+
+    const empty = createNotificationSnapshotManifestPayload({
+      highWaterRevision: 0n,
+      activeNotifications: [],
+    });
+    expect(decodeEncryptedPayloadV1(encodeEncryptedPayloadV1(empty)).body.case)
+      .toBe('notificationSnapshotManifest');
   });
 
   it('rejects invalid notification fields and schema mismatch', () => {
