@@ -51,17 +51,17 @@ export async function clearLifecycleTestNotification(): Promise<boolean> {
   await markProgrammaticClose(id, 'popup-test-clear');
   const cleared = await clearNotification(id);
   if (!cleared) {
-    await consumeProgrammaticMarker(id);
+    await consumeProgrammaticCloseMarker(id);
   }
   return cleared;
 }
 
 export async function handleNotificationClosed(notificationId: string, byUser: boolean): Promise<void> {
-  if (!notificationId.startsWith('spike003:')) {
+  if (!notificationId.startsWith('spike003:') && !notificationId.startsWith('sn1:')) {
     return;
   }
 
-  const marker = await consumeProgrammaticMarker(notificationId);
+  const marker = await consumeProgrammaticCloseMarker(notificationId);
   const decision = decideClose({
     byUser,
     hasProgrammaticMarker: marker !== undefined,
@@ -93,14 +93,14 @@ function clearNotification(notificationId: string): Promise<boolean> {
   });
 }
 
-async function markProgrammaticClose(notificationId: string, reason: string): Promise<void> {
+export async function markProgrammaticClose(notificationId: string, reason: string): Promise<void> {
   const stored = await chrome.storage.local.get(PROGRAMMATIC_MARKERS_KEY);
   const markers = asMarkers(stored[PROGRAMMATIC_MARKERS_KEY]);
   markers[notificationId] = { reason, createdAt: Date.now() };
   await chrome.storage.local.set({ [PROGRAMMATIC_MARKERS_KEY]: markers });
 }
 
-async function consumeProgrammaticMarker(
+export async function consumeProgrammaticCloseMarker(
   notificationId: string,
 ): Promise<ProgrammaticMarker | undefined> {
   const stored = await chrome.storage.local.get(PROGRAMMATIC_MARKERS_KEY);

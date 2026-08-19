@@ -29,6 +29,8 @@ import { IndexedDbPendingActionStore } from '../crypto/indexeddb-pending-action-
 import { IndexedDbReplayLedger } from '../crypto/indexeddb-replay-ledger';
 import { IndexedDbTrustedPeerStore } from '../crypto/indexeddb-trusted-peer-store';
 import { ActionResultDispatcher } from '../crypto/action-result-dispatcher';
+import { IndexedDbNotificationStateStore } from '../crypto/indexeddb-notification-state-store';
+import { NotificationPresenter } from './notification-presenter';
 import { IndexedDbTransportCredentialStore } from '../transport/indexeddb-transport-credential-store';
 import { TransportRuntime } from '../transport/transport-runtime';
 import { isAppOwnedSyntheticInvoke } from './synthetic-ack-hold';
@@ -56,12 +58,16 @@ const identityPromotionCoordinator = new IdentityPromotionCoordinator(
   new IndexedDbIdentityPromotionJournal(),
 );
 const inboundReplayLedger = new IndexedDbReplayLedger('action-results');
+const notificationStateStore = new IndexedDbNotificationStateStore();
+const notificationPresenter = new NotificationPresenter();
 const actionResultDispatcher = new ActionResultDispatcher(
   credentialStore,
   identityStore,
   trustedPeerStore,
   inboundReplayLedger,
   pendingActionStore,
+  Date.now,
+  notificationStateStore,
 );
 let transportRuntime: TransportRuntime;
 const actionInvokeOutbox = new ActionInvokeOutbox(
@@ -121,7 +127,12 @@ const identityTransitionDispatcher = new IdentityTransitionDispatcher(
   localIdentityTransitionStore,
   inboundReplayLedger,
   async (frame) => {
-    await actionResultDispatcher.receive(frame.slice().buffer as ArrayBuffer);
+    const result = await actionResultDispatcher.receiveBusiness(
+      frame.slice().buffer as ArrayBuffer,
+    );
+    if (result.kind === 'notification') {
+      await notificationPresenter.present(result.receipt);
+    }
   },
 );
 transportRuntime = new TransportRuntime(

@@ -289,7 +289,7 @@ async function decodePendingIdentityAck(
   return acknowledgement;
 }
 
-async function authenticateAndOpen(
+export async function authenticateAndOpen(
   frameBytes: Uint8Array,
   context: EnvelopeRecipientContext,
   nowUnixMs: number,
@@ -329,7 +329,7 @@ async function authenticateAndOpen(
   return { header, plaintext };
 }
 
-async function consumeReplay(
+export async function consumeReplay(
   header: RoutingHeaderV1,
   replayLedger: ReplayLedgerWriter,
   nowUnixMs: number,

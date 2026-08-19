@@ -2,10 +2,19 @@ import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
 import { ActionResultStatus } from '../protocol/generated/notification/v1/payload_pb';
 import { encodeEncryptedEnvelopeV1 } from '../protocol/encrypted-envelope';
-import { createActionResultPayload, encodeEncryptedPayloadV1 } from '../protocol/encrypted-payload';
+import {
+  createActionResultPayload,
+  createNotificationRemovedPayload,
+  createNotificationUpsertPayload,
+  encodeEncryptedPayloadV1,
+} from '../protocol/encrypted-payload';
 import { encodeRoutingHeaderV1 } from '../protocol/routing-header';
 import type { StoredTransportCredential } from '../transport/indexeddb-transport-credential-store';
 import { ActionResultDispatchError, ActionResultDispatcher } from './action-result-dispatcher';
+import {
+  NotificationPresenter,
+  type NotificationsApi,
+} from '../background/notification-presenter';
 import {
   generateNonExtractableIdentity,
   sealWithIdentity,
@@ -13,6 +22,7 @@ import {
   type HpkeIdentity,
 } from './auth-hpke';
 import type { ReplayLedgerWriter } from './envelope-receiver';
+import { IndexedDbNotificationStateStore } from './indexeddb-notification-state-store';
 import { IndexedDbPendingActionStore } from './indexeddb-pending-action-store';
 import { IndexedDbTrustedPeerStore } from './indexeddb-trusted-peer-store';
 
@@ -46,6 +56,78 @@ describe('ActionResultDispatcher', () => {
     }
   });
 
+  it('shows, updates and removes an authenticated Android notification without stale resurrection', async () => {
+    const fixture = await createFixture();
+    const visible = new Map<string, chrome.notifications.NotificationOptions<true>>();
+    const programmaticMarkers: string[] = [];
+    const notifications: NotificationsApi = {
+      getAll: (callback) => callback(Object.fromEntries([...visible.keys()].map((key) => [key, true]))),
+      create: (id, options, callback) => { visible.set(id, options); callback?.(id); },
+      update: (id, options, callback) => { visible.set(id, options); callback?.(true); },
+      clear: (id, callback) => callback?.(visible.delete(id)),
+    };
+    const presenter = new NotificationPresenter(
+      notifications,
+      async (id) => { programmaticMarkers.push(id); },
+      async () => undefined,
+      () => 'extension://notification-icon',
+    );
+    try {
+      await fixture.trustedPeers.pinApproved(workspaceId, androidDeviceId, fixture.androidPublicKey);
+      const upsert = await fixture.dispatcher.receiveBusiness(toArrayBuffer(await notificationFrame(
+        fixture.androidIdentity,
+        fixture.androidPublicKey,
+        fixture.chromePublicKey,
+        7n,
+        'first body',
+        false,
+        6,
+      )));
+      expect(upsert.kind).toBe('notification');
+      if (upsert.kind === 'notification') await presenter.present(upsert.receipt);
+      expect([...visible.values()][0]?.message).toBe('first body');
+
+      const update = await fixture.dispatcher.receiveBusiness(toArrayBuffer(await notificationFrame(
+        fixture.androidIdentity,
+        fixture.androidPublicKey,
+        fixture.chromePublicKey,
+        8n,
+        'updated body',
+        false,
+        7,
+      )));
+      if (update.kind === 'notification') await presenter.present(update.receipt);
+      expect([...visible.values()][0]?.message).toBe('updated body');
+
+      const removed = await fixture.dispatcher.receiveBusiness(toArrayBuffer(await notificationFrame(
+        fixture.androidIdentity,
+        fixture.androidPublicKey,
+        fixture.chromePublicKey,
+        9n,
+        undefined,
+        true,
+        8,
+      )));
+      if (removed.kind === 'notification') await presenter.present(removed.receipt);
+      expect(visible.size).toBe(0);
+      expect(programmaticMarkers).toHaveLength(1);
+
+      const stale = await fixture.dispatcher.receiveBusiness(toArrayBuffer(await notificationFrame(
+        fixture.androidIdentity,
+        fixture.androidPublicKey,
+        fixture.chromePublicKey,
+        8n,
+        'delayed body',
+        false,
+        9,
+      )));
+      if (stale.kind === 'notification') await presenter.present(stale.receipt);
+      expect(visible.size).toBe(0);
+    } finally {
+      await fixture.clear();
+    }
+  });
+
   it('rejects an unapproved sender before HPKE, replay, or reconciliation', async () => {
     const fixture = await createFixture();
     try {
@@ -68,6 +150,7 @@ async function createFixture() {
   const chromePublicKey = await serializeIdentityPublicKey(chromeIdentity);
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const pending = new IndexedDbPendingActionStore(`dispatcher-${suffix}`);
+  const notificationState = new IndexedDbNotificationStateStore(`notifications-${suffix}`);
   const trustedPeers = new IndexedDbTrustedPeerStore(`trusted-${suffix}`);
   const replay = new MemoryReplayLedger();
   await pending.register(
@@ -91,9 +174,12 @@ async function createFixture() {
     replay,
     pending,
     () => now,
+    notificationState,
   );
   return {
+    androidIdentity,
     androidPublicKey,
+    chromePublicKey,
     dispatcher,
     frame: await resultFrame(androidIdentity, androidPublicKey, chromePublicKey),
     loadedCredential,
@@ -101,6 +187,7 @@ async function createFixture() {
     replay,
     trustedPeers,
     clear: async () => {
+      await notificationState.clear();
       await pending.clear();
       await trustedPeers.clear();
     },
@@ -127,6 +214,51 @@ async function resultFrame(
     idempotencyKey,
     status: ActionResultStatus.SUCCEEDED,
   }));
+  const encrypted = await sealWithIdentity(
+    recipientPublicKey,
+    senderIdentity,
+    plaintext,
+    routingHeader,
+  );
+  return encodeEncryptedEnvelopeV1({
+    routingHeader,
+    encapsulatedKey: encrypted.encapsulatedKey,
+    ciphertext: encrypted.ciphertext,
+  });
+}
+
+async function notificationFrame(
+  senderIdentity: HpkeIdentity,
+  senderPublicKey: Uint8Array,
+  recipientPublicKey: Uint8Array,
+  revision: bigint,
+  body: string | undefined,
+  removed: boolean,
+  messageByte: number,
+): Promise<Uint8Array> {
+  const routingHeader = encodeRoutingHeaderV1({
+    workspaceId,
+    senderDeviceId: androidDeviceId,
+    recipientDeviceId: chromeDeviceId,
+    senderKeyId: await sha256(senderPublicKey),
+    recipientKeyId: await sha256(recipientPublicKey),
+    messageId: new Uint8Array(16).fill(messageByte),
+    sequence: BigInt(messageByte),
+    createdAtUnixMs: now,
+    expiresAtUnixMs: now + 60_000,
+  });
+  const payload = removed
+    ? createNotificationRemovedPayload({
+      notificationId: 'synthetic.notification/42',
+      notificationRevision: revision,
+    })
+    : createNotificationUpsertPayload({
+      notificationId: 'synthetic.notification/42',
+      notificationRevision: revision,
+      title: 'Synthetic notification',
+      body,
+    });
+  const plaintext = encodeEncryptedPayloadV1(payload);
   const encrypted = await sealWithIdentity(
     recipientPublicKey,
     senderIdentity,
