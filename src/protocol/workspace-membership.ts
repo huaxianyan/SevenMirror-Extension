@@ -102,6 +102,26 @@ export async function verifySignedDeviceCertificate(value: SignedDeviceCertifica
   if (!valid) throw new Error('Device certificate authority signature is invalid');
 }
 
+export async function requireTransportCertificateBinding(
+  encoded: Uint8Array,
+  authorityPublicKey: Uint8Array,
+  binding: { workspaceId: Uint8Array; deviceId: Uint8Array; identityKeyId: Uint8Array },
+  nowUnixMs: bigint,
+): Promise<void> {
+  if (nowUnixMs < 1n || nowUnixMs > LIMITS.maxInteger) throw new Error('Current time is invalid');
+  const signed = decodeSignedDeviceCertificate(encoded);
+  await verifySignedDeviceCertificate(signed, authorityPublicKey);
+  const certificate = signed.certificate!;
+  if (!equal(certificate.workspaceId, binding.workspaceId) || !equal(certificate.deviceId, binding.deviceId) ||
+      !equal(certificate.identityKeyId, binding.identityKeyId) || certificate.deviceType !== DeviceType.CHROME) {
+    throw new Error('Device certificate is not bound to this transport identity');
+  }
+  if (certificate.issuedAtUnixMs > nowUnixMs) throw new Error('Device certificate is not yet valid');
+  if (certificate.expiresAtUnixMs !== 0n && certificate.expiresAtUnixMs <= nowUnixMs) {
+    throw new Error('Device certificate has expired');
+  }
+}
+
 export function decodeSignedWorkspaceRoster(encoded: Uint8Array): SignedWorkspaceRoster {
   return decodeCanonical(SignedWorkspaceRosterSchema, encoded, validateSignedRosterStructure);
 }
