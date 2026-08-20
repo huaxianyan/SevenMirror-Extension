@@ -33,6 +33,7 @@ Load `dist/` as an unpacked extension from `chrome://extensions` after building.
 - Explicit optional-host permission grant during registration
 - Worker-start connection restoration with HPKE identity/transport credential binding verification
 - Provisional vendored protocol assets with SHA-256 verification
+- Extension-origin IndexedDB Workspace Membership store with an immutable authority pin, exact signed local certificate, canonical highest roster bytes/digest, and fail-closed rollback/fork/epoch-gap handling
 
 ## Protocol
 

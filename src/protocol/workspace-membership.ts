@@ -66,6 +66,11 @@ export function decodeSignedDeviceCertificate(encoded: Uint8Array): SignedDevice
   return decodeCanonical(SignedDeviceCertificateSchema, encoded, validateSignedCertificateStructure);
 }
 
+export function encodeSignedDeviceCertificate(value: SignedDeviceCertificate): Uint8Array {
+  validateSignedCertificateStructure(value);
+  return encode(SignedDeviceCertificateSchema, value);
+}
+
 export async function verifySignedDeviceCertificate(value: SignedDeviceCertificate, authorityPublicKey: Uint8Array): Promise<void> {
   validateSignedCertificateStructure(value);
   if (authorityPublicKey.byteLength !== 32) throw new Error('Authority public key must be Ed25519');
