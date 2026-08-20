@@ -18,6 +18,12 @@ async function verify(assetPath, hashPath) {
 
 await verify('./vendor/notification/v1/envelope.proto', './SCHEMA_SHA256');
 await verify('./vendor/notification/v1/payload.proto', './PAYLOAD_SCHEMA_SHA256');
+await verify('./vendor/membership/v1/membership.proto', './MEMBERSHIP_SCHEMA_SHA256');
+await verify('./workspace-membership-v1.md', './MEMBERSHIP_SPEC_SHA256');
+await verify(
+  './test-vectors/workspace-membership-v1.json',
+  './MEMBERSHIP_VECTOR_SHA256',
+);
 await verify('./encrypted-payload-v1.md', './PAYLOAD_SPEC_SHA256');
 await verify(
   './test-vectors/encrypted-payload-v1.json',

@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package notification.mirroring.membership.v1;
+
+option go_package = "github.com/huaxianyan/SyncNotifications-Server/protocol/generated/membership/v1;membershipv1";
+option java_package = "dev.notificationmirroring.protocol.generated.membership.v1";
+option java_multiple_files = true;
+option java_outer_classname = "MembershipProto";
+
+// IdentityPossessionChallenge is Base-HPKE encrypted to the proposed device
+// identity. Returning the embedded secret proves possession of the private key.
+message IdentityPossessionChallenge {
+  uint32 protocol_version = 1;
+  bytes workspace_id = 2;
+  bytes device_id = 3;
+  bytes identity_key_id = 4;
+  bytes challenge_secret = 5;
+  uint64 issued_at_unix_ms = 6;
+  uint64 expires_at_unix_ms = 7;
+}
+
+message PendingIdentityProof {
+  uint32 protocol_version = 1;
+  bytes workspace_id = 2;
+  bytes device_id = 3;
+  bytes identity_key_id = 4;
+  bytes challenge_digest = 5;
+  bytes challenge_secret = 6;
+}
+
+message DeviceCertificate {
+  uint32 protocol_version = 1;
+  bytes workspace_id = 2;
+  bytes device_id = 3;
+  DeviceType device_type = 4;
+  string display_name = 5;
+  repeated DeviceRole roles = 6;
+  bytes identity_public_key = 7;
+  bytes identity_key_id = 8;
+  uint64 issued_at_unix_ms = 9;
+  uint64 expires_at_unix_ms = 10;
+  uint64 membership_epoch = 11;
+}
+
+message SignedDeviceCertificate {
+  DeviceCertificate certificate = 1;
+  bytes certificate_id = 2;
+  bytes authority_signature = 3;
+}
+
+message RevokedCertificate {
+  bytes certificate_id = 1;
+  bytes device_id = 2;
+  uint64 revoked_at_unix_ms = 3;
+}
+
+message WorkspaceRoster {
+  uint32 protocol_version = 1;
+  bytes workspace_id = 2;
+  uint64 roster_epoch = 3;
+  bytes previous_roster_digest = 4;
+  repeated SignedDeviceCertificate active_certificates = 5;
+  repeated RevokedCertificate revocations = 6;
+}
+
+message SignedWorkspaceRoster {
+  WorkspaceRoster roster = 1;
+  bytes roster_digest = 2;
+  bytes authority_signature = 3;
+}
+
+enum DeviceType {
+  DEVICE_TYPE_UNSPECIFIED = 0;
+  DEVICE_TYPE_ANDROID = 1;
+  DEVICE_TYPE_CHROME = 2;
+}
+
+enum DeviceRole {
+  DEVICE_ROLE_UNSPECIFIED = 0;
+  DEVICE_ROLE_SEND_NOTIFICATIONS = 1;
+  DEVICE_ROLE_RECEIVE_NOTIFICATIONS = 2;
+  DEVICE_ROLE_INVOKE_NOTIFICATION_ACTIONS = 3;
+  DEVICE_ROLE_MANAGE_DEVICES = 4;
+}

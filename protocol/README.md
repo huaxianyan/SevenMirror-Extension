@@ -24,7 +24,9 @@ Run `npm run protocol:verify` after updating the schema. Do not edit the vendore
 
 `transport-credential-rotation-v1.md` defines client-generated pending credentials, exact-device-bound administrator authorization, atomic server replacement, and `SNO1`-gated client promotion. `TRANSPORT_CREDENTIAL_ROTATION_SPEC_SHA256` pins the server-owned copy.
 
-`trusted-device-pairing-v1.md` and its vector define the server-independent canonical offer/approval QR transcript and 60-bit safety code required before writing immutable approved-peer pins. `TRUST_PAIRING_SPEC_SHA256` and `TRUST_PAIRING_VECTOR_SHA256` pin these assets. Scanning alone never establishes trust.
+`workspace-membership-v1.md`, `vendor/membership/v1/membership.proto`, and their vector define ADR-005 identity-possession proof, authority-signed device certificates, monotonic signed rosters, roles, and revocation. `MEMBERSHIP_SCHEMA_SHA256`, `MEMBERSHIP_SPEC_SHA256`, and `MEMBERSHIP_VECTOR_SHA256` pin these assets.
+
+`trusted-device-pairing-v1.md` and its vector are frozen provisional 1 × 1 pairing artifacts. They are not the final membership trust source and must not be expanded.
 
 After updating vendored schemas, regenerate committed TypeScript sources with the pinned configuration:
 
