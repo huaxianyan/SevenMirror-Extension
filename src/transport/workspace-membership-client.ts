@@ -9,6 +9,7 @@ import {
   openIdentityPossessionChallenge,
 } from '../protocol/workspace-membership';
 import { normalizeServerOrigin } from './indexeddb-transport-credential-store';
+import type { PendingChromeMembershipStore, StoredPendingChromeMembership } from './indexeddb-pending-membership-store';
 
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_ROSTERS_PER_PAGE = 256;
@@ -39,6 +40,7 @@ export interface ChromeMembershipRefresh {
 export async function beginChromeMembership(
   request: ChromeMembershipRegistration,
   store: IndexedDbWorkspaceMembershipStore,
+  journal: PendingChromeMembershipStore,
   fetcher: typeof fetch = fetch,
 ): Promise<PendingChromeMembership> {
   const serverOrigin = normalizeServerOrigin(request.serverOrigin);
@@ -60,24 +62,24 @@ export async function beginChromeMembership(
     identityKeyId,
   };
   const authority = fromBase64Url(registration.authority_public_key, 32, 'authority_public_key');
+  const challengeEnc = fromBase64Url(registration.challenge_enc, 65, 'challenge_enc');
+  const challengeCiphertext = fromBase64UrlVariable(registration.challenge_ciphertext, 'challenge_ciphertext');
   try {
+    await journal.prepareRegistration(pending, authority, challengeEnc, challengeCiphertext);
     await store.pinAuthority(pending.workspaceId, pending.deviceId, authority);
     const challenge = await openIdentityPossessionChallenge(
       request.identity.privateKey,
       { workspaceId: pending.workspaceId, deviceId: pending.deviceId, identityKeyId },
-      fromBase64Url(registration.challenge_enc, 65, 'challenge_enc'),
-      fromBase64UrlVariable(registration.challenge_ciphertext, 'challenge_ciphertext'),
+      challengeEnc,
+      challengeCiphertext,
     );
     const canonicalChallenge = encodeIdentityPossessionChallenge(challenge);
     const proof = await createPendingIdentityProof(canonicalChallenge);
     try {
-      const proved = parseProofResponse(await postJson(fetcher, serverOrigin, '/v1/membership/prove', 200, {
-        workspace_id: registration.workspace_id,
-        device_id: registration.device_id,
-        auth_token: registration.auth_token,
-        proof: toBase64Url(proof),
-      }));
-      if (proved.state !== 'pending_approval') throw new Error('Membership proof returned an invalid state');
+      await journal.bindProof(pending, proof);
+      await journal.markProofAttempted(pending, proof);
+      await submitChromeProof(pending, proof, fetcher);
+      await journal.markPendingApproval(pending);
     } finally {
       canonicalChallenge.fill(0);
       proof.fill(0);
@@ -86,6 +88,36 @@ export async function beginChromeMembership(
   } catch (error) {
     pending.authToken.fill(0);
     throw error;
+  }
+}
+
+/** Recovers an exact durable proof intent after Worker suspension or an ambiguous response. */
+export async function resumeChromeMembership(
+  journal: PendingChromeMembershipStore,
+  store: IndexedDbWorkspaceMembershipStore,
+  identity: HpkeIdentity,
+  fetcher: typeof fetch = fetch,
+): Promise<ChromeMembershipRefresh> {
+  const pending = await journal.load();
+  if (pending === undefined) throw new Error('Pending membership enrollment is missing');
+  try {
+    await store.pinAuthority(pending.workspaceId, pending.deviceId, pending.authorityPublicKey);
+    const proof = await recoverChromeProof(pending, identity, journal);
+    let refreshed = await refreshChromeMembership(pending, store, fetcher);
+    if (refreshed.serverState === 'pending_proof') {
+      if (pending.phase === 'pending-approval') throw new Error('Membership server rolled back completed identity proof');
+      await journal.markProofAttempted(pending, proof);
+      await submitChromeProof(pending, proof, fetcher);
+      await journal.markPendingApproval(pending);
+      refreshed = await refreshChromeMembership(pending, store, fetcher);
+    } else {
+      await journal.markPendingApproval(pending);
+    }
+    proof.fill(0);
+    return refreshed;
+  } finally {
+    pending.authToken.fill(0);
+    pending.canonicalProof?.fill(0);
   }
 }
 
@@ -151,6 +183,39 @@ export async function refreshChromeMembership(
   }
 }
 
+async function recoverChromeProof(
+  pending: StoredPendingChromeMembership,
+  identity: HpkeIdentity,
+  journal: PendingChromeMembershipStore,
+): Promise<Uint8Array> {
+  const publicKey = await serializeIdentityPublicKey(identity);
+  if (!equalBytes(await deriveIdentityKeyId(publicKey), pending.identityKeyId)) throw new Error('Pending enrollment identity no longer matches');
+  if (pending.canonicalProof) return pending.canonicalProof.slice();
+  const challenge = await openIdentityPossessionChallenge(identity.privateKey, {
+    workspaceId: pending.workspaceId, deviceId: pending.deviceId, identityKeyId: pending.identityKeyId,
+  }, pending.challengeEnc, pending.challengeCiphertext);
+  const canonicalChallenge = encodeIdentityPossessionChallenge(challenge);
+  try {
+    const proof = await createPendingIdentityProof(canonicalChallenge);
+    await journal.bindProof(pending, proof);
+    return proof;
+  } finally { canonicalChallenge.fill(0); }
+}
+
+async function submitChromeProof(
+  pending: PendingChromeMembership,
+  canonicalProof: Uint8Array,
+  fetcher: typeof fetch,
+): Promise<void> {
+  const proved = parseProofResponse(await postJson(fetcher, normalizeServerOrigin(pending.serverOrigin), '/v1/membership/prove', 200, {
+    workspace_id: toBase64Url(pending.workspaceId),
+    device_id: toBase64Url(pending.deviceId),
+    auth_token: toBase64Url(pending.authToken),
+    proof: toBase64Url(canonicalProof),
+  }));
+  if (proved.state !== 'pending_approval') throw new Error('Membership proof returned an invalid state');
+}
+
 type RegistrationResponse = {
   workspace_id: string; device_id: string; auth_token: string; authority_public_key: string;
   challenge_enc: string; challenge_ciphertext: string;
@@ -212,4 +277,5 @@ function validateBytes(value: Uint8Array, size: number, name: string, nonZero: b
 function toBase64Url(value: Uint8Array): string { let binary = ''; for (const byte of value) binary += String.fromCharCode(byte); return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, ''); }
 function fromBase64Url(value: string, size: number, name: string): Uint8Array { const decoded = fromBase64UrlVariable(value, name); if (decoded.byteLength !== size) throw new Error(`${name} must encode ${size} bytes`); return decoded; }
 function fromBase64UrlVariable(value: string, name: string): Uint8Array { if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new Error(`${name} is not base64url`); let binary: string; try { binary = atob(value.replaceAll('-', '+').replaceAll('_', '/') + '='.repeat((4 - value.length % 4) % 4)); } catch { throw new Error(`${name} is not base64url`); } const decoded = Uint8Array.from(binary, (item) => item.charCodeAt(0)); if (toBase64Url(decoded) !== value) throw new Error(`${name} is not canonical base64url`); return decoded; }
+function equalBytes(left: Uint8Array, right: Uint8Array): boolean { return left.byteLength === right.byteLength && left.every((item, index) => item === right[index]); }
 function copyPending(value: PendingChromeMembership): PendingChromeMembership { return { serverOrigin: value.serverOrigin, workspaceId: value.workspaceId.slice(), deviceId: value.deviceId.slice(), authToken: value.authToken.slice(), identityKeyId: value.identityKeyId.slice() }; }
