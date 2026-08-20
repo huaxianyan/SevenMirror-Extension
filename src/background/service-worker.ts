@@ -32,6 +32,9 @@ import { ActionResultDispatcher } from '../crypto/action-result-dispatcher';
 import { IndexedDbNotificationStateStore } from '../crypto/indexeddb-notification-state-store';
 import { NotificationPresenter } from './notification-presenter';
 import { IndexedDbTransportCredentialStore } from '../transport/indexeddb-transport-credential-store';
+import { IndexedDbPendingMembershipStore } from '../transport/indexeddb-pending-membership-store';
+import { IndexedDbWorkspaceMembershipStore } from '../crypto/indexeddb-workspace-membership-store';
+import { recoverPendingMembership } from '../transport/membership-runtime-recovery';
 import { TransportRuntime } from '../transport/transport-runtime';
 import { isAppOwnedSyntheticInvoke } from './synthetic-ack-hold';
 
@@ -47,6 +50,9 @@ const TRANSPORT_AUTH_WATCHDOG_MS = 60_000;
 let syntheticAckHold: { idempotencyKeyHex: string; expiresAtUnixMs: number } | undefined;
 const credentialStore = new IndexedDbTransportCredentialStore();
 const identityStore = new IndexedDbIdentityStore();
+const pendingMembershipStore = new IndexedDbPendingMembershipStore();
+const workspaceMembershipStore = new IndexedDbWorkspaceMembershipStore();
+let membershipRecovery: Promise<void> | undefined;
 const trustedPeerStore = new IndexedDbTrustedPeerStore();
 const pendingActionStore = new IndexedDbPendingActionStore();
 const outboundSequenceStore = new IndexedDbOutboundSequenceStore();
@@ -173,6 +179,7 @@ transportRuntime = new TransportRuntime(
     // No socket may observe a half-completed cross-database identity promotion.
     beforeConnect: async () => {
       await identityPromotionCoordinator.promoteReady();
+      await recoverMembershipBeforeConnect();
     },
   },
 );
@@ -334,6 +341,39 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
       return false;
   }
 });
+
+async function recoverMembershipBeforeConnect(): Promise<void> {
+  if (membershipRecovery !== undefined) return membershipRecovery;
+  membershipRecovery = (async () => {
+    let result: Awaited<ReturnType<typeof recoverPendingMembership>>;
+    try {
+      result = await recoverPendingMembership(
+        pendingMembershipStore,
+        workspaceMembershipStore,
+        credentialStore,
+        identityStore,
+      );
+    } catch (error) {
+      if (error instanceof TypeError) {
+        await chrome.alarms.create(TRANSPORT_RECONNECT_ALARM, {
+          when: Date.now() + TRANSPORT_AUTH_WATCHDOG_MS,
+        });
+      }
+      throw error;
+    }
+    if (result === 'pending') {
+      await chrome.alarms.create(TRANSPORT_RECONNECT_ALARM, {
+        when: Date.now() + TRANSPORT_AUTH_WATCHDOG_MS,
+      });
+      throw new Error('Membership approval is pending');
+    }
+  })();
+  try {
+    await membershipRecovery;
+  } finally {
+    membershipRecovery = undefined;
+  }
+}
 
 async function connectTransportWithWatchdog(): Promise<void> {
   await transportRuntime.connect();
