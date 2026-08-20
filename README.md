@@ -34,6 +34,7 @@ Load `dist/` as an unpacked extension from `chrome://extensions` after building.
 - Worker-start connection restoration with HPKE identity/transport credential binding verification
 - Provisional vendored protocol assets with SHA-256 verification
 - Extension-origin IndexedDB Workspace Membership store with an immutable authority pin, exact signed local certificate, canonical highest roster bytes/digest, and fail-closed rollback/fork/epoch-gap handling
+- Strict provisional ADR-005 register/prove/state HTTP client with real Base HPKE proof generation, bounded no-redirect responses, sequential roster paging, and transport eligibility only after the durable active certificate is present
 
 ## Protocol
 

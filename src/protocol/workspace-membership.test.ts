@@ -2,6 +2,7 @@ import { Aes128Gcm, CipherSuite, DhkemP256HkdfSha256, HkdfSha256 } from '@hpke/c
 import { describe, expect, it } from 'vitest';
 import vector from '../../protocol/test-vectors/workspace-membership-v1.json';
 import {
+  createPendingIdentityProof,
   decodeIdentityPossessionChallenge,
   decodePendingIdentityProof,
   decodeSignedDeviceCertificate,
@@ -22,6 +23,8 @@ describe('Workspace Membership v1', () => {
     const challenge = await openIdentityPossessionChallenge(privateKey, binding, fromHex(vector.possessionHpkeEncapsulatedKeyHex), fromHex(vector.possessionHpkeCiphertextHex));
     expect(challenge).toEqual(decodeIdentityPossessionChallenge(fromHex(vector.challengeEncodedHex)));
     const proof = decodePendingIdentityProof(fromHex(vector.proofEncodedHex));
+    expect(await createPendingIdentityProof(fromHex(vector.challengeEncodedHex)))
+      .toEqual(fromHex(vector.proofEncodedHex));
     expect(encodePendingIdentityProof(proof)).toEqual(fromHex(vector.proofEncodedHex));
     expect(proof.challengeSecret).toEqual(challenge.challengeSecret);
   });

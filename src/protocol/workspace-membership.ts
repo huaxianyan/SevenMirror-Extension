@@ -1,4 +1,4 @@
-import { fromBinary, toBinary, type DescMessage, type MessageShape } from '@bufbuild/protobuf';
+import { create, fromBinary, toBinary, type DescMessage, type MessageShape } from '@bufbuild/protobuf';
 import { Aes128Gcm, CipherSuite, DhkemP256HkdfSha256, HkdfSha256 } from '@hpke/core';
 import {
   DeviceCertificateSchema,
@@ -33,6 +33,11 @@ export function decodeIdentityPossessionChallenge(encoded: Uint8Array): Identity
   return decodeCanonical(IdentityPossessionChallengeSchema, encoded, validateChallenge);
 }
 
+export function encodeIdentityPossessionChallenge(value: IdentityPossessionChallenge): Uint8Array {
+  validateChallenge(value);
+  return encode(IdentityPossessionChallengeSchema, value);
+}
+
 export function encodePendingIdentityProof(proof: PendingIdentityProof): Uint8Array {
   validateProof(proof);
   return encode(PendingIdentityProofSchema, proof);
@@ -40,6 +45,18 @@ export function encodePendingIdentityProof(proof: PendingIdentityProof): Uint8Ar
 
 export function decodePendingIdentityProof(encoded: Uint8Array): PendingIdentityProof {
   return decodeCanonical(PendingIdentityProofSchema, encoded, validateProof);
+}
+
+export async function createPendingIdentityProof(canonicalChallenge: Uint8Array): Promise<Uint8Array> {
+  const challenge = decodeIdentityPossessionChallenge(canonicalChallenge);
+  return encodePendingIdentityProof(create(PendingIdentityProofSchema, {
+    protocolVersion: LIMITS.version,
+    workspaceId: challenge.workspaceId,
+    deviceId: challenge.deviceId,
+    identityKeyId: challenge.identityKeyId,
+    challengeDigest: await domainHash(domains.challengeDigest, canonicalChallenge),
+    challengeSecret: challenge.challengeSecret,
+  }));
 }
 
 export async function openIdentityPossessionChallenge(
