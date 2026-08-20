@@ -10,7 +10,9 @@ import {
   type LocalTrustIdentity,
   type TrustPairingView,
 } from '../crypto/trust-pairing-coordinator';
-import { registerChromeDevice } from '../transport/device-registration-client';
+import { IndexedDbPendingMembershipStore } from '../transport/indexeddb-pending-membership-store';
+import { IndexedDbWorkspaceMembershipStore } from '../crypto/indexeddb-workspace-membership-store';
+import { beginChromeMembership } from '../transport/workspace-membership-client';
 import { rotateChromeTransportCredential } from '../transport/transport-credential-rotation-client';
 import {
   IndexedDbTransportCredentialStore,
@@ -21,6 +23,8 @@ import { localizeDocument, message } from '../shared/i18n';
 
 const identityStore = new IndexedDbIdentityStore();
 const credentialStore = new IndexedDbTransportCredentialStore();
+const pendingMembershipStore = new IndexedDbPendingMembershipStore();
+const workspaceMembershipStore = new IndexedDbWorkspaceMembershipStore();
 const pairingSessions = new IndexedDbTrustPairingSessionStore();
 const trustedPeers = new IndexedDbTrustedPeerStore();
 const pairingCoordinator = new TrustPairingCoordinator(pairingSessions, trustedPeers);
@@ -87,6 +91,7 @@ async function render(): Promise<void> {
   }
   const existing = await credentialStore.load();
   if (existing !== undefined) {
+    existing.authToken.fill(0);
     form?.setAttribute('hidden', '');
     setStatus(message('profileRegistered'));
     reconnectTransportButton?.removeAttribute('hidden');
@@ -99,6 +104,15 @@ async function render(): Promise<void> {
     await renderApprovedPeerControl();
     await renderSyntheticRelayAvailability();
     await restoreSyntheticOperationSelection();
+    return;
+  }
+  const pending = await pendingMembershipStore.load();
+  if (pending !== undefined) {
+    pending.authToken.fill(0);
+    pending.canonicalProof?.fill(0);
+    form?.setAttribute('hidden', '');
+    reconnectTransportButton?.removeAttribute('hidden');
+    setStatus(message('waitingForAdminApproval'));
   }
 }
 
@@ -157,13 +171,23 @@ rotateIdentityButton?.addEventListener('click', () => {
 
 reconnectTransportButton?.addEventListener('click', () => {
   reconnectTransportButton.disabled = true;
-  setStatus(message('reconnectingTransport'));
-  void chrome.runtime.sendMessage({ type: 'transport-connect' }).then(
-    (response: { started?: boolean }) => setStatus(response.started
-      ? message('reconnectRequested')
-      : message('reconnectRejected')),
-    () => setStatus(message('reconnectFailed')),
-  ).finally(() => { reconnectTransportButton.disabled = false; });
+  void (async () => {
+    const pending = await pendingMembershipStore.load();
+    if (pending !== undefined) {
+      pending.authToken.fill(0);
+      pending.canonicalProof?.fill(0);
+      setStatus(message('waitingForAdminApproval'));
+      await chrome.runtime.sendMessage({ type: 'transport-connect' }).catch(() => undefined);
+      await render();
+      return;
+    }
+    setStatus(message('reconnectingTransport'));
+    const response = await chrome.runtime.sendMessage({ type: 'transport-connect' }) as {
+      started?: boolean;
+    };
+    setStatus(response.started ? message('reconnectRequested') : message('reconnectRejected'));
+  })().catch(() => setStatus(message('reconnectFailed')))
+    .finally(() => { reconnectTransportButton.disabled = false; });
 });
 
 form?.addEventListener('submit', async (event) => {
@@ -173,7 +197,6 @@ form?.addEventListener('submit', async (event) => {
   setStatus(message('validatingRegistration'));
   let originPermission: string | undefined;
   let permissionAlreadyGranted = false;
-  let registered = false;
   try {
     const serverOrigin = normalizeServerOrigin(serverInput.value);
     originPermission = `${serverOrigin}/*`;
@@ -186,43 +209,36 @@ form?.addEventListener('submit', async (event) => {
       return;
     }
 
+    if (await credentialStore.load() !== undefined) {
+      throw new Error('This Chrome profile is already registered');
+    }
     const identity = await identityStore.loadOrCreate();
-    const publicKey = await serializeIdentityPublicKey(identity);
-    const identityKeyId = await deriveIdentityKeyId(publicKey);
     setStatus(message('registering'));
-    await registerChromeDevice({
+    await beginChromeMembership({
       serverOrigin,
       pairingCode: codeInput.value,
       deviceName: nameInput.value,
-      e2eePublicKey: publicKey,
-      identityKeyId,
-    }, credentialStore);
-    registered = true;
+      identity,
+    }, workspaceMembershipStore, pendingMembershipStore);
     codeInput.value = '';
-    setStatus(message('registeredStartingConnection'));
-    const response = await chrome.runtime.sendMessage({ type: 'transport-connect' }) as {
-      started?: boolean;
-    };
-    setStatus(response.started
-      ? message('registeredConnectionStarted')
-      : message('registeredConnectionStored'));
+    setStatus(message('waitingForAdminApproval'));
     form.setAttribute('hidden', '');
     reconnectTransportButton?.removeAttribute('hidden');
-    rotationSection?.removeAttribute('hidden');
-    await renderCredentialRotation();
-    identityRotationSection?.removeAttribute('hidden');
-    await renderIdentityTransitionStatus();
-    pairingSection?.removeAttribute('hidden');
-    await renderPairing();
-    await renderApprovedPeerControl();
-    await renderSyntheticRelayAvailability();
+    await chrome.runtime.sendMessage({ type: 'transport-connect' }).catch(() => undefined);
   } catch {
-    if (originPermission !== undefined && !permissionAlreadyGranted && !registered) {
-      await chrome.permissions.remove({ origins: [originPermission] });
+    const pending = await pendingMembershipStore.load().catch(() => undefined);
+    if (pending !== undefined) {
+      pending.authToken.fill(0);
+      pending.canonicalProof?.fill(0);
+      setStatus(message('waitingForAdminApproval'));
+      form.setAttribute('hidden', '');
+      reconnectTransportButton?.removeAttribute('hidden');
+    } else {
+      if (originPermission !== undefined && !permissionAlreadyGranted) {
+        await chrome.permissions.remove({ origins: [originPermission] });
+      }
+      setStatus(message('registrationFailed'));
     }
-    setStatus(registered
-      ? message('registeredRetry')
-      : message('registrationFailed'));
   } finally {
     codeInput.value = '';
     submit.disabled = false;

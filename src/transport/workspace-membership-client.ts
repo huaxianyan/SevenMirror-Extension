@@ -43,6 +43,12 @@ export async function beginChromeMembership(
   journal: PendingChromeMembershipStore,
   fetcher: typeof fetch = fetch,
 ): Promise<PendingChromeMembership> {
+  const existing = await journal.load();
+  if (existing !== undefined) {
+    existing.authToken.fill(0);
+    existing.canonicalProof?.fill(0);
+    throw new Error('A membership enrollment is already pending');
+  }
   const serverOrigin = normalizeServerOrigin(request.serverOrigin);
   validatePairingCode(request.pairingCode);
   validateDeviceName(request.deviceName);
