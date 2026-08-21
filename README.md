@@ -2,7 +2,7 @@
 
 Manifest V3 extension for private, end-to-end encrypted Android notification mirroring. This is one of three independent repositories.
 
-Repository: <https://github.com/huaxianyan/SyncNotifications-Extension>
+Repository: <https://github.com/huaxianyan/SevenMirror-Extension>
 
 > Status: cryptographic, replay, durable action invoke/result reconciliation, code-gated registration, Chrome recoverable credential rotation, textual trusted-device approval, and authenticated WebSocket lifecycle are implemented. Real notification synchronization remains disabled.
 

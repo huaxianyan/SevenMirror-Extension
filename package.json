@@ -6,7 +6,7 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/huaxianyan/SyncNotifications-Extension.git"
+    "url": "git+https://github.com/huaxianyan/SevenMirror-Extension.git"
   },
   "scripts": {
     "build": "tsc --noEmit && vite build",
