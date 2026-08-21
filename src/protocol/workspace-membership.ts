@@ -1,5 +1,6 @@
 import { create, fromBinary, toBinary, type DescMessage, type MessageShape } from '@bufbuild/protobuf';
 import { Aes128Gcm, CipherSuite, DhkemP256HkdfSha256, HkdfSha256 } from '@hpke/core';
+import { ed25519 } from '@noble/curves/ed25519';
 import {
   DeviceCertificateSchema,
   DeviceRole,
@@ -97,8 +98,11 @@ export async function verifySignedDeviceCertificate(value: SignedDeviceCertifica
   const identityKeyId = new Uint8Array(await crypto.subtle.digest('SHA-256', arrayBuffer(value.certificate!.identityPublicKey)));
   if (!equal(identityKeyId, value.certificate!.identityKeyId)) throw new Error('Device identity key ID does not match public key');
   await hpkeSuite.kem.deserializePublicKey(value.certificate!.identityPublicKey);
-  const key = await crypto.subtle.importKey('raw', arrayBuffer(authorityPublicKey), { name: 'Ed25519' }, false, ['verify']);
-  const valid = await crypto.subtle.verify('Ed25519', key, arrayBuffer(value.authoritySignature), arrayBuffer(concat(textEncoder.encode(domains.certificateSignature), certificateBytes)));
+  const valid = await verifyEd25519(
+    authorityPublicKey,
+    value.authoritySignature,
+    concat(textEncoder.encode(domains.certificateSignature), certificateBytes),
+  );
   if (!valid) throw new Error('Device certificate authority signature is invalid');
 }
 
@@ -132,9 +136,46 @@ export async function verifySignedWorkspaceRoster(value: SignedWorkspaceRoster, 
   const rosterBytes = encode(WorkspaceRosterSchema, value.roster!);
   const expectedDigest = await domainHash(domains.rosterDigest, rosterBytes);
   if (!equal(expectedDigest, value.rosterDigest)) throw new Error('Workspace roster digest does not match canonical roster');
-  const key = await crypto.subtle.importKey('raw', arrayBuffer(authorityPublicKey), { name: 'Ed25519' }, false, ['verify']);
-  const valid = await crypto.subtle.verify('Ed25519', key, arrayBuffer(value.authoritySignature), arrayBuffer(concat(textEncoder.encode(domains.rosterSignature), rosterBytes)));
+  const valid = await verifyEd25519(
+    authorityPublicKey,
+    value.authoritySignature,
+    concat(textEncoder.encode(domains.rosterSignature), rosterBytes),
+  );
   if (!valid) throw new Error('Workspace roster authority signature is invalid');
+}
+
+async function verifyEd25519(
+  publicKey: Uint8Array,
+  signature: Uint8Array,
+  message: Uint8Array,
+): Promise<boolean> {
+  try {
+    const key = await crypto.subtle.importKey(
+      'raw',
+      arrayBuffer(publicKey),
+      { name: 'Ed25519' },
+      false,
+      ['verify'],
+    );
+    return await crypto.subtle.verify(
+      'Ed25519',
+      key,
+      arrayBuffer(signature),
+      arrayBuffer(message),
+    );
+  } catch (error) {
+    if (!isUnsupportedAlgorithm(error)) throw error;
+    try {
+      return ed25519.verify(signature, message, publicKey, { zip215: false });
+    } catch {
+      return false;
+    }
+  }
+}
+
+function isUnsupportedAlgorithm(error: unknown): boolean {
+  return typeof error === 'object' && error !== null &&
+    'name' in error && error.name === 'NotSupportedError';
 }
 
 function validateChallenge(value: IdentityPossessionChallenge): void {
