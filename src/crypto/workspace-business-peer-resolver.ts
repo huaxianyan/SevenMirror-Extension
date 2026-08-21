@@ -26,8 +26,23 @@ export interface BusinessSenderResolver {
   ): Promise<BusinessSenderAuthorization | undefined>;
 }
 
-/** Resolves business senders only from the latest authority-verified durable roster. */
-export class WorkspaceBusinessSenderResolver implements BusinessSenderResolver {
+export interface BusinessActionRecipientResolver {
+  resolveActionRecipient(
+    workspaceId: Uint8Array,
+    localDeviceId: Uint8Array,
+    recipientDeviceId: Uint8Array,
+    recipientKeyId: Uint8Array,
+    nowUnixMs: number,
+  ): Promise<Uint8Array | undefined>;
+  listActionRecipients(
+    workspaceId: Uint8Array,
+    localDeviceId: Uint8Array,
+    nowUnixMs: number,
+  ): Promise<Array<{ deviceId: Uint8Array; keyId: Uint8Array }>>;
+}
+
+/** Resolves business peers only from the latest authority-verified durable roster. */
+export class WorkspaceBusinessPeerResolver implements BusinessSenderResolver, BusinessActionRecipientResolver {
   constructor(private readonly memberships: WorkspaceMembershipReader) {}
 
   async resolve(
@@ -52,6 +67,68 @@ export class WorkspaceBusinessSenderResolver implements BusinessSenderResolver {
     if (local?.certificate === undefined || sender?.certificate === undefined) return undefined;
     return authorizeBusinessSender(local.certificate, sender.certificate, nowUnixMs);
   }
+
+  async resolveActionRecipient(
+    workspaceId: Uint8Array,
+    localDeviceId: Uint8Array,
+    recipientDeviceId: Uint8Array,
+    recipientKeyId: Uint8Array,
+    nowUnixMs: number,
+  ): Promise<Uint8Array | undefined> {
+    const recipients = await this.actionRecipients(workspaceId, localDeviceId, nowUnixMs);
+    return recipients.find((candidate) =>
+      equal(candidate.deviceId, recipientDeviceId) && equal(candidate.keyId, recipientKeyId))
+      ?.publicKey.slice();
+  }
+
+  async listActionRecipients(
+    workspaceId: Uint8Array,
+    localDeviceId: Uint8Array,
+    nowUnixMs: number,
+  ): Promise<Array<{ deviceId: Uint8Array; keyId: Uint8Array }>> {
+    return (await this.actionRecipients(workspaceId, localDeviceId, nowUnixMs)).map((recipient) => ({
+      deviceId: recipient.deviceId.slice(),
+      keyId: recipient.keyId.slice(),
+    }));
+  }
+
+  private async actionRecipients(
+    workspaceId: Uint8Array,
+    localDeviceId: Uint8Array,
+    nowUnixMs: number,
+  ): Promise<Array<{ deviceId: Uint8Array; keyId: Uint8Array; publicKey: Uint8Array }>> {
+    if (!Number.isSafeInteger(nowUnixMs) || nowUnixMs < 1) throw new Error('Current time is invalid');
+    const state = await this.memberships.load(workspaceId, localDeviceId);
+    if (state === undefined || !state.localDeviceActive ||
+        state.signedCertificate === undefined || state.signedRoster === undefined) return [];
+    const roster = decodeSignedWorkspaceRoster(state.signedRoster).roster!;
+    const local = roster.activeCertificates.find((candidate) =>
+      equal(candidate.certificate!.deviceId, localDeviceId) &&
+      equal(encodeSignedDeviceCertificate(candidate), state.signedCertificate!))?.certificate;
+    if (local === undefined || local.deviceType !== DeviceType.CHROME ||
+        !local.roles.includes(DeviceRole.INVOKE_NOTIFICATION_ACTIONS) || !current(local, nowUnixMs)) return [];
+    return roster.activeCertificates.flatMap((candidate) => {
+      const certificate = candidate.certificate!;
+      return authorizeBusinessActionRecipient(local, certificate, nowUnixMs)
+        ? [{
+            deviceId: certificate.deviceId.slice(),
+            keyId: certificate.identityKeyId.slice(),
+            publicKey: certificate.identityPublicKey.slice(),
+          }]
+        : [];
+    });
+  }
+}
+
+export function authorizeBusinessActionRecipient(
+  local: DeviceCertificate,
+  recipient: DeviceCertificate,
+  nowUnixMs: number,
+): boolean {
+  return local.deviceType === DeviceType.CHROME &&
+    local.roles.includes(DeviceRole.INVOKE_NOTIFICATION_ACTIONS) && current(local, nowUnixMs) &&
+    recipient.deviceType === DeviceType.ANDROID &&
+    recipient.roles.includes(DeviceRole.SEND_NOTIFICATIONS) && current(recipient, nowUnixMs);
 }
 
 export function authorizeBusinessSender(

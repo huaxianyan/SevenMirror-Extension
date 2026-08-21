@@ -68,7 +68,14 @@ describe('ActionResultAckOutbox', () => {
     const createOutbox = () => new ActionResultAckOutbox(
       { load: async () => copyCredential(credential) },
       { loadExisting: async () => chromeIdentity },
-      peers,
+      {
+        resolveActionRecipient: (
+          resolvedWorkspace: Uint8Array,
+          _localDevice: Uint8Array,
+          recipientDevice: Uint8Array,
+          recipientKey: Uint8Array,
+        ) => peers.findApproved(resolvedWorkspace, recipientDevice, recipientKey),
+      },
       pending,
       sequences,
       (frame) => {

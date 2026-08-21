@@ -49,7 +49,7 @@ describe('ActionInvokeOutbox', () => {
     const outbox = new ActionInvokeOutbox(
       { load: async () => copyCredential(credential) },
       { loadExisting: async () => senderIdentity },
-      peers,
+      actionResolver(peers),
       pending,
       sequences,
       (frame) => { sent.push(frame.slice()); return true; },
@@ -122,7 +122,7 @@ describe('ActionInvokeOutbox', () => {
         duplicatePayload.body.value.idempotencyKey).toEqual(idempotencyKey);
 
       await peers.remove(workspaceId, recipientDeviceId);
-      await expect(outbox.resendExact(idempotencyKey)).rejects.toThrow('not approved');
+      await expect(outbox.resendExact(idempotencyKey)).rejects.toThrow('not authorized');
       now += 2_000;
       expect(await outbox.drainDue()).toEqual({ acceptedSends: 0, attemptedEntries: 0 });
       expect(sent).toHaveLength(3);
@@ -155,7 +155,7 @@ describe('ActionInvokeOutbox', () => {
     const common = [
       { load: async () => copyCredential(credential) },
       { loadExisting: async () => senderIdentity },
-      peers,
+      actionResolver(peers),
       pending,
       sequences,
     ] as const;
@@ -194,6 +194,17 @@ describe('ActionInvokeOutbox', () => {
     }
   });
 });
+
+function actionResolver(peers: IndexedDbTrustedPeerStore) {
+  return {
+    resolveActionRecipient: (
+      workspaceId: Uint8Array,
+      _localDeviceId: Uint8Array,
+      recipientDeviceId: Uint8Array,
+      recipientKeyId: Uint8Array,
+    ) => peers.findApproved(workspaceId, recipientDeviceId, recipientKeyId),
+  };
+}
 
 function copyCredential(value: StoredTransportCredential): StoredTransportCredential {
   return {

@@ -19,11 +19,13 @@ interface IdentityStore {
   loadExisting(): Promise<HpkeIdentity | undefined>;
 }
 
-interface TrustedPeerStore {
-  findApproved(
+interface ActionRecipientResolver {
+  resolveActionRecipient(
     workspaceId: Uint8Array,
-    deviceId: Uint8Array,
-    keyId: Uint8Array,
+    localDeviceId: Uint8Array,
+    recipientDeviceId: Uint8Array,
+    recipientKeyId: Uint8Array,
+    nowUnixMs: number,
   ): Promise<Uint8Array | undefined>;
 }
 
@@ -40,7 +42,7 @@ export class ActionResultAckOutbox {
   constructor(
     private readonly credentialStore: CredentialStore,
     private readonly identityStore: IdentityStore,
-    private readonly trustedPeers: TrustedPeerStore,
+    private readonly recipients: ActionRecipientResolver,
     private readonly pendingActions: IndexedDbPendingActionStore,
     private readonly sequences: IndexedDbOutboundSequenceStore,
     private readonly send: (frame: Uint8Array) => boolean,
@@ -67,10 +69,12 @@ export class ActionResultAckOutbox {
         let attemptedEntries = 0;
         let nextWakeDelayMs: number | undefined;
         for (const entry of due) {
-          const recipientPublicKey = await this.trustedPeers.findApproved(
+          const recipientPublicKey = await this.recipients.resolveActionRecipient(
             credential.workspaceId,
+            credential.deviceId,
             entry.recipientDeviceId,
             entry.recipientKeyId,
+            nowUnixMs,
           );
           if (recipientPublicKey === undefined) continue;
           attemptedEntries += 1;

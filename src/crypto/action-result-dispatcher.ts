@@ -17,7 +17,7 @@ import type { StoredTransportCredential } from '../transport/indexeddb-transport
 import type {
   BusinessSenderAuthorization,
   BusinessSenderResolver,
-} from './workspace-business-sender-resolver';
+} from './workspace-business-peer-resolver';
 
 export interface DispatcherCredentialStore {
   load(): Promise<StoredTransportCredential | undefined>;

@@ -10,9 +10,10 @@ import {
 } from '../protocol/generated/membership/v1/membership_pb';
 import type { WorkspaceMembershipState } from './indexeddb-workspace-membership-store';
 import {
+  authorizeBusinessActionRecipient,
   authorizeBusinessSender,
-  WorkspaceBusinessSenderResolver,
-} from './workspace-business-sender-resolver';
+  WorkspaceBusinessPeerResolver,
+} from './workspace-business-peer-resolver';
 
 const now = 1_800_000_000_000;
 
@@ -34,10 +35,21 @@ it('uses certified sender and local roles to authorize each Chrome business capa
     certificate(DeviceType.ANDROID, [DeviceRole.MANAGE_DEVICES], 5),
     now,
   )).toBeUndefined();
+  expect(authorizeBusinessActionRecipient(invokeOnly, sender, now)).toBe(true);
+  expect(authorizeBusinessActionRecipient(receiveOnly, sender, now)).toBe(false);
+  expect(authorizeBusinessActionRecipient(
+    invokeOnly,
+    certificate(DeviceType.ANDROID, [DeviceRole.MANAGE_DEVICES], 5),
+    now,
+  )).toBe(false);
 });
 
 it('resolves only the exact active sender identity from the durable roster', async () => {
-  const local = signedCertificate(DeviceType.CHROME, [DeviceRole.RECEIVE_NOTIFICATIONS], 3);
+  const local = signedCertificate(
+    DeviceType.CHROME,
+    [DeviceRole.RECEIVE_NOTIFICATIONS, DeviceRole.INVOKE_NOTIFICATION_ACTIONS],
+    3,
+  );
   const sender = signedCertificate(DeviceType.ANDROID, [DeviceRole.SEND_NOTIFICATIONS], 2);
   const signedRoster = toBinary(SignedWorkspaceRosterSchema, create(SignedWorkspaceRosterSchema, {
     roster: create(WorkspaceRosterSchema, {
@@ -61,7 +73,7 @@ it('resolves only the exact active sender identity from the durable roster', asy
     localDeviceActive: true,
   };
   const memberships = { load: async () => state };
-  const resolver = new WorkspaceBusinessSenderResolver(memberships);
+  const resolver = new WorkspaceBusinessPeerResolver(memberships);
 
   await expect(resolver.resolve(
     state.workspaceId,
@@ -71,6 +83,20 @@ it('resolves only the exact active sender identity from the durable roster', asy
     now,
   )).resolves.toMatchObject({ mayReceiveNotifications: true });
   await expect(resolver.resolve(
+    state.workspaceId,
+    state.deviceId,
+    sender.certificate!.deviceId,
+    new Uint8Array(32).fill(6),
+    now,
+  )).resolves.toBeUndefined();
+  await expect(resolver.resolveActionRecipient(
+    state.workspaceId,
+    state.deviceId,
+    sender.certificate!.deviceId,
+    sender.certificate!.identityKeyId,
+    now,
+  )).resolves.toEqual(sender.certificate!.identityPublicKey);
+  await expect(resolver.resolveActionRecipient(
     state.workspaceId,
     state.deviceId,
     sender.certificate!.deviceId,

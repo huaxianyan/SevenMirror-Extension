@@ -25,11 +25,13 @@ interface IdentityStore {
   loadExisting(): Promise<HpkeIdentity | undefined>;
 }
 
-interface TrustedPeerStore {
-  findApproved(
+interface ActionRecipientResolver {
+  resolveActionRecipient(
     workspaceId: Uint8Array,
-    deviceId: Uint8Array,
-    keyId: Uint8Array,
+    localDeviceId: Uint8Array,
+    recipientDeviceId: Uint8Array,
+    recipientKeyId: Uint8Array,
+    nowUnixMs: number,
   ): Promise<Uint8Array | undefined>;
 }
 
@@ -51,7 +53,7 @@ export class ActionInvokeOutbox {
   constructor(
     private readonly credentialStore: CredentialStore,
     private readonly identityStore: IdentityStore,
-    private readonly trustedPeers: TrustedPeerStore,
+    private readonly recipients: ActionRecipientResolver,
     private readonly pendingActions: IndexedDbPendingActionStore,
     private readonly sequences: IndexedDbOutboundSequenceStore,
     private readonly send: (frame: Uint8Array) => boolean,
@@ -104,12 +106,14 @@ export class ActionInvokeOutbox {
       if (credential === undefined) throw new Error('Transport is not configured');
       try {
         const identity = await this.requireBoundIdentity(credential);
-        const recipientPublicKey = await this.trustedPeers.findApproved(
+        const recipientPublicKey = await this.recipients.resolveActionRecipient(
           credential.workspaceId,
+          credential.deviceId,
           entry.recipientDeviceId,
           entry.recipientKeyId,
+          this.now(),
         );
-        if (recipientPublicKey === undefined) throw new Error('Action recipient is not approved');
+        if (recipientPublicKey === undefined) throw new Error('Action recipient is not authorized');
         try {
           const accepted = await this.sendDelivery(
             credential,
@@ -143,10 +147,12 @@ export class ActionInvokeOutbox {
         let attemptedEntries = 0;
         let nextWakeDelayMs: number | undefined;
         for (const entry of due) {
-          const recipientPublicKey = await this.trustedPeers.findApproved(
+          const recipientPublicKey = await this.recipients.resolveActionRecipient(
             credential.workspaceId,
+            credential.deviceId,
             entry.recipientDeviceId,
             entry.recipientKeyId,
+            nowUnixMs,
           );
           if (recipientPublicKey === undefined) continue;
           attemptedEntries += 1;
@@ -191,12 +197,14 @@ export class ActionInvokeOutbox {
       const credential = await this.credentialStore.load();
       if (credential === undefined) throw new Error('Transport is not configured');
       try {
-        const recipientPublicKey = await this.trustedPeers.findApproved(
+        const recipientPublicKey = await this.recipients.resolveActionRecipient(
           credential.workspaceId,
+          credential.deviceId,
           target.deviceId,
           target.keyId,
+          this.now(),
         );
-        if (recipientPublicKey === undefined) throw new Error('Action recipient is not approved');
+        if (recipientPublicKey === undefined) throw new Error('Action recipient is not authorized');
         recipientPublicKey.fill(0);
         const operation = await actionInvokeOperationDigest(request);
         const nowUnixMs = this.now();
@@ -256,12 +264,14 @@ export class ActionInvokeOutbox {
     if (credential === undefined) throw new Error('Transport is not configured');
     try {
       const identity = await this.requireBoundIdentity(credential);
-      const recipientPublicKey = await this.trustedPeers.findApproved(
+      const recipientPublicKey = await this.recipients.resolveActionRecipient(
         credential.workspaceId,
+        credential.deviceId,
         target.deviceId,
         target.keyId,
+        this.now(),
       );
-      if (recipientPublicKey === undefined) throw new Error('Action recipient is not approved');
+      if (recipientPublicKey === undefined) throw new Error('Action recipient is not authorized');
       return { credential, identity, recipientPublicKey };
     } catch (error) {
       credential.authToken.fill(0);

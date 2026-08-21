@@ -42,7 +42,7 @@ import {
   refreshActiveMembership,
 } from '../transport/membership-runtime-recovery';
 import { TransportRuntime } from '../transport/transport-runtime';
-import { WorkspaceBusinessSenderResolver } from '../crypto/workspace-business-sender-resolver';
+import { WorkspaceBusinessPeerResolver } from '../crypto/workspace-business-peer-resolver';
 import { isAppOwnedSyntheticInvoke } from './synthetic-ack-hold';
 
 const CONNECTION_STATE_KEY = 'connectionState';
@@ -60,7 +60,7 @@ const credentialStore = new IndexedDbTransportCredentialStore();
 const identityStore = new IndexedDbIdentityStore();
 const pendingMembershipStore = new IndexedDbPendingMembershipStore();
 const workspaceMembershipStore = new IndexedDbWorkspaceMembershipStore();
-const businessSenderResolver = new WorkspaceBusinessSenderResolver(workspaceMembershipStore);
+const businessPeerResolver = new WorkspaceBusinessPeerResolver(workspaceMembershipStore);
 let membershipRecovery: Promise<void> | undefined;
 const trustedPeerStore = new IndexedDbTrustedPeerStore();
 const pendingActionStore = new IndexedDbPendingActionStore();
@@ -78,7 +78,7 @@ const notificationPresenter = new NotificationPresenter();
 const actionResultDispatcher = new ActionResultDispatcher(
   credentialStore,
   identityStore,
-  businessSenderResolver,
+  businessPeerResolver,
   inboundReplayLedger,
   pendingActionStore,
   Date.now,
@@ -88,7 +88,7 @@ let transportRuntime: TransportRuntime;
 const actionInvokeOutbox = new ActionInvokeOutbox(
   credentialStore,
   identityStore,
-  trustedPeerStore,
+  businessPeerResolver,
   pendingActionStore,
   outboundSequenceStore,
   (frame) => transportRuntime.sendEnvelope(frame),
@@ -96,7 +96,7 @@ const actionInvokeOutbox = new ActionInvokeOutbox(
 const actionResultAckOutbox = new ActionResultAckOutbox(
   credentialStore,
   identityStore,
-  trustedPeerStore,
+  businessPeerResolver,
   pendingActionStore,
   outboundSequenceStore,
   (frame) => transportRuntime.sendEnvelope(frame),
@@ -461,11 +461,15 @@ async function getSyntheticActionTarget(): Promise<{
   const credential = await credentialStore.load();
   if (credential === undefined) return undefined;
   try {
-    const approved = await trustedPeerStore.listApproved(credential.workspaceId);
-    if (approved.length !== 1) return undefined;
+    const recipients = await businessPeerResolver.listActionRecipients(
+      credential.workspaceId,
+      credential.deviceId,
+      Date.now(),
+    );
+    if (recipients.length !== 1) return undefined;
     return {
-      targetDeviceId: toHex(approved[0]!.deviceId),
-      targetKeyId: toHex(approved[0]!.keyId),
+      targetDeviceId: toHex(recipients[0]!.deviceId),
+      targetKeyId: toHex(recipients[0]!.keyId),
     };
   } finally {
     credential.authToken.fill(0);
@@ -509,7 +513,7 @@ async function resendSyntheticAction(message: Record<string, unknown>): Promise<
     }
     return { accepted };
   } catch (error) {
-    if (error instanceof Error && error.message === 'Action recipient is not approved') {
+    if (error instanceof Error && error.message === 'Action recipient is not authorized') {
       return { accepted: false, reason: 'recipient-not-approved' };
     }
     throw error;
