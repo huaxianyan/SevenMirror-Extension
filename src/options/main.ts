@@ -1,15 +1,4 @@
-import {
-  deriveIdentityKeyId,
-  serializeIdentityPublicKey,
-} from '../crypto/auth-hpke';
 import { IndexedDbIdentityStore } from '../crypto/indexeddb-identity-store';
-import { IndexedDbTrustedPeerStore } from '../crypto/indexeddb-trusted-peer-store';
-import { IndexedDbTrustPairingSessionStore } from '../crypto/indexeddb-trust-pairing-session-store';
-import {
-  TrustPairingCoordinator,
-  type LocalTrustIdentity,
-  type TrustPairingView,
-} from '../crypto/trust-pairing-coordinator';
 import { IndexedDbPendingMembershipStore } from '../transport/indexeddb-pending-membership-store';
 import { IndexedDbWorkspaceMembershipStore } from '../crypto/indexeddb-workspace-membership-store';
 import { beginChromeMembership } from '../transport/workspace-membership-client';
@@ -25,9 +14,6 @@ const identityStore = new IndexedDbIdentityStore();
 const credentialStore = new IndexedDbTransportCredentialStore();
 const pendingMembershipStore = new IndexedDbPendingMembershipStore();
 const workspaceMembershipStore = new IndexedDbWorkspaceMembershipStore();
-const pairingSessions = new IndexedDbTrustPairingSessionStore();
-const trustedPeers = new IndexedDbTrustedPeerStore();
-const pairingCoordinator = new TrustPairingCoordinator(pairingSessions, trustedPeers);
 const versionOutput = document.querySelector<HTMLElement>('#extension-version');
 const form = document.querySelector<HTMLFormElement>('#registration-form');
 const serverInput = document.querySelector<HTMLInputElement>('#server-origin');
@@ -41,29 +27,6 @@ const rotationForm = document.querySelector<HTMLFormElement>('#credential-rotati
 const rotationCodeInput = document.querySelector<HTMLInputElement>('#credential-rotation-code');
 const rotateCredentialButton = document.querySelector<HTMLButtonElement>('#rotate-credential');
 const rotationStatus = document.querySelector<HTMLElement>('#credential-rotation-status');
-const identityRotationSection = document.querySelector<HTMLElement>('#identity-rotation');
-const rotateIdentityButton = document.querySelector<HTMLButtonElement>('#rotate-identity');
-const identityRotationStatus = document.querySelector<HTMLElement>('#identity-rotation-status');
-const refreshIdentityTransitionButton = document.querySelector<HTMLButtonElement>(
-  '#refresh-identity-transition',
-);
-const identityTransitionPeers = document.querySelector<HTMLElement>('#identity-transition-peers');
-const pairingSection = document.querySelector<HTMLElement>('#trust-pairing');
-const pairingStage = document.querySelector<HTMLElement>('#trust-pairing-stage');
-const createOfferButton = document.querySelector<HTMLButtonElement>('#create-trust-offer');
-const payloadInput = document.querySelector<HTMLTextAreaElement>('#trust-payload-input');
-const importPayloadButton = document.querySelector<HTMLButtonElement>('#import-trust-payload');
-const pairingOutput = document.querySelector<HTMLElement>('#pairing-output');
-const payloadOutputLabel = document.querySelector<HTMLElement>('#trust-payload-output-label');
-const payloadOutput = document.querySelector<HTMLTextAreaElement>('#trust-payload-output');
-const copyPayloadButton = document.querySelector<HTMLButtonElement>('#copy-trust-payload');
-const safetySection = document.querySelector<HTMLElement>('#safety-confirmation');
-const safetyCodeOutput = document.querySelector<HTMLOutputElement>('#trust-safety-code');
-const safetyConfirmed = document.querySelector<HTMLInputElement>('#trust-code-confirmed');
-const approvePeerButton = document.querySelector<HTMLButtonElement>('#approve-trust-peer');
-const cancelPairingButton = document.querySelector<HTMLButtonElement>('#cancel-trust-pairing');
-const removeApprovedPeerButton = document.querySelector<HTMLButtonElement>('#remove-approved-peer');
-const pairingStatus = document.querySelector<HTMLElement>('#trust-pairing-status');
 const relayTestSection = document.querySelector<HTMLElement>('#synthetic-relay-test');
 const syntheticTargetInput = document.querySelector<HTMLTextAreaElement>('#synthetic-action-target');
 const queueSyntheticActionButton = document.querySelector<HTMLButtonElement>('#queue-synthetic-action');
@@ -74,10 +37,6 @@ const releaseSyntheticResultAckButton = document.querySelector<HTMLButtonElement
 const syntheticActionStatus = document.querySelector<HTMLElement>('#synthetic-action-status');
 let currentSyntheticIdempotencyKey: string | undefined;
 let currentSyntheticResultUncertain = false;
-let currentSafetyCode: string | undefined;
-let currentPairingView: TrustPairingView | undefined;
-let pairingFailed = false;
-let pairingBusy = false;
 const SYNTHETIC_OPERATION_SELECTION_KEY = 'syntheticOperationSelectionV1';
 
 localizeDocument();
@@ -97,11 +56,6 @@ async function render(): Promise<void> {
     reconnectTransportButton?.removeAttribute('hidden');
     rotationSection?.removeAttribute('hidden');
     await renderCredentialRotation();
-    identityRotationSection?.removeAttribute('hidden');
-    await renderIdentityTransitionStatus();
-    pairingSection?.removeAttribute('hidden');
-    await renderPairing();
-    await renderApprovedPeerControl();
     await renderSyntheticRelayAvailability();
     await restoreSyntheticOperationSelection();
     return;
@@ -139,34 +93,6 @@ rotationForm?.addEventListener('submit', (event) => {
   }).finally(() => {
     rotateCredentialButton.disabled = false;
   });
-});
-
-refreshIdentityTransitionButton?.addEventListener('click', () => {
-  void renderIdentityTransitionStatus();
-});
-
-rotateIdentityButton?.addEventListener('click', () => {
-  const confirmed = window.confirm(
-    'Start E2EE identity transition? Every approved peer must acknowledge it. ' +
-      'After the first acknowledgement, the old identity cannot be silently restored.',
-  );
-  if (!confirmed || !rotateIdentityButton) return;
-  rotateIdentityButton.disabled = true;
-  if (identityRotationStatus) {
-    identityRotationStatus.textContent = 'Preparing a durable peer snapshot and pending identity…';
-  }
-  void chrome.runtime.sendMessage({ type: 'start-identity-transition' }).then(
-    (response: { started?: boolean; error?: string }) => {
-      if (identityRotationStatus) {
-        identityRotationStatus.textContent = response.started
-          ? 'Transition started. Exact lifecycle messages retry until every approved peer converges.'
-          : (response.error ?? 'Identity transition failed closed.');
-      }
-    },
-    () => {
-      if (identityRotationStatus) identityRotationStatus.textContent = 'Identity transition request failed.';
-    },
-  ).finally(() => { void renderIdentityTransitionStatus(); });
 });
 
 reconnectTransportButton?.addEventListener('click', () => {
@@ -244,303 +170,6 @@ form?.addEventListener('submit', async (event) => {
     submit.disabled = false;
   }
 });
-
-createOfferButton?.addEventListener('click', () => {
-  void runPairingOperation(async (local) => {
-    const view = await pairingCoordinator.createOffer(local);
-    renderPairingView(view);
-    setPairingStatus(message('offerPersisted'));
-  });
-});
-
-importPayloadButton?.addEventListener('click', () => {
-  const payload = payloadInput?.value ?? '';
-  if (!payload) return;
-  if (payloadInput) payloadInput.value = '';
-  void runPairingOperation(async (local) => {
-    const active = await pairingSessions.load();
-    const view = active?.role === 'offerer' && active.approvalBytes === undefined
-      ? await pairingCoordinator.acceptApproval(payload, local)
-      : await pairingCoordinator.acceptOffer(payload, local);
-    renderPairingView(view);
-    setPairingStatus(view.role === 'approver'
-      ? message('offerAccepted')
-      : message('approvalAccepted'));
-  });
-});
-
-copyPayloadButton?.addEventListener('click', () => {
-  const payload = payloadOutput?.value;
-  if (!payload) return;
-  void navigator.clipboard.writeText(payload)
-    .then(() => setPairingStatus(message('pairingPayloadCopied')))
-    .catch(() => setPairingStatus(message('clipboardWriteFailed')));
-});
-
-safetyConfirmed?.addEventListener('change', () => {
-  if (approvePeerButton) approvePeerButton.disabled = !safetyConfirmed.checked || pairingBusy;
-});
-
-approvePeerButton?.addEventListener('click', () => {
-  const safetyCode = currentSafetyCode;
-  if (!safetyCode || !safetyConfirmed?.checked) return;
-  void runPairingOperation(async (local) => {
-    await pairingCoordinator.confirmSafetyCode(safetyCode, local);
-    renderPairingView(undefined);
-    await renderApprovedPeerControl();
-    setPairingStatus(message('peerApprovedLocal'));
-  });
-});
-
-removeApprovedPeerButton?.addEventListener('click', () => {
-  if (!window.confirm(
-    message('removeApprovedPeerConfirm'),
-  )) return;
-  removeApprovedPeerButton.disabled = true;
-  void removeSoleApprovedPeer()
-    .then(() => {
-      removeApprovedPeerButton.hidden = true;
-      setPairingStatus(message('approvedPeerRemoved'));
-      setSyntheticActionStatus('Exact resend is now expected to fail closed before encryption because the Android peer is not approved.');
-    })
-    .catch(() => setPairingStatus(message('approvedPeerRemovalFailed')))
-    .finally(() => { removeApprovedPeerButton.disabled = false; });
-});
-
-cancelPairingButton?.addEventListener('click', () => {
-  if (pairingBusy) return;
-  pairingBusy = true;
-  setPairingButtonsBusy(true);
-  void pairingCoordinator.cancel()
-    .then(() => {
-      renderPairingView(undefined);
-      setPairingStatus(message('pairingCancelled'));
-    })
-    .catch(() => setPairingStatus(message('pairingCancelFailed')))
-    .finally(() => {
-      pairingBusy = false;
-      setPairingButtonsBusy(false);
-    });
-});
-
-interface IdentityTransitionStatusResponse {
-  active?: boolean;
-  phase?: string;
-  expiresAtUnixMs?: number;
-  error?: string;
-  peers?: Array<{
-    deviceId: string;
-    deviceRef: string;
-    keyRef: string;
-    phase: string;
-  }>;
-}
-
-async function renderIdentityTransitionStatus(): Promise<void> {
-  if (!identityRotationStatus || !identityTransitionPeers) return;
-  const response = await chrome.runtime.sendMessage({
-    type: 'get-identity-transition-status',
-  }) as IdentityTransitionStatusResponse;
-  identityTransitionPeers.replaceChildren();
-  if (!response.active) {
-    rotateIdentityButton?.removeAttribute('disabled');
-    identityRotationStatus.textContent = response.error ?? 'No active E2EE identity transition.';
-    return;
-  }
-  if (rotateIdentityButton) rotateIdentityButton.disabled = true;
-  const expires = response.expiresAtUnixMs === undefined
-    ? 'unknown'
-    : new Date(response.expiresAtUnixMs).toLocaleString();
-  identityRotationStatus.textContent =
-    `Transition phase: ${response.phase ?? 'unknown'}. Original deadline: ${expires}.`;
-  if ((response.peers ?? []).length === 0) {
-    const warning = document.createElement('p');
-    warning.textContent =
-      'No snapshot peers remain. Automatic promotion is forbidden; use explicit lost-device recovery.';
-    identityTransitionPeers.append(warning);
-  }
-  for (const peer of response.peers ?? []) {
-    const row = document.createElement('p');
-    row.textContent = `Peer ${peer.deviceRef}, key ${peer.keyRef}: ${peer.phase}. `;
-    const remove = document.createElement('button');
-    remove.type = 'button';
-    remove.textContent = 'Remove trust and exclude peer';
-    remove.addEventListener('click', () => {
-      if (!window.confirm(
-        `Explicitly remove peer ${peer.deviceRef} from local trust and this transition? ` +
-          'This device must complete a fresh safety-code approval to regain trust.',
-      )) return;
-      remove.disabled = true;
-      void chrome.runtime.sendMessage({
-        type: 'remove-identity-transition-peer',
-        peerDeviceId: peer.deviceId,
-      }).then((result: { removed?: boolean; error?: string }) => {
-        identityRotationStatus.textContent = result.removed
-          ? 'Peer explicitly removed. Rechecking transition promotion readiness…'
-          : (result.error ?? 'Peer removal failed closed.');
-        return renderIdentityTransitionStatus();
-      }).catch(() => {
-        identityRotationStatus.textContent = 'Peer removal request failed closed.';
-      }).finally(() => { remove.disabled = false; });
-    });
-    row.append(remove);
-    identityTransitionPeers.append(row);
-  }
-}
-
-async function renderApprovedPeerControl(): Promise<void> {
-  const credential = await credentialStore.load();
-  if (credential === undefined) return;
-  try {
-    const approved = await trustedPeers.listApproved(credential.workspaceId);
-    const transition = await chrome.runtime.sendMessage({
-      type: 'get-identity-transition-status',
-    }) as IdentityTransitionStatusResponse;
-    if (removeApprovedPeerButton) {
-      removeApprovedPeerButton.hidden = approved.length !== 1 || transition.active === true;
-    }
-    for (const peer of approved) {
-      peer.deviceId.fill(0);
-      peer.keyId.fill(0);
-    }
-  } finally {
-    credential.authToken.fill(0);
-  }
-}
-
-async function removeSoleApprovedPeer(): Promise<void> {
-  const credential = await credentialStore.load();
-  if (credential === undefined) throw new Error('Transport registration is required');
-  try {
-    const approved = await trustedPeers.listApproved(credential.workspaceId);
-    if (approved.length !== 1) throw new Error('Exactly one approved peer is required');
-    try {
-      await trustedPeers.remove(credential.workspaceId, approved[0]!.deviceId);
-    } finally {
-      for (const peer of approved) {
-        peer.deviceId.fill(0);
-        peer.keyId.fill(0);
-      }
-    }
-  } finally {
-    credential.authToken.fill(0);
-  }
-}
-
-async function renderPairing(): Promise<void> {
-  try {
-    const local = await loadLocalTrustIdentity();
-    const view = await pairingCoordinator.resume(local);
-    renderPairingView(view);
-    setPairingStatus(view === undefined
-      ? message('noPairingSession')
-      : message('pairingSessionRestored'));
-  } catch {
-    renderPairingView(undefined, true);
-    setPairingStatus(message('pairingStateInvalid'));
-  }
-}
-
-function renderPairingView(view: TrustPairingView | undefined, failed = false): void {
-  currentPairingView = view;
-  pairingFailed = failed;
-  currentSafetyCode = view?.stage === 'compare-safety-code' ? view.safetyCode : undefined;
-  if (createOfferButton) createOfferButton.hidden = view !== undefined || failed;
-  if (payloadInput) payloadInput.disabled = view?.stage === 'compare-safety-code' || failed;
-  if (importPayloadButton) importPayloadButton.disabled =
-    view?.stage === 'compare-safety-code' || failed || pairingBusy;
-  if (cancelPairingButton) cancelPairingButton.hidden = view === undefined && !failed;
-  if (pairingStage) {
-    pairingStage.textContent = view === undefined
-      ? message('pairingStepCreate')
-      : view.stage === 'offer-created'
-        ? message('pairingStepApproval')
-        : message('pairingStepSafetyCode');
-  }
-
-  const transferablePayload = view?.stage === 'offer-created'
-    ? view.offerQr
-    : view?.approvalQr;
-  if (pairingOutput && payloadOutput) {
-    pairingOutput.hidden = transferablePayload === undefined;
-    payloadOutput.value = transferablePayload ?? '';
-    if (payloadOutputLabel) {
-      payloadOutputLabel.textContent = view?.stage === 'offer-created'
-        ? message('offerOutputLabel')
-        : message('approvalOutputLabel');
-    }
-  }
-
-  if (safetySection && safetyCodeOutput && safetyConfirmed && approvePeerButton) {
-    const comparing = view?.stage === 'compare-safety-code';
-    safetySection.hidden = !comparing;
-    safetyCodeOutput.value = comparing ? view.safetyCode : '';
-    safetyCodeOutput.textContent = comparing ? view.safetyCode : '';
-    safetyConfirmed.checked = false;
-    approvePeerButton.disabled = true;
-  }
-}
-
-async function runPairingOperation(
-  operation: (local: LocalTrustIdentity) => Promise<void>,
-): Promise<void> {
-  if (pairingBusy) return;
-  pairingBusy = true;
-  setPairingButtonsBusy(true);
-  try {
-    const local = await loadLocalTrustIdentity();
-    await operation(local);
-  } catch (error) {
-    const failure = pairingFailureMessage(error);
-    try {
-      const local = await loadLocalTrustIdentity();
-      const restored = await pairingCoordinator.resume(local);
-      renderPairingView(restored);
-      setPairingStatus(message('pairingSessionStillActive', failure));
-    } catch {
-      renderPairingView(undefined, true);
-      setPairingStatus(message('pairingStateRestoreFailed', failure));
-    }
-  } finally {
-    pairingBusy = false;
-    setPairingButtonsBusy(false);
-    if (approvePeerButton && safetyConfirmed) {
-      approvePeerButton.disabled = !safetyConfirmed.checked || currentSafetyCode === undefined;
-    }
-  }
-}
-
-async function loadLocalTrustIdentity(): Promise<LocalTrustIdentity> {
-  const credential = await credentialStore.load();
-  if (credential === undefined) throw new Error('Transport registration is required');
-  try {
-    const identity = await identityStore.loadExisting();
-    if (identity === undefined) throw new Error('HPKE identity is missing');
-    const publicKey = await serializeIdentityPublicKey(identity);
-    const keyId = await deriveIdentityKeyId(publicKey);
-    if (!bytesEqual(keyId, credential.identityKeyId)) {
-      throw new Error('Transport credential and HPKE identity do not match');
-    }
-    return {
-      workspaceId: credential.workspaceId.slice(),
-      deviceId: credential.deviceId.slice(),
-      publicKey,
-    };
-  } finally {
-    credential.authToken.fill(0);
-  }
-}
-
-function setPairingButtonsBusy(busy: boolean): void {
-  if (createOfferButton) createOfferButton.disabled = busy;
-  if (importPayloadButton) importPayloadButton.disabled = busy || pairingFailed ||
-    currentPairingView?.stage === 'compare-safety-code';
-  if (payloadInput) payloadInput.disabled = pairingFailed ||
-    currentPairingView?.stage === 'compare-safety-code';
-  if (cancelPairingButton) cancelPairingButton.disabled = busy;
-  if (copyPayloadButton) copyPayloadButton.disabled = busy;
-  if (approvePeerButton) approvePeerButton.disabled = busy || !safetyConfirmed?.checked;
-}
 
 queueSyntheticActionButton?.addEventListener('click', () => {
   const raw = syntheticTargetInput?.value ?? '';
@@ -733,30 +362,6 @@ function setSyntheticActionStatus(message: string, uncertain = false): void {
   syntheticActionStatus.classList.toggle('uncertain-result', uncertain);
 }
 
-function pairingFailureMessage(error: unknown): string {
-  const errorMessage = error instanceof Error ? error.message : '';
-  if (errorMessage.includes('expired')) return message('pairingExpired');
-  if (errorMessage.includes('different workspace')) return message('pairingWorkspaceMismatch');
-  if (errorMessage.includes('exact trust offer') ||
-      errorMessage.includes('does not match this approval')) {
-    return message('pairingApprovalMismatch');
-  }
-  if (errorMessage.includes('base64url') || errorMessage.includes('prefix') ||
-      errorMessage.includes('magic') || errorMessage.includes('bytes') ||
-      errorMessage.includes('length')) {
-    return message('pairingMalformed');
-  }
-  if (errorMessage.includes('No offer is awaiting') ||
-      errorMessage.includes('No active trust pairing')) {
-    return message('pairingOfferMissing');
-  }
-  if (errorMessage.includes('already exists') || errorMessage.includes('Cancel the active')) {
-    return message('pairingSessionConflict');
-  }
-  if (errorMessage.includes('Safety code')) return message('pairingSafetyMismatch');
-  return message('pairingFailed');
-}
-
 async function renderCredentialRotation(): Promise<void> {
   const rotation = await credentialStore.loadRotation();
   if (rotation === undefined) {
@@ -775,14 +380,6 @@ async function renderCredentialRotation(): Promise<void> {
 
 function setRotationStatus(message: string): void {
   if (rotationStatus) rotationStatus.textContent = message;
-}
-
-function setPairingStatus(message: string): void {
-  if (pairingStatus) pairingStatus.textContent = message;
-}
-
-function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
-  return left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
 }
 
 function setStatus(message: string): void {

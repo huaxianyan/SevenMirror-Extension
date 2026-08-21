@@ -8,26 +8,11 @@ import {
 import { DEFAULT_CONNECTION_STATE } from '../shared/status';
 import { runE2eePersistenceSpike } from './e2ee-spike';
 import { IndexedDbIdentityStore } from '../crypto/indexeddb-identity-store';
-import { IdentityTransitionAckOutbox } from '../crypto/identity-transition-ack-outbox';
-import { IdentityTransitionCommitOutbox } from '../crypto/identity-transition-commit-outbox';
-import { IdentityTransitionDispatcher } from '../crypto/identity-transition-dispatcher';
-import { IdentityTransitionOutbox } from '../crypto/identity-transition-outbox';
-import { IdentityTransitionPeerRemovalCoordinator } from '../crypto/identity-transition-peer-removal';
-import {
-  IdentityTransitionInitiator,
-  IdentityTransitionPreconditionError,
-} from '../crypto/identity-transition-initiator';
-import {
-  IdentityPromotionCoordinator,
-  IndexedDbIdentityPromotionJournal,
-} from '../crypto/identity-promotion-journal';
-import { IndexedDbLocalIdentityTransitionStore } from '../crypto/indexeddb-local-identity-transition-store';
 import { ActionInvokeOutbox } from '../crypto/action-invoke-outbox';
 import { ActionResultAckOutbox } from '../crypto/action-result-ack-outbox';
 import { IndexedDbOutboundSequenceStore } from '../crypto/indexeddb-outbound-sequence-store';
 import { IndexedDbPendingActionStore } from '../crypto/indexeddb-pending-action-store';
 import { IndexedDbReplayLedger } from '../crypto/indexeddb-replay-ledger';
-import { IndexedDbTrustedPeerStore } from '../crypto/indexeddb-trusted-peer-store';
 import { ActionResultDispatcher } from '../crypto/action-result-dispatcher';
 import { IndexedDbNotificationStateStore } from '../crypto/indexeddb-notification-state-store';
 import { NotificationPresenter } from './notification-presenter';
@@ -50,9 +35,6 @@ const TRANSPORT_RECONNECT_ALARM = 'transport-reconnect-v1';
 const MEMBERSHIP_REFRESH_ALARM = 'membership-refresh-v1';
 const ACTION_INVOKE_RETRY_ALARM = 'action-invoke-retry-v1';
 const ACTION_RESULT_ACK_RETRY_ALARM = 'action-result-ack-retry-v1';
-const IDENTITY_TRANSITION_RETRY_ALARM = 'identity-transition-retry-v1';
-const IDENTITY_TRANSITION_ACK_RETRY_ALARM = 'identity-transition-ack-retry-v1';
-const IDENTITY_TRANSITION_COMMIT_RETRY_ALARM = 'identity-transition-commit-retry-v1';
 const SYNTHETIC_ACK_HOLD_MAX_MS = 10 * 60_000;
 const TRANSPORT_AUTH_WATCHDOG_MS = 60_000;
 let syntheticAckHold: { idempotencyKeyHex: string; expiresAtUnixMs: number } | undefined;
@@ -62,16 +44,8 @@ const pendingMembershipStore = new IndexedDbPendingMembershipStore();
 const workspaceMembershipStore = new IndexedDbWorkspaceMembershipStore();
 const businessPeerResolver = new WorkspaceBusinessPeerResolver(workspaceMembershipStore);
 let membershipRecovery: Promise<void> | undefined;
-const trustedPeerStore = new IndexedDbTrustedPeerStore();
 const pendingActionStore = new IndexedDbPendingActionStore();
 const outboundSequenceStore = new IndexedDbOutboundSequenceStore();
-const localIdentityTransitionStore = new IndexedDbLocalIdentityTransitionStore();
-const identityPromotionCoordinator = new IdentityPromotionCoordinator(
-  identityStore,
-  credentialStore,
-  localIdentityTransitionStore,
-  new IndexedDbIdentityPromotionJournal(),
-);
 const inboundReplayLedger = new IndexedDbReplayLedger('action-results');
 const notificationStateStore = new IndexedDbNotificationStateStore();
 const notificationPresenter = new NotificationPresenter();
@@ -101,69 +75,16 @@ const actionResultAckOutbox = new ActionResultAckOutbox(
   outboundSequenceStore,
   (frame) => transportRuntime.sendEnvelope(frame),
 );
-const identityTransitionInitiator = new IdentityTransitionInitiator(
-  credentialStore,
-  identityStore,
-  trustedPeerStore,
-  localIdentityTransitionStore,
-);
-const identityTransitionPeerRemoval = new IdentityTransitionPeerRemovalCoordinator(
-  credentialStore,
-  trustedPeerStore,
-  localIdentityTransitionStore,
-);
-const identityTransitionOutbox = new IdentityTransitionOutbox(
-  credentialStore,
-  identityStore,
-  localIdentityTransitionStore,
-  trustedPeerStore,
-  outboundSequenceStore,
-  (frame) => transportRuntime.sendEnvelope(frame),
-);
-const identityTransitionAckOutbox = new IdentityTransitionAckOutbox(
-  credentialStore,
-  identityStore,
-  trustedPeerStore,
-  outboundSequenceStore,
-  (frame) => transportRuntime.sendEnvelope(frame),
-);
-const identityTransitionCommitOutbox = new IdentityTransitionCommitOutbox(
-  credentialStore,
-  identityStore,
-  localIdentityTransitionStore,
-  trustedPeerStore,
-  outboundSequenceStore,
-  (frame) => transportRuntime.sendEnvelope(frame),
-);
-const identityTransitionDispatcher = new IdentityTransitionDispatcher(
-  credentialStore,
-  identityStore,
-  trustedPeerStore,
-  localIdentityTransitionStore,
-  inboundReplayLedger,
-  async (frame) => {
-    const result = await actionResultDispatcher.receiveBusiness(
-      frame.slice().buffer as ArrayBuffer,
-    );
-    if (result.kind === 'notification') {
-      await notificationPresenter.present(result.receipt);
-    }
-  },
-);
 transportRuntime = new TransportRuntime(
   credentialStore,
   identityStore,
   async (state) => chrome.storage.local.set({ [CONNECTION_STATE_KEY]: state }),
   async (frame) => {
-    const result = await identityTransitionDispatcher.receive(new Uint8Array(frame));
-    if (result === 'peer-transition') {
-      await drainIdentityTransitionAcks();
-    } else if (result === 'local-ack') {
-      await identityPromotionCoordinator.promoteReady();
-      await drainIdentityTransitionCommits();
-    } else if (result === 'business-fallback') {
-      await drainActionResultAcks();
+    const result = await actionResultDispatcher.receiveBusiness(frame);
+    if (result.kind === 'notification') {
+      await notificationPresenter.present(result.receipt);
     }
+    await drainActionResultAcks();
   },
   undefined,
   {
@@ -185,15 +106,8 @@ transportRuntime = new TransportRuntime(
       });
       void drainActionInvokes();
       void drainActionResultAcks();
-      void drainIdentityTransitions();
-      void drainIdentityTransitionAcks();
-      void drainIdentityTransitionCommits();
     },
-    // No socket may observe a half-completed cross-database identity promotion.
-    beforeConnect: async () => {
-      await identityPromotionCoordinator.promoteReady();
-      await recoverMembershipBeforeConnect();
-    },
+    beforeConnect: recoverMembershipBeforeConnect,
     beforeAuthenticate: refreshMembershipBeforeAuthenticate,
   },
 );
@@ -217,12 +131,6 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     void drainActionInvokes();
   } else if (alarm.name === ACTION_RESULT_ACK_RETRY_ALARM) {
     void drainActionResultAcks();
-  } else if (alarm.name === IDENTITY_TRANSITION_RETRY_ALARM) {
-    void drainIdentityTransitions();
-  } else if (alarm.name === IDENTITY_TRANSITION_ACK_RETRY_ALARM) {
-    void drainIdentityTransitionAcks();
-  } else if (alarm.name === IDENTITY_TRANSITION_COMMIT_RETRY_ALARM) {
-    void drainIdentityTransitionCommits();
   }
 });
 
@@ -264,41 +172,6 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
       void connectTransportWithWatchdog().then(
         () => sendResponse({ started: true }),
         () => sendResponse({ started: false }),
-      );
-      return true;
-
-    case 'get-identity-transition-status':
-      void getIdentityTransitionStatus().then(
-        (status) => sendResponse(status),
-        () => sendResponse({ active: false, error: 'Identity transition status failed closed' }),
-      );
-      return true;
-
-    case 'remove-identity-transition-peer':
-      void removeIdentityTransitionPeer(message).then(
-        (result) => sendResponse(result),
-        (error: unknown) => sendResponse({
-          removed: false,
-          error: error instanceof Error ? error.message : 'Peer removal failed closed',
-        }),
-      );
-      return true;
-
-    case 'start-identity-transition':
-      void identityTransitionInitiator.prepare().then(
-        async (session) => {
-          await drainIdentityTransitions();
-          sendResponse({ started: true });
-        },
-        async (error: unknown) => {
-          if (!(error instanceof IdentityTransitionPreconditionError)) {
-            await transportRuntime.failClosed();
-          }
-          sendResponse({
-            started: false,
-            error: error instanceof Error ? error.message : 'Identity transition failed closed',
-          });
-        },
       );
       return true;
 
@@ -549,92 +422,6 @@ async function drainActionResultAcks(): Promise<void> {
   }
 }
 
-async function getIdentityTransitionStatus(): Promise<Record<string, unknown>> {
-  const session = await localIdentityTransitionStore.loadSession(Date.now());
-  if (session === undefined) return { active: false };
-  const peers = await localIdentityTransitionStore.listPeers(Date.now());
-  return {
-    active: true,
-    phase: session.phase,
-    expiresAtUnixMs: session.expiresAtUnixMs,
-    peers: peers.map((peer) => ({
-      deviceId: encodeBase64Url(peer.deviceId),
-      deviceRef: encodeHex(peer.deviceId).slice(0, 12),
-      keyRef: encodeHex(peer.keyId).slice(0, 12),
-      phase: peer.phase,
-    })),
-  };
-}
-
-async function removeIdentityTransitionPeer(
-  message: Record<string, unknown>,
-): Promise<Record<string, unknown>> {
-  if (typeof message.peerDeviceId !== 'string') throw new Error('Peer device ID is required');
-  const peerDeviceId = decodeBase64Url(message.peerDeviceId, 16);
-  try {
-    const disposition = await identityTransitionPeerRemoval.remove(peerDeviceId);
-    const promotion = await identityPromotionCoordinator.promoteReady();
-    await drainIdentityTransitionCommits();
-    return { removed: true, disposition, promotion };
-  } finally {
-    peerDeviceId.fill(0);
-  }
-}
-
-async function drainIdentityTransitions(): Promise<void> {
-  try {
-    const result = await identityTransitionOutbox.drainDue();
-    await scheduleIdentityTransitionRetry(
-      IDENTITY_TRANSITION_RETRY_ALARM,
-      result.nextWakeDelayMs,
-      result.attemptedEntries > result.acceptedSends,
-    );
-  } catch {
-    await transportRuntime.failClosed();
-  }
-}
-
-async function drainIdentityTransitionAcks(): Promise<void> {
-  try {
-    const result = await identityTransitionAckOutbox.drainDue();
-    await scheduleIdentityTransitionRetry(
-      IDENTITY_TRANSITION_ACK_RETRY_ALARM,
-      result.nextWakeDelayMs,
-      result.attemptedEntries > result.acceptedSends,
-    );
-  } catch {
-    await transportRuntime.failClosed();
-  }
-}
-
-async function drainIdentityTransitionCommits(): Promise<void> {
-  try {
-    const result = await identityTransitionCommitOutbox.drainDue();
-    await scheduleIdentityTransitionRetry(
-      IDENTITY_TRANSITION_COMMIT_RETRY_ALARM,
-      result.nextWakeDelayMs,
-      result.attemptedEntries > result.acceptedSends,
-    );
-  } catch {
-    await transportRuntime.failClosed();
-  }
-}
-
-async function scheduleIdentityTransitionRetry(
-  alarmName: string,
-  nextWakeDelayMs: number | undefined,
-  sendRejected: boolean,
-): Promise<void> {
-  const delayMs = nextWakeDelayMs ?? (sendRejected ? 1_000 : undefined);
-  if (delayMs === undefined) {
-    await chrome.alarms.clear(alarmName);
-  } else {
-    await chrome.alarms.create(alarmName, {
-      when: Date.now() + Math.max(1_000, delayMs),
-    });
-  }
-}
-
 async function holdSyntheticResultAck(message: Record<string, unknown>): Promise<boolean> {
   const key = parseHex(message.idempotencyKey, 16, 'idempotencyKey');
   const record = await pendingActionStore.get(key);
@@ -748,27 +535,6 @@ function parseHex(value: unknown, bytes: number, name: string): Uint8Array {
 
 function toHex(value: Uint8Array): string {
   return Array.from(value, (byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-function encodeBase64Url(value: Uint8Array): string {
-  let binary = '';
-  for (const byte of value) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-}
-
-function decodeBase64Url(value: string, expectedLength: number): Uint8Array {
-  if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new Error('Peer device ID is not canonical base64url');
-  const padded = value.replace(/-/g, '+').replace(/_/g, '/') +
-    '='.repeat((4 - value.length % 4) % 4);
-  const decoded = Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
-  if (decoded.byteLength !== expectedLength || encodeBase64Url(decoded) !== value) {
-    throw new Error('Peer device ID has wrong length or encoding');
-  }
-  return decoded;
-}
-
-function encodeHex(value: Uint8Array): string {
-  return [...value].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function isMessage(value: unknown): value is Record<string, unknown> & { type: string } {

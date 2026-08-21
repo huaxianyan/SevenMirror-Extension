@@ -54,57 +54,6 @@
         <p id="credential-rotation-status" role="status" aria-live="polite"></p>
       </section>
 
-      <section id="identity-rotation" hidden>
-        <h2>Rotate E2EE identity</h2>
-        <p class="boundary">
-          This is separate from the transport credential. Every currently approved peer must
-          acknowledge the exact transition. After the first acknowledgement, the old identity
-          cannot be silently restored; unreachable peers must be explicitly removed.
-        </p>
-        <button id="rotate-identity" type="button">Start E2EE identity transition</button>
-        <button id="refresh-identity-transition" type="button">Refresh transition status</button>
-        <p id="identity-rotation-status" role="status" aria-live="polite"></p>
-        <div id="identity-transition-peers"></div>
-      </section>
-
-      <section id="trust-pairing" hidden>
-        <h2 data-i18n="trustedDeviceTitle">Trusted E2EE device</h2>
-        <p class="boundary" data-i18n="trustedDeviceBoundary">
-          Synthetic testing only. Exchange the pairing payload out of band and compare the complete
-          safety code on both devices. Importing a payload alone never approves a peer.
-        </p>
-        <h3 id="trust-pairing-stage" data-i18n="pairingStepCreate">Step 1 — Create or import an offer</h3>
-        <div id="pairing-actions">
-          <button id="create-trust-offer" type="button" data-i18n="createOffer">Create offer on this Chrome device</button>
-          <label>
-            <span data-i18n="receivedPayload">Payload received from the other device</span>
-            <textarea id="trust-payload-input" rows="5" maxlength="512"
-                      placeholder="sntrust1:…" data-i18n-placeholder="pairingPayloadPlaceholder"
-                      spellcheck="false"></textarea>
-          </label>
-          <button id="import-trust-payload" type="button" data-i18n="importPayload">Import received payload</button>
-        </div>
-        <div id="pairing-output" hidden>
-          <label>
-            <span id="trust-payload-output-label" data-i18n="transferPayload">Payload to transfer to the other device</span>
-            <textarea id="trust-payload-output" rows="5" readonly spellcheck="false"></textarea>
-          </label>
-          <button id="copy-trust-payload" type="button" data-i18n="copyPayload">Copy payload</button>
-        </div>
-        <div id="safety-confirmation" hidden>
-          <p data-i18n="safetyCode">Safety code</p>
-          <output id="trust-safety-code"></output>
-          <label class="confirmation">
-            <input id="trust-code-confirmed" type="checkbox" />
-            <span data-i18n="safetyCodeConfirmed">I compared the complete code on both devices and it matches</span>
-          </label>
-          <button id="approve-trust-peer" type="button" disabled data-i18n="approvePeer">Approve this peer</button>
-        </div>
-        <button id="cancel-trust-pairing" type="button" hidden data-i18n="cancelPairing">Reject and cancel pairing</button>
-        <button id="remove-approved-peer" type="button" hidden data-i18n="removeApprovedPeer">Remove approved Android peer</button>
-        <p id="trust-pairing-status" role="status" aria-live="polite"></p>
-      </section>
-
       <section id="synthetic-relay-test" hidden>
         <h2>Synthetic relay action test</h2>
         <p class="boundary">
