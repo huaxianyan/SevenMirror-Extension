@@ -31,15 +31,22 @@ import { IndexedDbTrustedPeerStore } from '../crypto/indexeddb-trusted-peer-stor
 import { ActionResultDispatcher } from '../crypto/action-result-dispatcher';
 import { IndexedDbNotificationStateStore } from '../crypto/indexeddb-notification-state-store';
 import { NotificationPresenter } from './notification-presenter';
-import { IndexedDbTransportCredentialStore } from '../transport/indexeddb-transport-credential-store';
+import {
+  IndexedDbTransportCredentialStore,
+  type StoredTransportCredential,
+} from '../transport/indexeddb-transport-credential-store';
 import { IndexedDbPendingMembershipStore } from '../transport/indexeddb-pending-membership-store';
 import { IndexedDbWorkspaceMembershipStore } from '../crypto/indexeddb-workspace-membership-store';
-import { recoverPendingMembership } from '../transport/membership-runtime-recovery';
+import {
+  recoverPendingMembership,
+  refreshActiveMembership,
+} from '../transport/membership-runtime-recovery';
 import { TransportRuntime } from '../transport/transport-runtime';
 import { isAppOwnedSyntheticInvoke } from './synthetic-ack-hold';
 
 const CONNECTION_STATE_KEY = 'connectionState';
 const TRANSPORT_RECONNECT_ALARM = 'transport-reconnect-v1';
+const MEMBERSHIP_REFRESH_ALARM = 'membership-refresh-v1';
 const ACTION_INVOKE_RETRY_ALARM = 'action-invoke-retry-v1';
 const ACTION_RESULT_ACK_RETRY_ALARM = 'action-result-ack-retry-v1';
 const IDENTITY_TRANSITION_RETRY_ALARM = 'identity-transition-retry-v1';
@@ -170,6 +177,10 @@ transportRuntime = new TransportRuntime(
     },
     onAuthenticated: () => {
       void chrome.alarms.clear(TRANSPORT_RECONNECT_ALARM);
+      void chrome.alarms.create(MEMBERSHIP_REFRESH_ALARM, {
+        delayInMinutes: 1,
+        periodInMinutes: 1,
+      });
       void drainActionInvokes();
       void drainActionResultAcks();
       void drainIdentityTransitions();
@@ -181,6 +192,7 @@ transportRuntime = new TransportRuntime(
       await identityPromotionCoordinator.promoteReady();
       await recoverMembershipBeforeConnect();
     },
+    beforeAuthenticate: refreshMembershipBeforeAuthenticate,
   },
 );
 
@@ -197,6 +209,8 @@ chrome.runtime.onInstalled.addListener(async () => {
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === TRANSPORT_RECONNECT_ALARM) {
     void retryTransportWithWatchdog().catch(() => undefined);
+  } else if (alarm.name === MEMBERSHIP_REFRESH_ALARM) {
+    void refreshMembershipWhileOnline();
   } else if (alarm.name === ACTION_INVOKE_RETRY_ALARM) {
     void drainActionInvokes();
   } else if (alarm.name === ACTION_RESULT_ACK_RETRY_ALARM) {
@@ -372,6 +386,49 @@ async function recoverMembershipBeforeConnect(): Promise<void> {
     await membershipRecovery;
   } finally {
     membershipRecovery = undefined;
+  }
+}
+
+async function refreshMembershipBeforeAuthenticate(
+  credential: StoredTransportCredential,
+): Promise<void> {
+  try {
+    const result = await refreshActiveMembership(credential, workspaceMembershipStore);
+    if (result === 'inactive') throw new Error('Local device is not active in the durable workspace roster');
+  } catch (error) {
+    if (error instanceof TypeError) {
+      await chrome.alarms.create(TRANSPORT_RECONNECT_ALARM, {
+        when: Date.now() + TRANSPORT_AUTH_WATCHDOG_MS,
+      });
+    }
+    throw error;
+  }
+}
+
+async function refreshMembershipWhileOnline(): Promise<void> {
+  const stored = await chrome.storage.local.get(CONNECTION_STATE_KEY);
+  if (stored[CONNECTION_STATE_KEY] !== 'online') return;
+  const credential = await credentialStore.load();
+  if (credential === undefined) {
+    await chrome.alarms.clear(MEMBERSHIP_REFRESH_ALARM);
+    await transportRuntime.failClosed();
+    return;
+  }
+  try {
+    const result = await refreshActiveMembership(credential, workspaceMembershipStore);
+    if (result === 'legacy') {
+      await chrome.alarms.clear(MEMBERSHIP_REFRESH_ALARM);
+    } else if (result === 'inactive') {
+      await chrome.alarms.clear(MEMBERSHIP_REFRESH_ALARM);
+      await transportRuntime.failClosed();
+    }
+  } catch (error) {
+    if (!(error instanceof TypeError)) {
+      await chrome.alarms.clear(MEMBERSHIP_REFRESH_ALARM);
+      await transportRuntime.failClosed();
+    }
+  } finally {
+    credential.authToken.fill(0);
   }
 }
 

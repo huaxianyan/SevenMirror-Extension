@@ -1,11 +1,31 @@
 import type { IndexedDbIdentityStore } from '../crypto/indexeddb-identity-store';
 import type { IndexedDbWorkspaceMembershipStore } from '../crypto/indexeddb-workspace-membership-store';
 import type { IndexedDbPendingMembershipStore } from './indexeddb-pending-membership-store';
-import type { IndexedDbTransportCredentialStore } from './indexeddb-transport-credential-store';
+import type {
+  IndexedDbTransportCredentialStore,
+  StoredTransportCredential,
+} from './indexeddb-transport-credential-store';
 import { promoteApprovedMembership } from './membership-transport-promotion';
-import { resumeChromeMembership } from './workspace-membership-client';
+import {
+  refreshChromeMembership,
+  resumeChromeMembership,
+} from './workspace-membership-client';
 
 export type MembershipRecoveryResult = 'absent' | 'pending' | 'promoted';
+export type ActiveMembershipRefreshResult = 'legacy' | 'active' | 'inactive';
+
+/** Reconciles a promoted credential without creating or mutating enrollment intent. */
+export async function refreshActiveMembership(
+  credential: StoredTransportCredential,
+  membershipStore: IndexedDbWorkspaceMembershipStore,
+  fetcher: typeof fetch = fetch,
+): Promise<ActiveMembershipRefreshResult> {
+  const durable = await membershipStore.load(credential.workspaceId, credential.deviceId);
+  if (durable === undefined) return 'legacy';
+  const refreshed = await refreshChromeMembership(credential, membershipStore, fetcher);
+  if (refreshed.serverState !== 'approved' || !refreshed.transportEligible) return 'inactive';
+  return 'active';
+}
 
 /** Runs before transport reads current credentials. Callers must serialize invocations. */
 export async function recoverPendingMembership(

@@ -6,7 +6,10 @@ import type { IndexedDbIdentityStore } from '../crypto/indexeddb-identity-store'
 import { IndexedDbWorkspaceMembershipStore } from '../crypto/indexeddb-workspace-membership-store';
 import { IndexedDbPendingMembershipStore } from './indexeddb-pending-membership-store';
 import { IndexedDbTransportCredentialStore } from './indexeddb-transport-credential-store';
-import { recoverPendingMembership } from './membership-runtime-recovery';
+import {
+  recoverPendingMembership,
+  refreshActiveMembership,
+} from './membership-runtime-recovery';
 
 const fromHex = (value: string): Uint8Array =>
   Uint8Array.from(value.match(/../g) ?? [], (item) => Number.parseInt(item, 16));
@@ -52,5 +55,48 @@ it('resumes approved membership and promotes before returning to transport', asy
     await expect(transportStore.load()).resolves.toEqual(enrollment);
   } finally {
     await pendingStore.clear(); await membershipStore.clear(); await transportStore.clear();
+  }
+});
+
+it('refreshes a promoted member and persists a signed revocation roster', async () => {
+  const suffix = crypto.randomUUID();
+  const membershipStore = new IndexedDbWorkspaceMembershipStore(`active-membership-${suffix}`);
+  const transportStore = new IndexedDbTransportCredentialStore(`active-transport-${suffix}`);
+  const authority = fromHex(vector.authorityPublicKeyHex);
+  const credential = {
+    serverOrigin: 'https://notify.example',
+    workspaceId: fromHex(vector.workspaceIdHex),
+    deviceId: fromHex(vector.deviceIdHex),
+    authToken: new Uint8Array(32).fill(7),
+    identityKeyId: fromHex(vector.identityKeyIdHex),
+  };
+  try {
+    await membershipStore.pinAuthority(credential.workspaceId, credential.deviceId, authority);
+    await membershipStore.reconcileApproved(
+      credential.workspaceId,
+      credential.deviceId,
+      fromHex(vector.certificateEncodedHex),
+      fromHex(vector.initialRosterEncodedHex),
+    );
+    await transportStore.saveNew(credential);
+    const fetcher = async () => new Response(JSON.stringify({
+      state: 'approved', authority_public_key: toBase64Url(authority),
+      signed_certificate: toBase64Url(fromHex(vector.certificateEncodedHex)),
+      rosters: [toBase64Url(fromHex(vector.revokedRosterEncodedHex))],
+      latest_roster_epoch: '2',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+
+    await expect(refreshActiveMembership(
+      credential,
+      membershipStore,
+      fetcher as typeof fetch,
+    )).resolves.toBe('inactive');
+    await expect(membershipStore.load(credential.workspaceId, credential.deviceId))
+      .resolves.toMatchObject({ rosterEpoch: 2n, localDeviceActive: false });
+    await expect(transportStore.load()).resolves.toEqual(credential);
+  } finally {
+    credential.authToken.fill(0);
+    await membershipStore.clear();
+    await transportStore.clear();
   }
 });

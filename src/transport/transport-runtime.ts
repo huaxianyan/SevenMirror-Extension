@@ -42,6 +42,7 @@ export interface TransportReconnectOptions {
   clearTimer?: (handle: TimerHandle) => void;
   onAuthenticated?: () => void;
   beforeConnect?: () => Promise<void>;
+  beforeAuthenticate?: (credential: StoredTransportCredential) => Promise<void>;
 }
 
 interface ReconnectPolicy {
@@ -76,6 +77,7 @@ export class TransportRuntime {
   private preferCurrentFallback = false;
   private readonly onAuthenticated: () => void;
   private readonly beforeConnect: () => Promise<void>;
+  private readonly beforeAuthenticate: (credential: StoredTransportCredential) => Promise<void>;
   private readonly reconnectPolicy: ReconnectPolicy;
 
   constructor(
@@ -88,9 +90,11 @@ export class TransportRuntime {
   ) {
     this.onAuthenticated = reconnectOptions.onAuthenticated ?? (() => undefined);
     this.beforeConnect = reconnectOptions.beforeConnect ?? (async () => undefined);
+    this.beforeAuthenticate = reconnectOptions.beforeAuthenticate ?? (async () => undefined);
     const {
       onAuthenticated: _onAuthenticated,
       beforeConnect: _beforeConnect,
+      beforeAuthenticate: _beforeAuthenticate,
       ...policyOptions
     } = reconnectOptions;
     this.reconnectPolicy = validateReconnectPolicy({
@@ -207,6 +211,7 @@ export class TransportRuntime {
     }
 
     try {
+      await this.beforeAuthenticate(credential);
       await this.requireBoundIdentity(credential);
     } catch (error) {
       credential.authToken.fill(0);

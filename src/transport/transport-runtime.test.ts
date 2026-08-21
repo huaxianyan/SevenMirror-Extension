@@ -116,6 +116,33 @@ describe('TransportRuntime', () => {
     expect(states).toEqual(['offline']);
   });
 
+  it('refreshes membership for the exact candidate before opening a socket', async () => {
+    const identity = await generateNonExtractableIdentity();
+    const credential = await credentialFor(identity);
+    const observedTokens: Uint8Array[] = [];
+    let socketOpened = false;
+    const runtime = new TransportRuntime(
+      { load: async () => copyCredential(credential) },
+      { loadExisting: async () => identity },
+      async () => undefined,
+      undefined,
+      () => {
+        socketOpened = true;
+        return new FakeSocket() as unknown as WebSocket;
+      },
+      {
+        beforeAuthenticate: async (candidate) => {
+          observedTokens.push(candidate.authToken.slice());
+          throw new Error('synthetic signed roster rejection');
+        },
+      },
+    );
+
+    await expect(runtime.connect()).rejects.toThrow('synthetic signed roster rejection');
+    expect(observedTokens).toEqual([credential.authToken]);
+    expect(socketOpened).toBe(false);
+  });
+
   it('waits for SNO1 when an explicit resend wakes a suspended Worker', async () => {
     const identity = await generateNonExtractableIdentity();
     const credential = await credentialFor(identity);
