@@ -1,6 +1,7 @@
 import { decodeEncryptedEnvelopeV1 } from '../protocol/encrypted-envelope';
 import type { HpkeIdentity } from './auth-hpke';
 import {
+  ActionResultRejectedError,
   receiveActionResultOnce,
   type ActionResultReceipt,
   type PendingActionReconciler,
@@ -13,6 +14,10 @@ import {
   type NotificationReceipt,
 } from './notification-receiver';
 import type { StoredTransportCredential } from '../transport/indexeddb-transport-credential-store';
+import type {
+  BusinessSenderAuthorization,
+  BusinessSenderResolver,
+} from './workspace-business-sender-resolver';
 
 export interface DispatcherCredentialStore {
   load(): Promise<StoredTransportCredential | undefined>;
@@ -22,31 +27,23 @@ export interface DispatcherIdentityStore {
   loadExisting(): Promise<HpkeIdentity | undefined>;
 }
 
-export interface ApprovedPeerResolver {
-  findApproved(
-    workspaceId: Uint8Array,
-    deviceId: Uint8Array,
-    keyId: Uint8Array,
-  ): Promise<Uint8Array | undefined>;
-}
-
 export type BusinessDispatchReceipt =
   | { kind: 'action-result'; receipt: ActionResultReceipt }
   | { kind: 'notification'; receipt: NotificationReceipt };
 
 export class ActionResultDispatchError extends Error {
-  constructor(readonly code: 'NOT_CONFIGURED' | 'IDENTITY_UNAVAILABLE' | 'WRONG_ROUTE' | 'UNAPPROVED_SENDER') {
+  constructor(readonly code: 'NOT_CONFIGURED' | 'IDENTITY_UNAVAILABLE' | 'WRONG_ROUTE' | 'UNAUTHORIZED_SENDER' | 'UNAUTHORIZED_ROLE') {
     super(code);
     this.name = 'ActionResultDispatchError';
   }
 }
 
-/** Resolves only a locally approved sender pin before HPKE opening and reconciliation. */
+/** Resolves an authority-certified sender before HPKE opening and reconciliation. */
 export class ActionResultDispatcher {
   constructor(
     private readonly credentialStore: DispatcherCredentialStore,
     private readonly identityStore: DispatcherIdentityStore,
-    private readonly approvedPeers: ApprovedPeerResolver,
+    private readonly senders: BusinessSenderResolver,
     private readonly replayLedger: ReplayLedgerWriter,
     private readonly pendingActions: PendingActionReconciler,
     private readonly now: () => number = Date.now,
@@ -55,6 +52,9 @@ export class ActionResultDispatcher {
 
   async receive(frame: ArrayBuffer): Promise<ActionResultReceipt> {
     const resolved = await this.resolve(frame);
+    if (!resolved.authorization.mayReceiveActionResults) {
+      throw new ActionResultDispatchError('UNAUTHORIZED_ROLE');
+    }
     return receiveActionResultOnce(
       resolved.frameBytes,
       resolved.context,
@@ -66,7 +66,7 @@ export class ActionResultDispatcher {
 
   async receiveBusiness(frame: ArrayBuffer): Promise<BusinessDispatchReceipt> {
     const resolved = await this.resolve(frame);
-    if (this.notifications !== undefined) {
+    if (resolved.authorization.mayReceiveNotifications && this.notifications !== undefined) {
       try {
         const receipt = await receiveNotificationOnce(
           resolved.frameBytes,
@@ -81,19 +81,30 @@ export class ActionResultDispatcher {
             error.code !== 'UNEXPECTED_PAYLOAD') throw error;
       }
     }
-    const receipt = await receiveActionResultOnce(
-      resolved.frameBytes,
-      resolved.context,
-      this.replayLedger,
-      this.pendingActions,
-      this.now(),
-    );
-    return { kind: 'action-result', receipt };
+    if (!resolved.authorization.mayReceiveActionResults) {
+      throw new ActionResultDispatchError('UNAUTHORIZED_ROLE');
+    }
+    try {
+      const receipt = await receiveActionResultOnce(
+        resolved.frameBytes,
+        resolved.context,
+        this.replayLedger,
+        this.pendingActions,
+        this.now(),
+      );
+      return { kind: 'action-result', receipt };
+    } catch (error) {
+      if (error instanceof ActionResultRejectedError && error.code === 'UNEXPECTED_PAYLOAD') {
+        throw new ActionResultDispatchError('UNAUTHORIZED_ROLE');
+      }
+      throw error;
+    }
   }
 
   private async resolve(frame: ArrayBuffer): Promise<{
     frameBytes: Uint8Array;
     context: EnvelopeRecipientContext;
+    authorization: BusinessSenderAuthorization;
   }> {
     const frameBytes = new Uint8Array(frame.slice(0));
     // Strictly decode the public routing header before consulting the local pin directory.
@@ -113,13 +124,15 @@ export class ActionResultDispatcher {
     if (identity === undefined) {
       throw new ActionResultDispatchError('IDENTITY_UNAVAILABLE');
     }
-    const pinnedSenderPublicKey = await this.approvedPeers.findApproved(
+    const authorization = await this.senders.resolve(
       header.workspaceId,
+      credential.deviceId,
       header.senderDeviceId,
       header.senderKeyId,
+      this.now(),
     );
-    if (pinnedSenderPublicKey === undefined) {
-      throw new ActionResultDispatchError('UNAPPROVED_SENDER');
+    if (authorization === undefined) {
+      throw new ActionResultDispatchError('UNAUTHORIZED_SENDER');
     }
 
     return {
@@ -128,8 +141,9 @@ export class ActionResultDispatcher {
         workspaceId: credential.workspaceId,
         recipientDeviceId: credential.deviceId,
         recipientIdentity: identity,
-        pinnedSenderPublicKey,
+        pinnedSenderPublicKey: authorization.senderPublicKey,
       },
+      authorization,
     };
   }
 }

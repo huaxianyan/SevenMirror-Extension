@@ -42,6 +42,7 @@ import {
   refreshActiveMembership,
 } from '../transport/membership-runtime-recovery';
 import { TransportRuntime } from '../transport/transport-runtime';
+import { WorkspaceBusinessSenderResolver } from '../crypto/workspace-business-sender-resolver';
 import { isAppOwnedSyntheticInvoke } from './synthetic-ack-hold';
 
 const CONNECTION_STATE_KEY = 'connectionState';
@@ -59,6 +60,7 @@ const credentialStore = new IndexedDbTransportCredentialStore();
 const identityStore = new IndexedDbIdentityStore();
 const pendingMembershipStore = new IndexedDbPendingMembershipStore();
 const workspaceMembershipStore = new IndexedDbWorkspaceMembershipStore();
+const businessSenderResolver = new WorkspaceBusinessSenderResolver(workspaceMembershipStore);
 let membershipRecovery: Promise<void> | undefined;
 const trustedPeerStore = new IndexedDbTrustedPeerStore();
 const pendingActionStore = new IndexedDbPendingActionStore();
@@ -76,7 +78,7 @@ const notificationPresenter = new NotificationPresenter();
 const actionResultDispatcher = new ActionResultDispatcher(
   credentialStore,
   identityStore,
-  trustedPeerStore,
+  businessSenderResolver,
   inboundReplayLedger,
   pendingActionStore,
   Date.now,

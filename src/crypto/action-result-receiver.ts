@@ -5,7 +5,8 @@ import {
   encodeEncryptedPayloadV1,
 } from '../protocol/encrypted-payload';
 import {
-  openEnvelopeOnce,
+  authenticateAndOpen,
+  consumeReplay,
   type EnvelopeRecipientContext,
   type ReplayLedgerWriter,
 } from './envelope-receiver';
@@ -34,7 +35,7 @@ export class ActionResultRejectedError extends Error {
   }
 }
 
-/** Authenticates, consumes replay state, then atomically correlates action.result. */
+/** Authenticates and validates the payload type before replay consumption and reconciliation. */
 export async function receiveActionResultOnce(
   frameBytes: Uint8Array,
   context: EnvelopeRecipientContext,
@@ -42,12 +43,13 @@ export async function receiveActionResultOnce(
   pendingActions: PendingActionReconciler,
   nowUnixMs: number,
 ): Promise<ActionResultReceipt> {
-  const opened = await openEnvelopeOnce(frameBytes, context, replayLedger, nowUnixMs);
+  const opened = await authenticateAndOpen(frameBytes, context, nowUnixMs);
   const payload = decodeEncryptedPayloadV1(opened.plaintext);
   if (payload.body.case !== 'actionResult') {
     throw new ActionResultRejectedError('UNEXPECTED_PAYLOAD');
   }
   const result = payload.body.value;
+  await consumeReplay(opened.header, replayLedger, nowUnixMs);
   const canonicalAck = encodeEncryptedPayloadV1(createActionResultAckPayload({
     idempotencyKey: result.idempotencyKey,
     resultSha256: await sha256(opened.plaintext),

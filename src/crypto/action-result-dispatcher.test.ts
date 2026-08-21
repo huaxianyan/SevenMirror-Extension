@@ -42,7 +42,7 @@ class MemoryReplayLedger implements ReplayLedgerWriter {
 }
 
 describe('ActionResultDispatcher', () => {
-  it('resolves an approved sender pin and reconciles through the production boundary', async () => {
+  it('resolves an authorized sender and reconciles through the production boundary', async () => {
     const fixture = await createFixture();
     try {
       await fixture.trustedPeers.pinApproved(workspaceId, androidDeviceId, fixture.androidPublicKey);
@@ -181,11 +181,36 @@ describe('ActionResultDispatcher', () => {
     }
   });
 
-  it('rejects an unapproved sender before HPKE, replay, or reconciliation', async () => {
+  it('rejects a notification when the local certified role permits actions only', async () => {
+    const fixture = await createFixture({
+      mayReceiveNotifications: false,
+      mayReceiveActionResults: true,
+    });
+    try {
+      await fixture.trustedPeers.pinApproved(workspaceId, androidDeviceId, fixture.androidPublicKey);
+      const frame = await notificationFrame(
+        fixture.androidIdentity,
+        fixture.androidPublicKey,
+        fixture.chromePublicKey,
+        7n,
+        'role-restricted body',
+        false,
+        6,
+      );
+      await expect(fixture.dispatcher.receiveBusiness(toArrayBuffer(frame))).rejects.toMatchObject({
+        code: 'UNAUTHORIZED_ROLE',
+      } satisfies Partial<ActionResultDispatchError>);
+      expect(fixture.replay.calls).toBe(0);
+    } finally {
+      await fixture.clear();
+    }
+  });
+
+  it('rejects an unauthorized sender before HPKE, replay, or reconciliation', async () => {
     const fixture = await createFixture();
     try {
       await expect(fixture.dispatcher.receive(toArrayBuffer(fixture.frame))).rejects.toMatchObject({
-        code: 'UNAPPROVED_SENDER',
+        code: 'UNAUTHORIZED_SENDER',
       } satisfies Partial<ActionResultDispatchError>);
       expect(fixture.loadedCredential.authToken.every((byte) => byte === 0)).toBe(true);
       expect(fixture.replay.calls).toBe(0);
@@ -196,7 +221,10 @@ describe('ActionResultDispatcher', () => {
   });
 });
 
-async function createFixture() {
+async function createFixture(authorization = {
+  mayReceiveNotifications: true,
+  mayReceiveActionResults: true,
+}) {
   const androidIdentity = await generateNonExtractableIdentity();
   const chromeIdentity = await generateNonExtractableIdentity();
   const androidPublicKey = await serializeIdentityPublicKey(androidIdentity);
@@ -223,7 +251,20 @@ async function createFixture() {
   const dispatcher = new ActionResultDispatcher(
     { load: async () => loadedCredential },
     { loadExisting: async () => chromeIdentity },
-    trustedPeers,
+    {
+      resolve: async (resolvedWorkspace, _localDevice, senderDevice, senderKey) => {
+        const publicKey = await trustedPeers.findApproved(
+          resolvedWorkspace,
+          senderDevice,
+          senderKey,
+        );
+        return publicKey === undefined ? undefined : {
+          senderPublicKey: publicKey,
+          mayReceiveNotifications: authorization.mayReceiveNotifications,
+          mayReceiveActionResults: authorization.mayReceiveActionResults,
+        };
+      },
+    },
     replay,
     pending,
     () => now,
