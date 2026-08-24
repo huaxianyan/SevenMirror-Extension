@@ -57,6 +57,32 @@ describe('IndexedDbWorkspaceMembershipStore', () => {
     }
   });
 
+  it('atomically advances authority and roster rollback floors', async () => {
+    const store = new IndexedDbWorkspaceMembershipStore(`membership-${crypto.randomUUID()}`);
+    try {
+      await store.pinAuthority(workspaceId, deviceId, authority);
+      await store.reconcileApproved(workspaceId, deviceId, certificate, initialRoster);
+      const transition = fromHex(vector.authorityTransitionEncodedHex);
+      const activation = fromHex(vector.authorityActivationRosterEncodedHex);
+      await expect(store.reconcileAuthorityTransition(workspaceId, deviceId, transition, activation))
+        .resolves.toBe('applied');
+      await expect(store.load(workspaceId, deviceId)).resolves.toMatchObject({
+        authorityEpoch: 2n, rosterEpoch: 2n, localDeviceActive: true,
+      });
+      await expect(store.reconcileAuthorityTransition(workspaceId, deviceId, transition, activation))
+        .resolves.toBe('already-applied');
+      const differentActivation = activation.slice(); differentActivation[differentActivation.length - 1] ^= 1;
+      await expect(store.reconcileAuthorityTransition(workspaceId, deviceId, transition, differentActivation))
+        .rejects.toThrow('different transition');
+      expect((await store.load(workspaceId, deviceId))?.authorityPublicKey)
+        .toEqual(fromHex(vector.newAuthorityPublicKeyHex));
+      const tampered = transition.slice(); tampered[tampered.length - 1] ^= 1;
+      await expect(store.reconcileAuthorityTransition(workspaceId, deviceId, tampered, activation))
+        .rejects.toThrow();
+      await expect(store.load(workspaceId, deviceId)).resolves.toMatchObject({ authorityEpoch: 2n, rosterEpoch: 2n });
+    } finally { await store.clear(); }
+  });
+
   it('rejects a certificate for a different local device', async () => {
     const store = new IndexedDbWorkspaceMembershipStore(`membership-${crypto.randomUUID()}`);
     const otherDevice = new Uint8Array(16).fill(7);

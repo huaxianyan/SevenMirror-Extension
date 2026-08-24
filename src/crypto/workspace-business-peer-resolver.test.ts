@@ -66,6 +66,8 @@ it('resolves only the exact active sender identity from the durable roster', asy
     workspaceId: new Uint8Array(16).fill(1),
     deviceId: local.certificate!.deviceId,
     authorityPublicKey: new Uint8Array(32).fill(7),
+    authorityEpoch: 1n,
+    authorityTransitionDigest: new Uint8Array(32),
     signedCertificate: toBinary(SignedDeviceCertificateSchema, local),
     rosterEpoch: 1n,
     rosterDigest: new Uint8Array(32).fill(8),

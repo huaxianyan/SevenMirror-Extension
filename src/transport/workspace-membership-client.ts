@@ -5,6 +5,8 @@ import {
 } from '../crypto/indexeddb-workspace-membership-store';
 import {
   createPendingIdentityProof,
+  decodeSignedAuthorityKeyTransition,
+  decodeSignedWorkspaceRoster,
   encodeIdentityPossessionChallenge,
   openIdentityPossessionChallenge,
 } from '../protocol/workspace-membership';
@@ -149,14 +151,11 @@ export async function refreshChromeMembership(
       auth_token: toBase64Url(pending.authToken),
       after_roster_epoch: durable.rosterEpoch.toString(),
     }));
-    await store.pinAuthority(
-      pending.workspaceId,
-      pending.deviceId,
-      fromBase64Url(response.authority_public_key, 32, 'authority_public_key'),
-    );
     if (response.state !== 'approved') {
+      await store.pinAuthority(pending.workspaceId, pending.deviceId,
+        fromBase64Url(response.authority_public_key, 32, 'authority_public_key'));
       if (response.signed_certificate !== undefined || response.rosters.length !== 0 ||
-          response.latest_roster_epoch !== '0') {
+          response.authority_transitions.length !== 0 || response.latest_roster_epoch !== '0') {
         throw new Error('Pending membership state exposed approved membership data');
       }
       return { serverState: response.state, transportEligible: false, state: durable };
@@ -167,13 +166,33 @@ export async function refreshChromeMembership(
     const latest = parseEpoch(response.latest_roster_epoch, 'latest_roster_epoch');
     if (latest < durable.rosterEpoch) throw new Error('Membership server attempted a roster rollback');
     const certificate = fromBase64UrlVariable(response.signed_certificate, 'signed_certificate');
+    const transitions = response.authority_transitions.map((encoded) => {
+      const bytes = fromBase64UrlVariable(encoded, 'authority_transition');
+      return { bytes, value: decodeSignedAuthorityKeyTransition(bytes) };
+    });
     for (const encoded of response.rosters) {
       const roster = fromBase64UrlVariable(encoded, 'roster');
-      await store.reconcileApproved(pending.workspaceId, pending.deviceId, certificate, roster);
+      const rosterEpoch = decodeSignedWorkspaceRoster(roster).roster!.rosterEpoch;
+      const current = await store.load(pending.workspaceId, pending.deviceId);
+      if (current === undefined) throw new Error('Membership state disappeared during reconciliation');
+      const transition = transitions.find((item) =>
+        item.value.transition!.activationRosterEpoch === rosterEpoch &&
+        item.value.transition!.transitionEpoch === current.authorityEpoch + 1n);
+      if (transition) {
+        await store.reconcileAuthorityTransition(pending.workspaceId, pending.deviceId, transition.bytes, roster);
+      } else {
+        const currentCertificate = current.signedCertificate ?? certificate;
+        await store.reconcileApproved(pending.workspaceId, pending.deviceId, currentCertificate, roster);
+      }
     }
     const accepted = await store.load(pending.workspaceId, pending.deviceId);
     if (accepted === undefined) throw new Error('Membership state disappeared during reconciliation');
     if (accepted.rosterEpoch === latest) {
+      if (!accepted.signedCertificate || !equalBytes(accepted.signedCertificate, certificate)) {
+        throw new Error('Membership certificate does not match the accepted roster');
+      }
+      await store.pinAuthority(pending.workspaceId, pending.deviceId,
+        fromBase64Url(response.authority_public_key, 32, 'authority_public_key'));
       if (response.rosters.length === 0 && durable.rosterEpoch !== latest) {
         throw new Error('Membership roster response made no progress');
       }
@@ -228,7 +247,7 @@ type RegistrationResponse = {
 };
 type StateResponse = {
   state: 'pending_proof' | 'pending_approval' | 'approved'; authority_public_key: string;
-  signed_certificate?: string; rosters: string[]; latest_roster_epoch: string;
+  signed_certificate?: string; authority_transitions: string[]; rosters: string[]; latest_roster_epoch: string;
 };
 
 function parseRegistration(value: unknown): RegistrationResponse {
@@ -245,12 +264,14 @@ function parseStateResponse(value: unknown): StateResponse {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('Membership state returned an invalid object');
   const record = value as Record<string, unknown>;
   const expected = record.signed_certificate === undefined
-    ? ['authority_public_key', 'latest_roster_epoch', 'rosters', 'state']
-    : ['authority_public_key', 'latest_roster_epoch', 'rosters', 'signed_certificate', 'state'];
+    ? ['authority_public_key', 'authority_transitions', 'latest_roster_epoch', 'rosters', 'state']
+    : ['authority_public_key', 'authority_transitions', 'latest_roster_epoch', 'rosters', 'signed_certificate', 'state'];
   if (Object.keys(record).sort().join(',') !== expected.join(',')) throw new Error('Membership state returned unexpected fields');
   if ((record.state !== 'pending_proof' && record.state !== 'pending_approval' && record.state !== 'approved') ||
       typeof record.authority_public_key !== 'string' || typeof record.latest_roster_epoch !== 'string' ||
       (record.signed_certificate !== undefined && typeof record.signed_certificate !== 'string') ||
+      !Array.isArray(record.authority_transitions) || record.authority_transitions.length > 256 ||
+      record.authority_transitions.some((item) => typeof item !== 'string') ||
       !Array.isArray(record.rosters) || record.rosters.length > MAX_ROSTERS_PER_PAGE ||
       record.rosters.some((item) => typeof item !== 'string')) throw new Error('Membership state returned invalid fields');
   return record as StateResponse;

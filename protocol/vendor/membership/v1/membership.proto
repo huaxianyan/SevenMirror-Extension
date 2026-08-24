@@ -69,6 +69,28 @@ message SignedWorkspaceRoster {
   bytes authority_signature = 3;
 }
 
+// AuthorityKeyTransition authorizes exactly one forward-only authority change.
+// The previous authority authorizes continuity; the new authority signature
+// proves possession before it may sign the activation roster.
+message AuthorityKeyTransition {
+  uint32 protocol_version = 1;
+  bytes workspace_id = 2;
+  uint64 transition_epoch = 3;
+  bytes previous_transition_digest = 4;
+  bytes previous_authority_public_key = 5;
+  bytes new_authority_public_key = 6;
+  uint64 activation_roster_epoch = 7;
+  bytes previous_roster_digest = 8;
+  uint64 issued_at_unix_ms = 9;
+}
+
+message SignedAuthorityKeyTransition {
+  AuthorityKeyTransition transition = 1;
+  bytes transition_digest = 2;
+  bytes previous_authority_signature = 3;
+  bytes new_authority_signature = 4;
+}
+
 enum DeviceType {
   DEVICE_TYPE_UNSPECIFIED = 0;
   DEVICE_TYPE_ANDROID = 1;

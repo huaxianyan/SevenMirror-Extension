@@ -34,13 +34,14 @@ describe('Workspace Membership HTTP client', () => {
       { state: 'pending_approval' },
       {
         state: 'approved', authority_public_key: b64(fromHex(vector.authorityPublicKeyHex)),
-        signed_certificate: b64(fromHex(vector.certificateEncodedHex)),
+        authority_transitions: [], signed_certificate: b64(fromHex(vector.certificateEncodedHex)),
         rosters: [b64(fromHex(vector.initialRosterEncodedHex))], latest_roster_epoch: '1',
       },
       {
-        state: 'approved', authority_public_key: b64(fromHex(vector.authorityPublicKeyHex)),
-        signed_certificate: b64(fromHex(vector.certificateEncodedHex)),
-        rosters: [b64(fromHex(vector.revokedRosterEncodedHex))], latest_roster_epoch: '2',
+        state: 'approved', authority_public_key: b64(fromHex(vector.newAuthorityPublicKeyHex)),
+        authority_transitions: [b64(fromHex(vector.authorityTransitionEncodedHex))],
+        signed_certificate: b64(fromHex(vector.authorityActivationCertificateEncodedHex)),
+        rosters: [b64(fromHex(vector.authorityActivationRosterEncodedHex))], latest_roster_epoch: '2',
       },
     ];
     const fetcher = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -65,9 +66,10 @@ describe('Workspace Membership HTTP client', () => {
       expect(approved.state.rosterEpoch).toBe(1n);
       expect(requests[2]?.body.after_roster_epoch).toBe('0');
 
-      const revoked = await refreshChromeMembership(pending, store, fetcher);
-      expect(revoked).toMatchObject({ serverState: 'approved', transportEligible: false });
-      expect(revoked.state.rosterEpoch).toBe(2n);
+      const rotated = await refreshChromeMembership(pending, store, fetcher);
+      expect(rotated).toMatchObject({ serverState: 'approved', transportEligible: true });
+      expect(rotated.state).toMatchObject({ authorityEpoch: 2n, rosterEpoch: 2n });
+      expect(rotated.state.authorityPublicKey).toEqual(fromHex(vector.newAuthorityPublicKeyHex));
       expect(requests[3]?.body.after_roster_epoch).toBe('1');
     } finally {
       await store.clear();
@@ -93,9 +95,9 @@ describe('Workspace Membership HTTP client', () => {
     await journal.bindProof(pending, proof);
     await journal.markProofAttempted(pending, proof);
     const responses = [
-      { state: 'pending_proof', authority_public_key: b64(fromHex(vector.authorityPublicKeyHex)), rosters: [], latest_roster_epoch: '0' },
+      { state: 'pending_proof', authority_public_key: b64(fromHex(vector.authorityPublicKeyHex)), authority_transitions: [], rosters: [], latest_roster_epoch: '0' },
       { state: 'pending_approval' },
-      { state: 'pending_approval', authority_public_key: b64(fromHex(vector.authorityPublicKeyHex)), rosters: [], latest_roster_epoch: '0' },
+      { state: 'pending_approval', authority_public_key: b64(fromHex(vector.authorityPublicKeyHex)), authority_transitions: [], rosters: [], latest_roster_epoch: '0' },
     ];
     const bodies: Record<string, unknown>[] = [];
     try {
@@ -121,7 +123,7 @@ describe('Workspace Membership HTTP client', () => {
         authToken: new Uint8Array(32).fill(8), identityKeyId: fromHex(vector.identityKeyIdHex),
       }, store, async () => Response.json({
         state: 'pending_approval', authority_public_key: b64(fromHex(vector.authorityPublicKeyHex)),
-        rosters: [], latest_roster_epoch: '0',
+        authority_transitions: [], rosters: [], latest_roster_epoch: '0',
       }));
       expect(result).toMatchObject({ serverState: 'pending_approval', transportEligible: false });
     } finally {

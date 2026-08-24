@@ -1,7 +1,9 @@
 import {
+  decodeSignedAuthorityKeyTransition,
   decodeSignedDeviceCertificate,
   decodeSignedWorkspaceRoster,
   encodeSignedDeviceCertificate,
+  verifySignedAuthorityKeyTransition,
   verifySignedDeviceCertificate,
   verifySignedWorkspaceRoster,
 } from '../protocol/workspace-membership';
@@ -14,6 +16,8 @@ interface StoredMembershipState {
   workspaceId: Uint8Array;
   deviceId: Uint8Array;
   authorityPublicKey: Uint8Array;
+  authorityEpoch?: string;
+  authorityTransitionDigest?: Uint8Array;
   signedCertificate?: Uint8Array;
   rosterEpoch: string;
   rosterDigest?: Uint8Array;
@@ -25,6 +29,8 @@ export interface WorkspaceMembershipState {
   workspaceId: Uint8Array;
   deviceId: Uint8Array;
   authorityPublicKey: Uint8Array;
+  authorityEpoch: bigint;
+  authorityTransitionDigest: Uint8Array;
   signedCertificate?: Uint8Array;
   rosterEpoch: bigint;
   rosterDigest?: Uint8Array;
@@ -65,6 +71,8 @@ export class IndexedDbWorkspaceMembershipStore {
         workspaceId: workspaceId.slice(),
         deviceId: deviceId.slice(),
         authorityPublicKey: authorityPublicKey.slice(),
+        authorityEpoch: '1',
+        authorityTransitionDigest: new Uint8Array(32),
         rosterEpoch: '0',
         localDeviceActive: false,
       } satisfies StoredMembershipState));
@@ -133,6 +141,8 @@ export class IndexedDbWorkspaceMembershipStore {
       workspaceId: workspaceId.slice(),
       deviceId: deviceId.slice(),
       authorityPublicKey: observed.authorityPublicKey.slice(),
+      authorityEpoch: observed.authorityEpoch,
+      authorityTransitionDigest: observed.authorityTransitionDigest!.slice(),
       signedCertificate: signedCertificate.slice(),
       rosterEpoch: epoch.toString(),
       rosterDigest: roster.rosterDigest.slice(),
@@ -156,6 +166,69 @@ export class IndexedDbWorkspaceMembershipStore {
     } finally {
       database.close();
     }
+  }
+
+  async reconcileAuthorityTransition(
+    workspaceId: Uint8Array,
+    deviceId: Uint8Array,
+    signedTransition: Uint8Array,
+    signedActivationRoster: Uint8Array,
+  ): Promise<'applied' | 'already-applied'> {
+    const observed = await this.readRaw(workspaceId, deviceId);
+    if (observed === undefined || observed.rosterEpoch === '0' || !observed.rosterDigest) {
+      throw new Error('Authority transition requires an accepted predecessor roster');
+    }
+    const transition = decodeSignedAuthorityKeyTransition(signedTransition);
+    await verifySignedAuthorityKeyTransition(transition);
+    const body = transition.transition!;
+    const authorityEpoch = BigInt(observed.authorityEpoch!);
+    if (!equal(body.workspaceId, workspaceId)) throw new Error('Authority transition is not bound to the workspace');
+    if (body.transitionEpoch === authorityEpoch) {
+      if (!equal(transition.transitionDigest, observed.authorityTransitionDigest!) ||
+          !equal(body.newAuthorityPublicKey, observed.authorityPublicKey) ||
+          !observed.signedRoster || !equal(signedActivationRoster, observed.signedRoster)) {
+        throw new Error('Authority transition epoch is bound to a different transition');
+      }
+      return 'already-applied';
+    }
+    if (!equal(body.previousAuthorityPublicKey, observed.authorityPublicKey) ||
+        body.transitionEpoch !== authorityEpoch + 1n ||
+        !equal(body.previousTransitionDigest, observed.authorityTransitionDigest!)) {
+      throw new Error('Authority transition is stale, forked, or non-contiguous');
+    }
+    if (body.activationRosterEpoch !== BigInt(observed.rosterEpoch) + 1n ||
+        !equal(body.previousRosterDigest, observed.rosterDigest)) {
+      throw new Error('Authority transition does not extend the durable roster floor');
+    }
+    const roster = decodeSignedWorkspaceRoster(signedActivationRoster);
+    await verifySignedWorkspaceRoster(roster, body.newAuthorityPublicKey);
+    if (!roster.roster || !equal(roster.roster.workspaceId, workspaceId) ||
+        roster.roster.rosterEpoch !== body.activationRosterEpoch ||
+        !equal(roster.roster.previousRosterDigest, body.previousRosterDigest)) {
+      throw new Error('Authority activation roster does not match the transition');
+    }
+    const local = roster.roster.activeCertificates.find((item) =>
+      item.certificate !== undefined && equal(item.certificate.deviceId, deviceId));
+    if (!local) throw new Error('Authority activation roster does not contain the local device');
+    const proposed: StoredMembershipState = {
+      tuple: observed.tuple, workspaceId: workspaceId.slice(), deviceId: deviceId.slice(),
+      authorityPublicKey: body.newAuthorityPublicKey.slice(), authorityEpoch: body.transitionEpoch.toString(),
+      authorityTransitionDigest: transition.transitionDigest.slice(), signedCertificate: encodeSignedDeviceCertificate(local),
+      rosterEpoch: roster.roster.rosterEpoch.toString(), rosterDigest: roster.rosterDigest.slice(),
+      signedRoster: signedActivationRoster.slice(), localDeviceActive: true,
+    };
+    const database = await this.openDatabase();
+    try {
+      const transaction = database.transaction(STORE_NAME, 'readwrite');
+      const completed = transactionCompleted(transaction);
+      const store = transaction.objectStore(STORE_NAME);
+      const current = normalizeStored(await requestResult<StoredMembershipState | undefined>(store.get(observed.tuple)));
+      if (current === undefined || !sameStored(current, observed)) {
+        transaction.abort(); await completed.catch(() => undefined);
+        throw new Error('Membership state changed during authority transition');
+      }
+      await requestResult(store.put(proposed)); await completed; return 'applied';
+    } finally { database.close(); }
   }
 
   async load(workspaceId: Uint8Array, deviceId: Uint8Array): Promise<WorkspaceMembershipState | undefined> {
@@ -205,8 +278,9 @@ export class IndexedDbWorkspaceMembershipStore {
         transaction.objectStore(STORE_NAME).get(key(workspaceId, deviceId)),
       );
       await completed;
-      if (value !== undefined) validateStored(value);
-      return value;
+      const normalized = normalizeStored(value);
+      if (normalized !== undefined) validateStored(normalized);
+      return normalized;
     } finally {
       database.close();
     }
@@ -232,6 +306,7 @@ function validateStored(value: StoredMembershipState): void {
   validateId(value.workspaceId, 'stored workspaceId');
   validateId(value.deviceId, 'stored deviceId');
   if (value.tuple !== key(value.workspaceId, value.deviceId) || value.authorityPublicKey.byteLength !== 32 ||
+      !/^[1-9][0-9]*$/.test(value.authorityEpoch!) || value.authorityTransitionDigest?.byteLength !== 32 ||
       !/^(0|[1-9][0-9]*)$/.test(value.rosterEpoch)) {
     throw new Error('Persisted membership state is corrupt');
   }
@@ -248,7 +323,8 @@ function sameStored(left: StoredMembershipState, right: StoredMembershipState): 
   return left.tuple === right.tuple && left.rosterEpoch === right.rosterEpoch &&
     left.localDeviceActive === right.localDeviceActive &&
     equal(left.workspaceId, right.workspaceId) && equal(left.deviceId, right.deviceId) &&
-    equal(left.authorityPublicKey, right.authorityPublicKey) &&
+    equal(left.authorityPublicKey, right.authorityPublicKey) && left.authorityEpoch === right.authorityEpoch &&
+    optionalEqual(left.authorityTransitionDigest, right.authorityTransitionDigest) &&
     optionalEqual(left.signedCertificate, right.signedCertificate) &&
     optionalEqual(left.rosterDigest, right.rosterDigest) && optionalEqual(left.signedRoster, right.signedRoster);
 }
@@ -256,12 +332,17 @@ function copyState(value: StoredMembershipState): WorkspaceMembershipState {
   return {
     workspaceId: value.workspaceId.slice(), deviceId: value.deviceId.slice(),
     authorityPublicKey: value.authorityPublicKey.slice(),
+    authorityEpoch: BigInt(value.authorityEpoch!), authorityTransitionDigest: value.authorityTransitionDigest!.slice(),
     ...(value.signedCertificate ? { signedCertificate: value.signedCertificate.slice() } : {}),
     rosterEpoch: BigInt(value.rosterEpoch),
     ...(value.rosterDigest ? { rosterDigest: value.rosterDigest.slice() } : {}),
     ...(value.signedRoster ? { signedRoster: value.signedRoster.slice() } : {}),
     localDeviceActive: value.localDeviceActive,
   };
+}
+function normalizeStored(value: StoredMembershipState | undefined): StoredMembershipState | undefined {
+  if (value === undefined) return undefined;
+  return { ...value, authorityEpoch: value.authorityEpoch ?? '1', authorityTransitionDigest: value.authorityTransitionDigest?.slice() ?? new Uint8Array(32) };
 }
 function validateId(value: Uint8Array, name: string): void {
   if (value.byteLength !== 16 || value.every((item) => item === 0)) throw new Error(`${name} must be a non-zero 16-byte value`);

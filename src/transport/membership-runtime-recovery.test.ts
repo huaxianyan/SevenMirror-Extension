@@ -40,7 +40,7 @@ it('resumes approved membership and promotes before returning to transport', asy
     await pendingStore.bindProof(enrollment, proof);
     await pendingStore.markPendingApproval(enrollment);
     const fetcher = async () => new Response(JSON.stringify({
-      state: 'approved', authority_public_key: toBase64Url(authority),
+      state: 'approved', authority_public_key: toBase64Url(authority), authority_transitions: [],
       signed_certificate: toBase64Url(fromHex(vector.certificateEncodedHex)),
       rosters: [toBase64Url(fromHex(vector.initialRosterEncodedHex))],
       latest_roster_epoch: '1',
@@ -80,7 +80,7 @@ it('refreshes a promoted member and persists a signed revocation roster', async 
     );
     await transportStore.saveNew(credential);
     const fetcher = async () => new Response(JSON.stringify({
-      state: 'approved', authority_public_key: toBase64Url(authority),
+      state: 'approved', authority_public_key: toBase64Url(authority), authority_transitions: [],
       signed_certificate: toBase64Url(fromHex(vector.certificateEncodedHex)),
       rosters: [toBase64Url(fromHex(vector.revokedRosterEncodedHex))],
       latest_roster_epoch: '2',

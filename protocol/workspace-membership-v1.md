@@ -27,6 +27,9 @@ SyncNotifications-membership-device-certificate-id-v1\0
 SyncNotifications-membership-device-certificate-signature-v1\0
 SyncNotifications-membership-workspace-roster-digest-v1\0
 SyncNotifications-membership-workspace-roster-signature-v1\0
+SyncNotifications-membership-authority-transition-digest-v1\0
+SyncNotifications-membership-authority-transition-old-signature-v1\0
+SyncNotifications-membership-authority-transition-new-signature-v1\0
 ```
 
 A domain-separated digest is `SHA-256(domain || canonical_bytes)`. An authority
@@ -152,6 +155,37 @@ The signature covers the complete active set, revocations, epoch, and previous
 digest. The relay cannot edit roles or remove a member without invalidating it.
 The accepted trust boundary still permits the authority itself to authorize a
 malicious future recipient.
+
+## Signed authority key transition
+
+An authority rotation is a forward-only transition jointly authenticated by the
+previous and new Ed25519 authorities. The canonical transition body binds the
+workspace, transition epoch, previous transition digest, exact previous and new
+public keys, activation roster epoch, preceding roster digest, and issue time.
+The keys must differ. Epoch 2 has an all-zero previous transition digest; later
+epochs require the exact non-zero digest of the preceding transition.
+
+For canonical transition body bytes `T`:
+
+```text
+transition_digest = SHA-256(transition-digest-domain || T)
+previous_authority_signature = Ed25519.Sign(previous_private_key,
+                                             old-signature-domain || T)
+new_authority_signature = Ed25519.Sign(new_private_key,
+                                       new-signature-domain || T)
+```
+
+Both signatures are mandatory. The old signature establishes continuity and the
+new signature proves possession before activation. The activation roster is the
+next roster, extends the bound previous roster digest, reissues every active
+device certificate under the new authority, and is signed by the new authority.
+The transition, replacement certificates, activation roster, and current
+authority pointer must be committed atomically.
+
+Clients may replace a pin only by validating the next transition and activation
+roster against their durable transition and roster rollback floors. Stale or
+gapped epochs, digest forks, key reuse, activation mismatches, and unsigned pin
+replacement fail closed.
 
 ## Client acceptance and rollback protection
 

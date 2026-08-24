@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file membership/v1/membership.proto.
  */
 export const file_membership_v1_membership: GenFile = /*@__PURE__*/
-  fileDesc("Ch5tZW1iZXJzaGlwL3YxL21lbWJlcnNoaXAucHJvdG8SJG5vdGlmaWNhdGlvbi5taXJyb3JpbmcubWVtYmVyc2hpcC52MSLKAQobSWRlbnRpdHlQb3NzZXNzaW9uQ2hhbGxlbmdlEhgKEHByb3RvY29sX3ZlcnNpb24YASABKA0SFAoMd29ya3NwYWNlX2lkGAIgASgMEhEKCWRldmljZV9pZBgDIAEoDBIXCg9pZGVudGl0eV9rZXlfaWQYBCABKAwSGAoQY2hhbGxlbmdlX3NlY3JldBgFIAEoDBIZChFpc3N1ZWRfYXRfdW5peF9tcxgGIAEoBBIaChJleHBpcmVzX2F0X3VuaXhfbXMYByABKAQipgEKFFBlbmRpbmdJZGVudGl0eVByb29mEhgKEHByb3RvY29sX3ZlcnNpb24YASABKA0SFAoMd29ya3NwYWNlX2lkGAIgASgMEhEKCWRldmljZV9pZBgDIAEoDBIXCg9pZGVudGl0eV9rZXlfaWQYBCABKAwSGAoQY2hhbGxlbmdlX2RpZ2VzdBgFIAEoDBIYChBjaGFsbGVuZ2Vfc2VjcmV0GAYgASgMIvsCChFEZXZpY2VDZXJ0aWZpY2F0ZRIYChBwcm90b2NvbF92ZXJzaW9uGAEgASgNEhQKDHdvcmtzcGFjZV9pZBgCIAEoDBIRCglkZXZpY2VfaWQYAyABKAwSRQoLZGV2aWNlX3R5cGUYBCABKA4yMC5ub3RpZmljYXRpb24ubWlycm9yaW5nLm1lbWJlcnNoaXAudjEuRGV2aWNlVHlwZRIUCgxkaXNwbGF5X25hbWUYBSABKAkSPwoFcm9sZXMYBiADKA4yMC5ub3RpZmljYXRpb24ubWlycm9yaW5nLm1lbWJlcnNoaXAudjEuRGV2aWNlUm9sZRIbChNpZGVudGl0eV9wdWJsaWNfa2V5GAcgASgMEhcKD2lkZW50aXR5X2tleV9pZBgIIAEoDBIZChFpc3N1ZWRfYXRfdW5peF9tcxgJIAEoBBIaChJleHBpcmVzX2F0X3VuaXhfbXMYCiABKAQSGAoQbWVtYmVyc2hpcF9lcG9jaBgLIAEoBCKcAQoXU2lnbmVkRGV2aWNlQ2VydGlmaWNhdGUSTAoLY2VydGlmaWNhdGUYASABKAsyNy5ub3RpZmljYXRpb24ubWlycm9yaW5nLm1lbWJlcnNoaXAudjEuRGV2aWNlQ2VydGlmaWNhdGUSFgoOY2VydGlmaWNhdGVfaWQYAiABKAwSGwoTYXV0aG9yaXR5X3NpZ25hdHVyZRgDIAEoDCJbChJSZXZva2VkQ2VydGlmaWNhdGUSFgoOY2VydGlmaWNhdGVfaWQYASABKAwSEQoJZGV2aWNlX2lkGAIgASgMEhoKEnJldm9rZWRfYXRfdW5peF9tcxgDIAEoBCKiAgoPV29ya3NwYWNlUm9zdGVyEhgKEHByb3RvY29sX3ZlcnNpb24YASABKA0SFAoMd29ya3NwYWNlX2lkGAIgASgMEhQKDHJvc3Rlcl9lcG9jaBgDIAEoBBIeChZwcmV2aW91c19yb3N0ZXJfZGlnZXN0GAQgASgMEloKE2FjdGl2ZV9jZXJ0aWZpY2F0ZXMYBSADKAsyPS5ub3RpZmljYXRpb24ubWlycm9yaW5nLm1lbWJlcnNoaXAudjEuU2lnbmVkRGV2aWNlQ2VydGlmaWNhdGUSTQoLcmV2b2NhdGlvbnMYBiADKAsyOC5ub3RpZmljYXRpb24ubWlycm9yaW5nLm1lbWJlcnNoaXAudjEuUmV2b2tlZENlcnRpZmljYXRlIpIBChVTaWduZWRXb3Jrc3BhY2VSb3N0ZXISRQoGcm9zdGVyGAEgASgLMjUubm90aWZpY2F0aW9uLm1pcnJvcmluZy5tZW1iZXJzaGlwLnYxLldvcmtzcGFjZVJvc3RlchIVCg1yb3N0ZXJfZGlnZXN0GAIgASgMEhsKE2F1dGhvcml0eV9zaWduYXR1cmUYAyABKAwqWgoKRGV2aWNlVHlwZRIbChdERVZJQ0VfVFlQRV9VTlNQRUNJRklFRBAAEhcKE0RFVklDRV9UWVBFX0FORFJPSUQQARIWChJERVZJQ0VfVFlQRV9DSFJPTUUQAirBAQoKRGV2aWNlUm9sZRIbChdERVZJQ0VfUk9MRV9VTlNQRUNJRklFRBAAEiIKHkRFVklDRV9ST0xFX1NFTkRfTk9USUZJQ0FUSU9OUxABEiUKIURFVklDRV9ST0xFX1JFQ0VJVkVfTk9USUZJQ0FUSU9OUxACEisKJ0RFVklDRV9ST0xFX0lOVk9LRV9OT1RJRklDQVRJT05fQUNUSU9OUxADEh4KGkRFVklDRV9ST0xFX01BTkFHRV9ERVZJQ0VTEARCrQEKOmRldi5ub3RpZmljYXRpb25taXJyb3JpbmcucHJvdG9jb2wuZ2VuZXJhdGVkLm1lbWJlcnNoaXAudjFCD01lbWJlcnNoaXBQcm90b1ABWlxnaXRodWIuY29tL2h1YXhpYW55YW4vU3luY05vdGlmaWNhdGlvbnMtU2VydmVyL3Byb3RvY29sL2dlbmVyYXRlZC9tZW1iZXJzaGlwL3YxO21lbWJlcnNoaXB2MWIGcHJvdG8z");
+  fileDesc("Ch5tZW1iZXJzaGlwL3YxL21lbWJlcnNoaXAucHJvdG8SJG5vdGlmaWNhdGlvbi5taXJyb3JpbmcubWVtYmVyc2hpcC52MSLKAQobSWRlbnRpdHlQb3NzZXNzaW9uQ2hhbGxlbmdlEhgKEHByb3RvY29sX3ZlcnNpb24YASABKA0SFAoMd29ya3NwYWNlX2lkGAIgASgMEhEKCWRldmljZV9pZBgDIAEoDBIXCg9pZGVudGl0eV9rZXlfaWQYBCABKAwSGAoQY2hhbGxlbmdlX3NlY3JldBgFIAEoDBIZChFpc3N1ZWRfYXRfdW5peF9tcxgGIAEoBBIaChJleHBpcmVzX2F0X3VuaXhfbXMYByABKAQipgEKFFBlbmRpbmdJZGVudGl0eVByb29mEhgKEHByb3RvY29sX3ZlcnNpb24YASABKA0SFAoMd29ya3NwYWNlX2lkGAIgASgMEhEKCWRldmljZV9pZBgDIAEoDBIXCg9pZGVudGl0eV9rZXlfaWQYBCABKAwSGAoQY2hhbGxlbmdlX2RpZ2VzdBgFIAEoDBIYChBjaGFsbGVuZ2Vfc2VjcmV0GAYgASgMIvsCChFEZXZpY2VDZXJ0aWZpY2F0ZRIYChBwcm90b2NvbF92ZXJzaW9uGAEgASgNEhQKDHdvcmtzcGFjZV9pZBgCIAEoDBIRCglkZXZpY2VfaWQYAyABKAwSRQoLZGV2aWNlX3R5cGUYBCABKA4yMC5ub3RpZmljYXRpb24ubWlycm9yaW5nLm1lbWJlcnNoaXAudjEuRGV2aWNlVHlwZRIUCgxkaXNwbGF5X25hbWUYBSABKAkSPwoFcm9sZXMYBiADKA4yMC5ub3RpZmljYXRpb24ubWlycm9yaW5nLm1lbWJlcnNoaXAudjEuRGV2aWNlUm9sZRIbChNpZGVudGl0eV9wdWJsaWNfa2V5GAcgASgMEhcKD2lkZW50aXR5X2tleV9pZBgIIAEoDBIZChFpc3N1ZWRfYXRfdW5peF9tcxgJIAEoBBIaChJleHBpcmVzX2F0X3VuaXhfbXMYCiABKAQSGAoQbWVtYmVyc2hpcF9lcG9jaBgLIAEoBCKcAQoXU2lnbmVkRGV2aWNlQ2VydGlmaWNhdGUSTAoLY2VydGlmaWNhdGUYASABKAsyNy5ub3RpZmljYXRpb24ubWlycm9yaW5nLm1lbWJlcnNoaXAudjEuRGV2aWNlQ2VydGlmaWNhdGUSFgoOY2VydGlmaWNhdGVfaWQYAiABKAwSGwoTYXV0aG9yaXR5X3NpZ25hdHVyZRgDIAEoDCJbChJSZXZva2VkQ2VydGlmaWNhdGUSFgoOY2VydGlmaWNhdGVfaWQYASABKAwSEQoJZGV2aWNlX2lkGAIgASgMEhoKEnJldm9rZWRfYXRfdW5peF9tcxgDIAEoBCKiAgoPV29ya3NwYWNlUm9zdGVyEhgKEHByb3RvY29sX3ZlcnNpb24YASABKA0SFAoMd29ya3NwYWNlX2lkGAIgASgMEhQKDHJvc3Rlcl9lcG9jaBgDIAEoBBIeChZwcmV2aW91c19yb3N0ZXJfZGlnZXN0GAQgASgMEloKE2FjdGl2ZV9jZXJ0aWZpY2F0ZXMYBSADKAsyPS5ub3RpZmljYXRpb24ubWlycm9yaW5nLm1lbWJlcnNoaXAudjEuU2lnbmVkRGV2aWNlQ2VydGlmaWNhdGUSTQoLcmV2b2NhdGlvbnMYBiADKAsyOC5ub3RpZmljYXRpb24ubWlycm9yaW5nLm1lbWJlcnNoaXAudjEuUmV2b2tlZENlcnRpZmljYXRlIpIBChVTaWduZWRXb3Jrc3BhY2VSb3N0ZXISRQoGcm9zdGVyGAEgASgLMjUubm90aWZpY2F0aW9uLm1pcnJvcmluZy5tZW1iZXJzaGlwLnYxLldvcmtzcGFjZVJvc3RlchIVCg1yb3N0ZXJfZGlnZXN0GAIgASgMEhsKE2F1dGhvcml0eV9zaWduYXR1cmUYAyABKAwiqwIKFkF1dGhvcml0eUtleVRyYW5zaXRpb24SGAoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDRIUCgx3b3Jrc3BhY2VfaWQYAiABKAwSGAoQdHJhbnNpdGlvbl9lcG9jaBgDIAEoBBIiChpwcmV2aW91c190cmFuc2l0aW9uX2RpZ2VzdBgEIAEoDBIlCh1wcmV2aW91c19hdXRob3JpdHlfcHVibGljX2tleRgFIAEoDBIgChhuZXdfYXV0aG9yaXR5X3B1YmxpY19rZXkYBiABKAwSHwoXYWN0aXZhdGlvbl9yb3N0ZXJfZXBvY2gYByABKAQSHgoWcHJldmlvdXNfcm9zdGVyX2RpZ2VzdBgIIAEoDBIZChFpc3N1ZWRfYXRfdW5peF9tcxgJIAEoBCLSAQocU2lnbmVkQXV0aG9yaXR5S2V5VHJhbnNpdGlvbhJQCgp0cmFuc2l0aW9uGAEgASgLMjwubm90aWZpY2F0aW9uLm1pcnJvcmluZy5tZW1iZXJzaGlwLnYxLkF1dGhvcml0eUtleVRyYW5zaXRpb24SGQoRdHJhbnNpdGlvbl9kaWdlc3QYAiABKAwSJAoccHJldmlvdXNfYXV0aG9yaXR5X3NpZ25hdHVyZRgDIAEoDBIfChduZXdfYXV0aG9yaXR5X3NpZ25hdHVyZRgEIAEoDCpaCgpEZXZpY2VUeXBlEhsKF0RFVklDRV9UWVBFX1VOU1BFQ0lGSUVEEAASFwoTREVWSUNFX1RZUEVfQU5EUk9JRBABEhYKEkRFVklDRV9UWVBFX0NIUk9NRRACKsEBCgpEZXZpY2VSb2xlEhsKF0RFVklDRV9ST0xFX1VOU1BFQ0lGSUVEEAASIgoeREVWSUNFX1JPTEVfU0VORF9OT1RJRklDQVRJT05TEAESJQohREVWSUNFX1JPTEVfUkVDRUlWRV9OT1RJRklDQVRJT05TEAISKwonREVWSUNFX1JPTEVfSU5WT0tFX05PVElGSUNBVElPTl9BQ1RJT05TEAMSHgoaREVWSUNFX1JPTEVfTUFOQUdFX0RFVklDRVMQBEKtAQo6ZGV2Lm5vdGlmaWNhdGlvbm1pcnJvcmluZy5wcm90b2NvbC5nZW5lcmF0ZWQubWVtYmVyc2hpcC52MUIPTWVtYmVyc2hpcFByb3RvUAFaXGdpdGh1Yi5jb20vaHVheGlhbnlhbi9TeW5jTm90aWZpY2F0aW9ucy1TZXJ2ZXIvcHJvdG9jb2wvZ2VuZXJhdGVkL21lbWJlcnNoaXAvdjE7bWVtYmVyc2hpcHYxYgZwcm90bzM");
 
 /**
  * IdentityPossessionChallenge is Base-HPKE encrypted to the proposed device
@@ -293,6 +293,99 @@ export type SignedWorkspaceRoster = Message<"notification.mirroring.membership.v
  */
 export const SignedWorkspaceRosterSchema: GenMessage<SignedWorkspaceRoster> = /*@__PURE__*/
   messageDesc(file_membership_v1_membership, 6);
+
+/**
+ * AuthorityKeyTransition authorizes exactly one forward-only authority change.
+ * The previous authority authorizes continuity; the new authority signature
+ * proves possession before it may sign the activation roster.
+ *
+ * @generated from message notification.mirroring.membership.v1.AuthorityKeyTransition
+ */
+export type AuthorityKeyTransition = Message<"notification.mirroring.membership.v1.AuthorityKeyTransition"> & {
+  /**
+   * @generated from field: uint32 protocol_version = 1;
+   */
+  protocolVersion: number;
+
+  /**
+   * @generated from field: bytes workspace_id = 2;
+   */
+  workspaceId: Uint8Array;
+
+  /**
+   * @generated from field: uint64 transition_epoch = 3;
+   */
+  transitionEpoch: bigint;
+
+  /**
+   * @generated from field: bytes previous_transition_digest = 4;
+   */
+  previousTransitionDigest: Uint8Array;
+
+  /**
+   * @generated from field: bytes previous_authority_public_key = 5;
+   */
+  previousAuthorityPublicKey: Uint8Array;
+
+  /**
+   * @generated from field: bytes new_authority_public_key = 6;
+   */
+  newAuthorityPublicKey: Uint8Array;
+
+  /**
+   * @generated from field: uint64 activation_roster_epoch = 7;
+   */
+  activationRosterEpoch: bigint;
+
+  /**
+   * @generated from field: bytes previous_roster_digest = 8;
+   */
+  previousRosterDigest: Uint8Array;
+
+  /**
+   * @generated from field: uint64 issued_at_unix_ms = 9;
+   */
+  issuedAtUnixMs: bigint;
+};
+
+/**
+ * Describes the message notification.mirroring.membership.v1.AuthorityKeyTransition.
+ * Use `create(AuthorityKeyTransitionSchema)` to create a new message.
+ */
+export const AuthorityKeyTransitionSchema: GenMessage<AuthorityKeyTransition> = /*@__PURE__*/
+  messageDesc(file_membership_v1_membership, 7);
+
+/**
+ * @generated from message notification.mirroring.membership.v1.SignedAuthorityKeyTransition
+ */
+export type SignedAuthorityKeyTransition = Message<"notification.mirroring.membership.v1.SignedAuthorityKeyTransition"> & {
+  /**
+   * @generated from field: notification.mirroring.membership.v1.AuthorityKeyTransition transition = 1;
+   */
+  transition?: AuthorityKeyTransition;
+
+  /**
+   * @generated from field: bytes transition_digest = 2;
+   */
+  transitionDigest: Uint8Array;
+
+  /**
+   * @generated from field: bytes previous_authority_signature = 3;
+   */
+  previousAuthoritySignature: Uint8Array;
+
+  /**
+   * @generated from field: bytes new_authority_signature = 4;
+   */
+  newAuthoritySignature: Uint8Array;
+};
+
+/**
+ * Describes the message notification.mirroring.membership.v1.SignedAuthorityKeyTransition.
+ * Use `create(SignedAuthorityKeyTransitionSchema)` to create a new message.
+ */
+export const SignedAuthorityKeyTransitionSchema: GenMessage<SignedAuthorityKeyTransition> = /*@__PURE__*/
+  messageDesc(file_membership_v1_membership, 8);
 
 /**
  * @generated from enum notification.mirroring.membership.v1.DeviceType

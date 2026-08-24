@@ -5,10 +5,12 @@ import {
   createPendingIdentityProof,
   decodeIdentityPossessionChallenge,
   decodePendingIdentityProof,
+  decodeSignedAuthorityKeyTransition,
   decodeSignedDeviceCertificate,
   decodeSignedWorkspaceRoster,
   encodePendingIdentityProof,
   openIdentityPossessionChallenge,
+  verifySignedAuthorityKeyTransition,
   verifySignedDeviceCertificate,
   verifySignedWorkspaceRoster,
 } from './workspace-membership';
@@ -42,6 +44,13 @@ describe('Workspace Membership v1', () => {
     await expect(verifySignedWorkspaceRoster(initial, authority)).resolves.toBeUndefined();
     await expect(verifySignedWorkspaceRoster(revoked, authority)).resolves.toBeUndefined();
     expect(revoked.roster?.previousRosterDigest).toEqual(initial.rosterDigest);
+
+    const transition = decodeSignedAuthorityKeyTransition(fromHex(vector.authorityTransitionEncodedHex));
+    await expect(verifySignedAuthorityKeyTransition(transition)).resolves.toBeUndefined();
+    expect(transition.transitionDigest).toEqual(fromHex(vector.authorityTransitionDigestHex));
+    const activation = decodeSignedWorkspaceRoster(fromHex(vector.authorityActivationRosterEncodedHex));
+    await expect(verifySignedWorkspaceRoster(activation, fromHex(vector.newAuthorityPublicKeyHex))).resolves.toBeUndefined();
+    expect(activation.roster?.previousRosterDigest).toEqual(initial.rosterDigest);
 
     certificate.authoritySignature[0] ^= 1;
     await expect(verifySignedDeviceCertificate(certificate, authority)).rejects.toThrow(/signature/i);

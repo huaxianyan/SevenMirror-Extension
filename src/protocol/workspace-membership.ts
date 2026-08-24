@@ -2,17 +2,21 @@ import { create, fromBinary, toBinary, type DescMessage, type MessageShape } fro
 import { Aes128Gcm, CipherSuite, DhkemP256HkdfSha256, HkdfSha256 } from '@hpke/core';
 import { ed25519 } from '@noble/curves/ed25519';
 import {
+  AuthorityKeyTransitionSchema,
   DeviceCertificateSchema,
   DeviceRole,
   DeviceType,
   IdentityPossessionChallengeSchema,
   PendingIdentityProofSchema,
+  SignedAuthorityKeyTransitionSchema,
   SignedDeviceCertificateSchema,
   SignedWorkspaceRosterSchema,
   WorkspaceRosterSchema,
+  type AuthorityKeyTransition,
   type DeviceCertificate,
   type IdentityPossessionChallenge,
   type PendingIdentityProof,
+  type SignedAuthorityKeyTransition,
   type SignedDeviceCertificate,
   type SignedWorkspaceRoster,
   type WorkspaceRoster,
@@ -26,6 +30,9 @@ const domains = Object.freeze({
   certificateSignature: 'SyncNotifications-membership-device-certificate-signature-v1\0',
   rosterDigest: 'SyncNotifications-membership-workspace-roster-digest-v1\0',
   rosterSignature: 'SyncNotifications-membership-workspace-roster-signature-v1\0',
+  transitionDigest: 'SyncNotifications-membership-authority-transition-digest-v1\0',
+  transitionOldSignature: 'SyncNotifications-membership-authority-transition-old-signature-v1\0',
+  transitionNewSignature: 'SyncNotifications-membership-authority-transition-new-signature-v1\0',
 });
 const textEncoder = new TextEncoder();
 const hpkeSuite = new CipherSuite({ kem: new DhkemP256HkdfSha256(), kdf: new HkdfSha256(), aead: new Aes128Gcm() });
@@ -144,6 +151,25 @@ export async function verifySignedWorkspaceRoster(value: SignedWorkspaceRoster, 
   if (!valid) throw new Error('Workspace roster authority signature is invalid');
 }
 
+export function decodeSignedAuthorityKeyTransition(encoded: Uint8Array): SignedAuthorityKeyTransition {
+  return decodeCanonical(SignedAuthorityKeyTransitionSchema, encoded, validateSignedAuthorityTransitionStructure);
+}
+
+export async function verifySignedAuthorityKeyTransition(value: SignedAuthorityKeyTransition): Promise<void> {
+  validateSignedAuthorityTransitionStructure(value);
+  const transitionBytes = encode(AuthorityKeyTransitionSchema, value.transition!);
+  const digest = await domainHash(domains.transitionDigest, transitionBytes);
+  if (!equal(digest, value.transitionDigest)) throw new Error('Authority transition digest does not match canonical transition');
+  if (!await verifyEd25519(value.transition!.previousAuthorityPublicKey, value.previousAuthoritySignature,
+    concat(textEncoder.encode(domains.transitionOldSignature), transitionBytes))) {
+    throw new Error('Previous authority transition signature is invalid');
+  }
+  if (!await verifyEd25519(value.transition!.newAuthorityPublicKey, value.newAuthoritySignature,
+    concat(textEncoder.encode(domains.transitionNewSignature), transitionBytes))) {
+    throw new Error('New authority transition signature is invalid');
+  }
+}
+
 async function verifyEd25519(
   publicKey: Uint8Array,
   signature: Uint8Array,
@@ -176,6 +202,32 @@ async function verifyEd25519(
 function isUnsupportedAlgorithm(error: unknown): boolean {
   return typeof error === 'object' && error !== null &&
     'name' in error && error.name === 'NotSupportedError';
+}
+
+function validateSignedAuthorityTransitionStructure(value: SignedAuthorityKeyTransition): void {
+  rejectUnknown(value);
+  if (!value.transition) throw new Error('Authority transition is required');
+  validateAuthorityTransition(value.transition);
+  requireNonZero(value.transitionDigest, LIMITS.digest, 'Authority transition digest');
+  if (value.previousAuthoritySignature.byteLength !== LIMITS.signature || value.newAuthoritySignature.byteLength !== LIMITS.signature) {
+    throw new Error('Authority transition signatures must be 64 bytes');
+  }
+}
+
+function validateAuthorityTransition(value: AuthorityKeyTransition): void {
+  rejectUnknown(value);
+  if (value.protocolVersion !== LIMITS.version || value.workspaceId.byteLength !== LIMITS.id || allZero(value.workspaceId) ||
+      value.transitionEpoch < 2n || value.transitionEpoch > LIMITS.maxInteger) throw new Error('Authority transition version, workspace, or epoch is invalid');
+  if (value.previousTransitionDigest.byteLength !== LIMITS.digest ||
+      (value.transitionEpoch === 2n ? !allZero(value.previousTransitionDigest) : allZero(value.previousTransitionDigest))) {
+    throw new Error('Authority transition previous digest is invalid');
+  }
+  requireNonZero(value.previousAuthorityPublicKey, 32, 'Previous authority public key');
+  requireNonZero(value.newAuthorityPublicKey, 32, 'New authority public key');
+  if (equal(value.previousAuthorityPublicKey, value.newAuthorityPublicKey)) throw new Error('Authority transition keys must differ');
+  if (value.activationRosterEpoch < 2n || value.activationRosterEpoch > LIMITS.maxInteger) throw new Error('Authority activation roster epoch is invalid');
+  requireNonZero(value.previousRosterDigest, LIMITS.digest, 'Authority transition previous roster digest');
+  if (value.issuedAtUnixMs < 1n || value.issuedAtUnixMs > LIMITS.maxInteger) throw new Error('Authority transition issue time is invalid');
 }
 
 function validateChallenge(value: IdentityPossessionChallenge): void {
