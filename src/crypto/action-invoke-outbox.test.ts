@@ -11,7 +11,6 @@ import {
 import { openEnvelopeOnce, type ReplayLedgerWriter } from './envelope-receiver';
 import { IndexedDbOutboundSequenceStore } from './indexeddb-outbound-sequence-store';
 import { IndexedDbPendingActionStore } from './indexeddb-pending-action-store';
-import { IndexedDbTrustedPeerStore } from './indexeddb-trusted-peer-store';
 
 const nowBase = 1_800_000_000_000;
 
@@ -42,14 +41,14 @@ describe('ActionInvokeOutbox', () => {
       identityKeyId: await deriveIdentityKeyId(senderPublicKey),
     };
     const pending = new IndexedDbPendingActionStore(name);
-    const peers = new IndexedDbTrustedPeerStore(`trusted-${name}`);
+    const recipients = new TestActionRecipientDirectory();
     const sequences = new IndexedDbOutboundSequenceStore(`sequences-${name}`);
     let now = nowBase;
     const sent: Uint8Array[] = [];
     const outbox = new ActionInvokeOutbox(
       { load: async () => copyCredential(credential) },
       { loadExisting: async () => senderIdentity },
-      actionResolver(peers),
+      actionResolver(recipients),
       pending,
       sequences,
       (frame) => { sent.push(frame.slice()); return true; },
@@ -58,7 +57,7 @@ describe('ActionInvokeOutbox', () => {
     );
     const idempotencyKey = new Uint8Array(16).fill(8);
     try {
-      await peers.pinApproved(workspaceId, recipientDeviceId, recipientPublicKey);
+      recipients.authorize(workspaceId, recipientDeviceId, recipientPublicKey);
       const queued = await outbox.queueAndSend({
         deviceId: recipientDeviceId,
         keyId: recipientKeyId,
@@ -121,13 +120,13 @@ describe('ActionInvokeOutbox', () => {
       expect(duplicatePayload.body.case === 'actionInvoke' &&
         duplicatePayload.body.value.idempotencyKey).toEqual(idempotencyKey);
 
-      await peers.remove(workspaceId, recipientDeviceId);
+      recipients.revoke();
       await expect(outbox.resendExact(idempotencyKey)).rejects.toThrow('not authorized');
       now += 2_000;
       expect(await outbox.drainDue()).toEqual({ acceptedSends: 0, attemptedEntries: 0 });
       expect(sent).toHaveLength(3);
     } finally {
-      await Promise.all([pending.clear(), peers.clear(), sequences.clear()]);
+      await Promise.all([pending.clear(), sequences.clear()]);
     }
   });
 
@@ -149,18 +148,18 @@ describe('ActionInvokeOutbox', () => {
       identityKeyId: await deriveIdentityKeyId(senderPublicKey),
     };
     const pending = new IndexedDbPendingActionStore(name);
-    const peers = new IndexedDbTrustedPeerStore(`trusted-${name}`);
+    const recipients = new TestActionRecipientDirectory();
     const sequences = new IndexedDbOutboundSequenceStore(`sequences-${name}`);
     const idempotencyKey = new Uint8Array(16).fill(8);
     const common = [
       { load: async () => copyCredential(credential) },
       { loadExisting: async () => senderIdentity },
-      actionResolver(peers),
+      actionResolver(recipients),
       pending,
       sequences,
     ] as const;
     try {
-      await peers.pinApproved(workspaceId, recipientDeviceId, recipientPublicKey);
+      recipients.authorize(workspaceId, recipientDeviceId, recipientPublicKey);
       const offline = new ActionInvokeOutbox(...common, () => false, () => nowBase);
       expect((await offline.queueAndSend({
         deviceId: recipientDeviceId,
@@ -190,19 +189,19 @@ describe('ActionInvokeOutbox', () => {
       expect(payload.body.case === 'actionInvoke' && payload.body.value.idempotencyKey)
         .toEqual(idempotencyKey);
     } finally {
-      await Promise.all([pending.clear(), peers.clear(), sequences.clear()]);
+      await Promise.all([pending.clear(), sequences.clear()]);
     }
   });
 });
 
-function actionResolver(peers: IndexedDbTrustedPeerStore) {
+function actionResolver(recipients: TestActionRecipientDirectory) {
   return {
     resolveActionRecipient: (
       workspaceId: Uint8Array,
       _localDeviceId: Uint8Array,
       recipientDeviceId: Uint8Array,
       recipientKeyId: Uint8Array,
-    ) => peers.findApproved(workspaceId, recipientDeviceId, recipientKeyId),
+    ) => recipients.resolve(workspaceId, recipientDeviceId, recipientKeyId),
   };
 }
 
@@ -214,4 +213,40 @@ function copyCredential(value: StoredTransportCredential): StoredTransportCreden
     authToken: value.authToken.slice(),
     identityKeyId: value.identityKeyId.slice(),
   };
+}
+
+class TestActionRecipientDirectory {
+  private recipient?: { workspaceId: Uint8Array; deviceId: Uint8Array; publicKey: Uint8Array };
+
+  authorize(workspaceId: Uint8Array, deviceId: Uint8Array, publicKey: Uint8Array): void {
+    this.recipient = {
+      workspaceId: workspaceId.slice(),
+      deviceId: deviceId.slice(),
+      publicKey: publicKey.slice(),
+    };
+  }
+
+  revoke(): void {
+    this.recipient = undefined;
+  }
+
+  async resolve(
+    workspaceId: Uint8Array,
+    deviceId: Uint8Array,
+    keyId: Uint8Array,
+  ): Promise<Uint8Array | undefined> {
+    const recipient = this.recipient;
+    if (recipient === undefined ||
+        !bytesEqual(recipient.workspaceId, workspaceId) ||
+        !bytesEqual(recipient.deviceId, deviceId) ||
+        !bytesEqual(await deriveIdentityKeyId(recipient.publicKey), keyId)) {
+      return undefined;
+    }
+    return recipient.publicKey.slice();
+  }
+}
+
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+  return left.byteLength === right.byteLength &&
+    left.every((value, index) => value === right[index]);
 }

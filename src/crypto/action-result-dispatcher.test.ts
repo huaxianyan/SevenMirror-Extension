@@ -25,7 +25,6 @@ import {
 import type { ReplayLedgerWriter } from './envelope-receiver';
 import { IndexedDbNotificationStateStore } from './indexeddb-notification-state-store';
 import { IndexedDbPendingActionStore } from './indexeddb-pending-action-store';
-import { IndexedDbTrustedPeerStore } from './indexeddb-trusted-peer-store';
 
 const now = 1_800_000_000_000;
 const workspaceId = new Uint8Array(16).fill(1);
@@ -45,7 +44,7 @@ describe('ActionResultDispatcher', () => {
   it('resolves an authorized sender and reconciles through the production boundary', async () => {
     const fixture = await createFixture();
     try {
-      await fixture.trustedPeers.pinApproved(workspaceId, androidDeviceId, fixture.androidPublicKey);
+      fixture.authorize();
       const receipt = await fixture.dispatcher.receive(toArrayBuffer(fixture.frame));
       expect(receipt.reconciliation).toBe('completed');
       expect(receipt.result.status).toBe(ActionResultStatus.SUCCEEDED);
@@ -74,7 +73,7 @@ describe('ActionResultDispatcher', () => {
       () => 'extension://notification-icon',
     );
     try {
-      await fixture.trustedPeers.pinApproved(workspaceId, androidDeviceId, fixture.androidPublicKey);
+      fixture.authorize();
       const upsert = await fixture.dispatcher.receiveBusiness(toArrayBuffer(await notificationFrame(
         fixture.androidIdentity,
         fixture.androidPublicKey,
@@ -187,7 +186,7 @@ describe('ActionResultDispatcher', () => {
       mayReceiveActionResults: true,
     });
     try {
-      await fixture.trustedPeers.pinApproved(workspaceId, androidDeviceId, fixture.androidPublicKey);
+      fixture.authorize();
       const frame = await notificationFrame(
         fixture.androidIdentity,
         fixture.androidPublicKey,
@@ -232,7 +231,7 @@ async function createFixture(authorization = {
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const pending = new IndexedDbPendingActionStore(`dispatcher-${suffix}`);
   const notificationState = new IndexedDbNotificationStateStore(`notifications-${suffix}`);
-  const trustedPeers = new IndexedDbTrustedPeerStore(`trusted-${suffix}`);
+  let senderAuthorized = false;
   const replay = new MemoryReplayLedger();
   await pending.register(
     idempotencyKey,
@@ -253,13 +252,14 @@ async function createFixture(authorization = {
     { loadExisting: async () => chromeIdentity },
     {
       resolve: async (resolvedWorkspace, _localDevice, senderDevice, senderKey) => {
-        const publicKey = await trustedPeers.findApproved(
-          resolvedWorkspace,
-          senderDevice,
-          senderKey,
-        );
-        return publicKey === undefined ? undefined : {
-          senderPublicKey: publicKey,
+        if (!senderAuthorized ||
+            !bytesEqual(resolvedWorkspace, workspaceId) ||
+            !bytesEqual(senderDevice, androidDeviceId) ||
+            !bytesEqual(senderKey, await sha256(androidPublicKey))) {
+          return undefined;
+        }
+        return {
+          senderPublicKey: androidPublicKey,
           mayReceiveNotifications: authorization.mayReceiveNotifications,
           mayReceiveActionResults: authorization.mayReceiveActionResults,
         };
@@ -279,11 +279,10 @@ async function createFixture(authorization = {
     loadedCredential,
     pending,
     replay,
-    trustedPeers,
+    authorize: () => { senderAuthorized = true; },
     clear: async () => {
       await notificationState.clear();
       await pending.clear();
-      await trustedPeers.clear();
     },
   };
 }
@@ -408,4 +407,9 @@ function toArrayBuffer(value: Uint8Array): ArrayBuffer {
 
 async function sha256(value: Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(await crypto.subtle.digest('SHA-256', value.slice().buffer));
+}
+
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+  return left.byteLength === right.byteLength &&
+    left.every((value, index) => value === right[index]);
 }
