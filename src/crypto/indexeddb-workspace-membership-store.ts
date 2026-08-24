@@ -57,11 +57,15 @@ export class IndexedDbWorkspaceMembershipStore {
       const store = transaction.objectStore(STORE_NAME);
       const existing = await requestResult<StoredMembershipState | undefined>(store.get(tuple));
       if (existing !== undefined) {
-        validateStored(existing);
-        if (!equal(existing.authorityPublicKey, authorityPublicKey)) {
+        const normalized = normalizeStored(existing)!;
+        validateStored(normalized);
+        if (!equal(normalized.authorityPublicKey, authorityPublicKey)) {
           transaction.abort();
           await completed.catch(() => undefined);
           throw new Error('Workspace authority replacement requires an authenticated transition');
+        }
+        if (existing.authorityEpoch === undefined || existing.authorityTransitionDigest === undefined) {
+          await requestResult(store.put(normalized));
         }
         await completed;
         return 'already-pinned';

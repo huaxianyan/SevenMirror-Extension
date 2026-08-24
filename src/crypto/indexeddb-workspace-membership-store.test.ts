@@ -57,6 +57,28 @@ describe('IndexedDbWorkspaceMembershipStore', () => {
     }
   });
 
+  it('durably upgrades a legacy authority pin before validating it', async () => {
+    const databaseName = `membership-${crypto.randomUUID()}`;
+    const store = new IndexedDbWorkspaceMembershipStore(databaseName);
+    try {
+      await store.pinAuthority(workspaceId, deviceId, authority);
+      await removeAuthorityFloor(databaseName);
+
+      await expect(store.pinAuthority(workspaceId, deviceId, authority))
+        .resolves.toBe('already-pinned');
+      await expect(store.load(workspaceId, deviceId)).resolves.toMatchObject({
+        authorityEpoch: 1n,
+        authorityTransitionDigest: new Uint8Array(32),
+      });
+      await expect(readAuthorityFloor(databaseName)).resolves.toEqual({
+        authorityEpoch: '1',
+        authorityTransitionDigest: new Uint8Array(32),
+      });
+    } finally {
+      await store.clear();
+    }
+  });
+
   it('atomically advances authority and roster rollback floors', async () => {
     const store = new IndexedDbWorkspaceMembershipStore(`membership-${crypto.randomUUID()}`);
     try {
@@ -96,3 +118,63 @@ describe('IndexedDbWorkspaceMembershipStore', () => {
     }
   });
 });
+
+async function removeAuthorityFloor(databaseName: string): Promise<void> {
+  const database = await openDatabase(databaseName);
+  try {
+    const transaction = database.transaction('workspace-membership', 'readwrite');
+    const store = transaction.objectStore('workspace-membership');
+    const value = await requestResult<Record<string, unknown>>(
+      store.get(`${vector.workspaceIdHex}:${vector.deviceIdHex}`),
+    );
+    delete value.authorityEpoch;
+    delete value.authorityTransitionDigest;
+    await requestResult(store.put(value));
+    await transactionCompleted(transaction);
+  } finally {
+    database.close();
+  }
+}
+
+async function readAuthorityFloor(databaseName: string): Promise<{
+  authorityEpoch: unknown;
+  authorityTransitionDigest: unknown;
+}> {
+  const database = await openDatabase(databaseName);
+  try {
+    const transaction = database.transaction('workspace-membership', 'readonly');
+    const value = await requestResult<Record<string, unknown>>(
+      transaction.objectStore('workspace-membership').get(`${vector.workspaceIdHex}:${vector.deviceIdHex}`),
+    );
+    await transactionCompleted(transaction);
+    return {
+      authorityEpoch: value.authorityEpoch,
+      authorityTransitionDigest: value.authorityTransitionDigest,
+    };
+  } finally {
+    database.close();
+  }
+}
+
+function openDatabase(databaseName: string): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(databaseName);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function requestResult<T>(request: IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function transactionCompleted(transaction: IDBTransaction): Promise<void> {
+  return new Promise((resolve, reject) => {
+    transaction.oncomplete = () => resolve();
+    transaction.onabort = () => reject(transaction.error);
+    transaction.onerror = () => reject(transaction.error);
+  });
+}
