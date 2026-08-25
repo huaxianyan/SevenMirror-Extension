@@ -77,6 +77,23 @@ resource identifier, content URI, file path or external URL from media bytes.
 The avatar is preferred for the single image position exposed by
 `chrome.notifications`; the app icon is the fallback.
 
+`actions` preserves the source notification's display order and contains at
+most 16 entries. Every `NotificationActionDescriptor` satisfies:
+
+- `action_id`: exactly 16 opaque bytes and unique within this upsert;
+- `title`: valid UTF-8, 1..256 encoded bytes, preserved as source application data;
+- `requires_text_input`: true when Android requires one or more local
+  `RemoteInput` values before invoking the action;
+- `allows_free_form_input`: true only when `requires_text_input` is also true
+  and at least one local input accepts free-form text.
+
+The descriptor does not contain a `PendingIntent`, `RemoteInput`, result key,
+choice value, resource identifier or other executable capability. Chrome may
+show fewer actions than the payload carries because `chrome.notifications` has
+platform-specific button limits. It MUST bind every shown button to the exact
+notification revision and opaque `action_id`; unsupported text-input actions
+remain unavailable rather than being invoked without required input.
+
 When `contains_content_image` is true, `body` MUST contain the exact `[图片]`
 placeholder. The original body image, URI and encoded bytes are forbidden from
 this field; only normalized app icon and avatar media may be present. A literal
@@ -89,8 +106,9 @@ observe bounded ciphertext size and timing but cannot read media type, hash,
 dimensions or bytes.
 
 The internal alpha continues to send only application-owned synthetic
-notifications. Action capabilities, package-private tokens and third-party
-notification content remain outside this slice.
+notifications. Only bounded action descriptors enter this payload; executable
+capabilities, package-private tokens and third-party notification content remain
+outside this slice.
 
 ## `notification_removed`
 

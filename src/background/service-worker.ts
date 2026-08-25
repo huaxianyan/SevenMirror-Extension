@@ -15,7 +15,7 @@ import { IndexedDbPendingActionStore } from '../crypto/indexeddb-pending-action-
 import { IndexedDbReplayLedger } from '../crypto/indexeddb-replay-ledger';
 import { ActionResultDispatcher } from '../crypto/action-result-dispatcher';
 import { IndexedDbNotificationStateStore } from '../crypto/indexeddb-notification-state-store';
-import { NotificationPresenter } from './notification-presenter';
+import { NotificationPresenter, notificationButtonActions } from './notification-presenter';
 import {
   IndexedDbTransportCredentialStore,
   type StoredTransportCredential,
@@ -136,6 +136,10 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 chrome.notifications.onClosed.addListener((notificationId, byUser) => {
   void handleNotificationClosed(notificationId, byUser);
+});
+
+chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
+  void invokeNotificationButton(notificationId, buttonIndex).catch(() => transportRuntime.failClosed());
 });
 
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
@@ -464,6 +468,35 @@ async function drainActionInvokes(): Promise<void> {
   } catch {
     // Corrupt local delivery state or encryption failure is not a network outage.
     await transportRuntime.failClosed();
+  }
+}
+
+async function invokeNotificationButton(notificationId: string, buttonIndex: number): Promise<void> {
+  if (!Number.isInteger(buttonIndex) || buttonIndex < 0) return;
+  const state = await notificationStateStore.findVisibleByChromeNotificationId(notificationId);
+  if (state === undefined) return;
+  const action = notificationButtonActions(state)[buttonIndex];
+  if (action === undefined) return;
+  const credential = await credentialStore.load();
+  if (credential === undefined) return;
+  try {
+    const recipients = await businessPeerResolver.listActionRecipients(
+      credential.workspaceId,
+      credential.deviceId,
+      Date.now(),
+    );
+    const recipient = recipients.find((candidate) =>
+      toHex(candidate.deviceId) === toHex(state.sourceDeviceId));
+    if (recipient === undefined) return;
+    await queueActionInvoke({
+      targetDeviceId: toHex(recipient.deviceId),
+      targetKeyId: toHex(recipient.keyId),
+      notificationId: state.notificationId,
+      notificationRevision: state.revision,
+      actionId: toHex(action.actionId),
+    });
+  } finally {
+    credential.authToken.fill(0);
   }
 }
 

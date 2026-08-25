@@ -14,6 +14,7 @@ import {
   type ActionResult,
   type ActionResultAck,
   type EncryptedPayload,
+  type NotificationActionDescriptor,
   type NotificationMedia,
   type NotificationRemoved,
   type NotificationSnapshotManifest,
@@ -22,11 +23,13 @@ import {
 
 export const ENCRYPTED_PAYLOAD_LIMITS = {
   schemaVersion: 1,
-  notificationSchemaVersion: 4,
+  notificationSchemaVersion: 5,
   maxPlaintextSize: 524_272,
   maxNotificationIdBytes: 512,
   maxNotificationTitleBytes: 512,
   maxNotificationBodyBytes: 4_000,
+  maxNotificationActions: 16,
+  maxNotificationActionTitleBytes: 256,
   maxNotificationMediaBytes: 128 * 1_024,
   maxNotificationMediaDimension: 256,
   maxSnapshotEntries: 200,
@@ -43,8 +46,9 @@ const RIFF_SIGNATURE = encoder.encode('RIFF');
 const WEBP_SIGNATURE = encoder.encode('WEBP');
 
 export function createNotificationUpsertPayload(
-  notification: Omit<NotificationUpsert, '$typeName' | 'containsContentImage'> & {
+  notification: Omit<NotificationUpsert, '$typeName' | 'containsContentImage' | 'actions'> & {
     containsContentImage?: boolean;
+    actions?: NotificationUpsert['actions'];
   },
 ): EncryptedPayload {
   return create(EncryptedPayloadSchema, {
@@ -203,6 +207,32 @@ function validateNotificationUpsert(notification: NotificationUpsert): void {
   if (notification.avatar !== undefined) {
     validateNotificationMedia(notification.avatar);
   }
+  if (notification.actions.length > ENCRYPTED_PAYLOAD_LIMITS.maxNotificationActions) {
+    throw new Error('Notification has too many actions');
+  }
+  const actionIds = new Set<string>();
+  for (const action of notification.actions) {
+    validateNotificationActionDescriptor(action);
+    const actionId = toHex(action.actionId);
+    if (actionIds.has(actionId)) {
+      throw new Error('Notification action ids must be unique');
+    }
+    actionIds.add(actionId);
+  }
+}
+
+function validateNotificationActionDescriptor(action: NotificationActionDescriptor): void {
+  if (action.$unknown?.length) {
+    throw new Error('Notification action contains unknown fields');
+  }
+  if (action.actionId.byteLength !== ENCRYPTED_PAYLOAD_LIMITS.identifierSize) {
+    throw new Error('Notification action id must be 16 bytes');
+  }
+  validateText(action.title, ENCRYPTED_PAYLOAD_LIMITS.maxNotificationActionTitleBytes,
+    'Notification action title');
+  if (action.allowsFreeFormInput && !action.requiresTextInput) {
+    throw new Error('Notification action cannot allow text without requiring text input');
+  }
 }
 
 function validateNotificationMedia(media: NotificationMedia): void {
@@ -236,6 +266,10 @@ function validateNotificationMedia(media: NotificationMedia): void {
     default:
       throw new Error('Notification media MIME type is unsupported');
   }
+}
+
+function toHex(value: Uint8Array): string {
+  return Array.from(value, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function hasBytesAt(value: Uint8Array, offset: number, expected: Uint8Array): boolean {

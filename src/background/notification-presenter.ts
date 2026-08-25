@@ -3,7 +3,11 @@ import {
   markProgrammaticClose,
 } from './lifecycle-spike';
 import type { NotificationReceipt } from '../crypto/notification-receiver';
-import type { MirroredNotificationMedia } from '../crypto/indexeddb-notification-state-store';
+import type {
+  MirroredNotificationAction,
+  MirroredNotificationMedia,
+  MirroredNotificationState,
+} from '../crypto/indexeddb-notification-state-store';
 import { NotificationMediaMimeType } from '../protocol/generated/notification/v1/payload_pb';
 
 export interface NotificationsApi {
@@ -46,6 +50,7 @@ export class NotificationPresenter {
     }
 
     const sourceRef = toHex(state.sourceDeviceId).slice(0, 12);
+    const actions = notificationButtonActions(state);
     const options: chrome.notifications.NotificationOptions<true> = {
       type: 'basic',
       iconUrl: await this.resolveIconUrl(state.avatar, state.appIcon),
@@ -53,6 +58,9 @@ export class NotificationPresenter {
       message: state.body ?? '',
       priority: 0,
       requireInteraction: true,
+      ...(actions.length === 0 ? {} : {
+        buttons: actions.map((action) => ({ title: action.title })),
+      }),
     };
     const existing = await this.getAll();
     if (existing[state.chromeNotificationId]) {
@@ -117,6 +125,15 @@ export class NotificationPresenter {
   private clear(notificationId: string): Promise<boolean> {
     return new Promise((resolve) => this.notifications.clear(notificationId, resolve));
   }
+}
+
+export function notificationButtonActions(
+  state: MirroredNotificationState,
+): MirroredNotificationAction[] {
+  return (state.actions ?? [])
+    .filter((action) => !action.requiresTextInput)
+    .slice(0, 2)
+    .map((action) => ({ ...action, actionId: action.actionId.slice() }));
 }
 
 interface DecodedImage {

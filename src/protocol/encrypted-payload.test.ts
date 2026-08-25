@@ -13,12 +13,21 @@ import {
 } from './encrypted-payload';
 import {
   ActionResultStatus,
+  NotificationActionDescriptorSchema,
   NotificationMediaMimeType,
   NotificationMediaSchema,
 } from './generated/notification/v1/payload_pb';
 
 const fromHex = (value: string): Uint8Array =>
   Uint8Array.from(value.match(/.{2}/g) ?? [], (byte) => Number.parseInt(byte, 16));
+
+const actionFromVector = (action: typeof vector.notificationActions[number]) =>
+  create(NotificationActionDescriptorSchema, {
+    actionId: fromHex(action.actionIdHex),
+    title: action.title,
+    requiresTextInput: action.requiresTextInput,
+    allowsFreeFormInput: action.allowsFreeFormInput,
+  });
 
 const mediaFromVector = (media: typeof vector.notificationAppIcon) =>
   create(NotificationMediaSchema, {
@@ -93,6 +102,7 @@ describe('Encrypted Payload v1', () => {
       appIcon: mediaFromVector(vector.notificationAppIcon),
       avatar: mediaFromVector(vector.notificationAvatar),
       containsContentImage: vector.notificationContainsContentImage,
+      actions: vector.notificationActions.map(actionFromVector),
     });
     const encodedUpsert = encodeEncryptedPayloadV1(upsert);
     expect(encodedUpsert).toEqual(fromHex(vector.notificationUpsertEncodedHex));
@@ -162,6 +172,18 @@ describe('Encrypted Payload v1', () => {
       title: vector.notificationTitle,
       appIcon: mediaFromVector(vector.notificationAppIcon),
     });
+
+    const invalidAction = createNotificationUpsertPayload({
+      notificationId: vector.notificationPayloadId,
+      notificationRevision: 7n,
+      title: vector.notificationTitle,
+      actions: [create(NotificationActionDescriptorSchema, {
+        actionId: new Uint8Array(16).fill(1),
+        title: 'Reply',
+        allowsFreeFormInput: true,
+      })],
+    });
+    expect(() => encodeEncryptedPayloadV1(invalidAction)).toThrow(/requiring text input/i);
 
     const wrongDigest = validMediaPayload();
     if (wrongDigest.body.case === 'notificationUpsert') {

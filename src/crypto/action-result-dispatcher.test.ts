@@ -3,6 +3,7 @@ import { create } from '@bufbuild/protobuf';
 import { describe, expect, it } from 'vitest';
 import {
   ActionResultStatus,
+  NotificationActionDescriptorSchema,
   NotificationMediaMimeType,
   NotificationMediaSchema,
 } from '../protocol/generated/notification/v1/payload_pb';
@@ -102,6 +103,7 @@ describe('ActionResultDispatcher', () => {
       expect([...visible.values()][0]?.message).toBe('first body');
       expect([...visible.values()][0]?.iconUrl).toBe('data:image/png;base64,app-icon');
       expect([...visible.values()][0]?.requireInteraction).toBe(true);
+      expect([...visible.values()][0]?.buttons).toEqual([{ title: 'Mark handled' }]);
       expect(mediaAttempts).toEqual([1, 2]);
 
       mediaAttempts.length = 0;
@@ -389,6 +391,13 @@ async function notificationFrame(
       ...(includeMedia ? {
         appIcon: vectorMedia(payloadVector.notificationAppIcon),
         avatar: vectorMedia(payloadVector.notificationAvatar),
+        actions: payloadVector.notificationActions.map((action) =>
+          create(NotificationActionDescriptorSchema, {
+            actionId: fromHex(action.actionIdHex),
+            title: action.title,
+            requiresTextInput: action.requiresTextInput,
+            allowsFreeFormInput: action.allowsFreeFormInput,
+          })),
       } : {}),
     });
   const plaintext = encodeEncryptedPayloadV1(payload);

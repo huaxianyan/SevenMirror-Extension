@@ -88,6 +88,16 @@ message NotificationUpsert {
   optional NotificationMedia app_icon = 5;
   optional NotificationMedia avatar = 6;
   bool contains_content_image = 7;
+  repeated NotificationActionDescriptor actions = 8;
+}
+
+// NotificationActionDescriptor exposes only the bounded action metadata needed
+// by Chrome. Android retains every executable capability locally.
+message NotificationActionDescriptor {
+  bytes action_id = 1;
+  string title = 2;
+  bool requires_text_input = 3;
+  bool allows_free_form_input = 4;
 }
 
 // NotificationMedia carries one normalized static image inside the same E2EE

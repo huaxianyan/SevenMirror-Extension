@@ -16,6 +16,13 @@ const STORE_NAME = 'notification-state';
 const SNAPSHOT_STORE_NAME = 'notification-snapshot';
 const DATABASE_VERSION = 2;
 
+export interface MirroredNotificationAction {
+  actionId: Uint8Array;
+  title: string;
+  requiresTextInput: boolean;
+  allowsFreeFormInput: boolean;
+}
+
 export interface MirroredNotificationMedia {
   contentSha256: Uint8Array;
   mimeType: NotificationMediaMimeType;
@@ -34,6 +41,7 @@ export interface MirroredNotificationState {
   payloadSha256: Uint8Array;
   title?: string;
   body?: string;
+  actions?: MirroredNotificationAction[];
   appIcon?: MirroredNotificationMedia;
   avatar?: MirroredNotificationMedia;
 }
@@ -70,6 +78,12 @@ export class IndexedDbNotificationStateStore {
       payloadSha256: await sha256(canonicalPayload),
       ...(notification.title === undefined ? {} : { title: notification.title }),
       ...(notification.body === undefined ? {} : { body: notification.body }),
+      actions: notification.actions.map((action) => ({
+        actionId: action.actionId.slice(),
+        title: action.title,
+        requiresTextInput: action.requiresTextInput,
+        allowsFreeFormInput: action.allowsFreeFormInput,
+      })),
       ...(notification.appIcon === undefined ? {} : { appIcon: storeMedia(notification.appIcon) }),
       ...(notification.avatar === undefined ? {} : { avatar: storeMedia(notification.avatar) }),
     });
@@ -223,6 +237,26 @@ export class IndexedDbNotificationStateStore {
     });
   }
 
+  async findVisibleByChromeNotificationId(
+    chromeNotificationId: string,
+  ): Promise<MirroredNotificationState | undefined> {
+    const database = await this.openDatabase();
+    try {
+      const transaction = database.transaction(STORE_NAME, 'readonly');
+      const completed = transactionCompleted(transaction);
+      const states = await requestResult<MirroredNotificationState[]>(
+        transaction.objectStore(STORE_NAME).getAll(),
+      );
+      await completed;
+      for (const state of states) validateStored(state);
+      const found = states.find((state) =>
+        state.phase === 'visible' && state.chromeNotificationId === chromeNotificationId);
+      return found === undefined ? undefined : copyState(found);
+    } finally {
+      database.close();
+    }
+  }
+
   private async reconcile(
     sourceDeviceId: Uint8Array,
     incoming: Omit<MirroredNotificationState, 'tuple' | 'sourceDeviceId' | 'chromeNotificationId' | 'revision'> & {
@@ -318,6 +352,7 @@ function validateStored(state: MirroredNotificationState): void {
   if (!(state.payloadSha256 instanceof Uint8Array) || state.payloadSha256.byteLength !== 32) {
     throw new Error('Stored notification digest is corrupt');
   }
+  if (state.actions !== undefined) validateStoredActions(state.actions);
   if (state.appIcon !== undefined) validateStoredMedia(state.appIcon);
   if (state.avatar !== undefined) validateStoredMedia(state.avatar);
 }
@@ -341,6 +376,7 @@ function copyState(state: MirroredNotificationState): MirroredNotificationState 
     ...state,
     sourceDeviceId: state.sourceDeviceId.slice(),
     payloadSha256: state.payloadSha256.slice(),
+    actions: (state.actions ?? []).map((action) => ({ ...action, actionId: action.actionId.slice() })),
     ...(state.appIcon === undefined ? {} : { appIcon: copyMedia(state.appIcon) }),
     ...(state.avatar === undefined ? {} : { avatar: copyMedia(state.avatar) }),
   };
@@ -362,6 +398,28 @@ function copyMedia(media: MirroredNotificationMedia): MirroredNotificationMedia 
     contentSha256: media.contentSha256.slice(),
     encodedBytes: media.encodedBytes.slice(),
   };
+}
+
+function validateStoredActions(actions: MirroredNotificationAction[]): void {
+  if (!Array.isArray(actions) || actions.length > ENCRYPTED_PAYLOAD_LIMITS.maxNotificationActions) {
+    throw new Error('Stored notification actions are corrupt');
+  }
+  const ids = new Set<string>();
+  for (const action of actions) {
+    const titleBytes = new TextEncoder().encode(action.title).byteLength;
+    if (!(action.actionId instanceof Uint8Array) ||
+        action.actionId.byteLength !== ENCRYPTED_PAYLOAD_LIMITS.identifierSize ||
+        typeof action.title !== 'string' || titleBytes < 1 ||
+        titleBytes > ENCRYPTED_PAYLOAD_LIMITS.maxNotificationActionTitleBytes ||
+        typeof action.requiresTextInput !== 'boolean' ||
+        typeof action.allowsFreeFormInput !== 'boolean' ||
+        (action.allowsFreeFormInput && !action.requiresTextInput)) {
+      throw new Error('Stored notification action is corrupt');
+    }
+    const id = toHex(action.actionId);
+    if (ids.has(id)) throw new Error('Stored notification action ids are not unique');
+    ids.add(id);
+  }
 }
 
 function validateStoredMedia(media: MirroredNotificationMedia): void {
