@@ -52,6 +52,7 @@ export class NotificationPresenter {
       title: `${state.title ?? 'Notification'} · Android ${sourceRef}`,
       message: state.body ?? '',
       priority: 0,
+      requireInteraction: true,
     };
     const existing = await this.getAll();
     if (existing[state.chromeNotificationId]) {

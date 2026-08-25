@@ -101,6 +101,7 @@ describe('ActionResultDispatcher', () => {
       if (upsert.kind === 'notification') await presenter.present(upsert.receipt);
       expect([...visible.values()][0]?.message).toBe('first body');
       expect([...visible.values()][0]?.iconUrl).toBe('data:image/png;base64,app-icon');
+      expect([...visible.values()][0]?.requireInteraction).toBe(true);
       expect(mediaAttempts).toEqual([1, 2]);
 
       mediaAttempts.length = 0;
