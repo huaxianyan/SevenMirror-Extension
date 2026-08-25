@@ -1,8 +1,12 @@
+import { sha256 as sha256Sync } from '@noble/hashes/sha256';
 import {
   createNotificationRemovedPayload,
   encodeEncryptedPayloadV1,
+  ENCRYPTED_PAYLOAD_LIMITS,
 } from '../protocol/encrypted-payload';
+import { NotificationMediaMimeType } from '../protocol/generated/notification/v1/payload_pb';
 import type {
+  NotificationMedia,
   NotificationRemoved,
   NotificationSnapshotManifest,
   NotificationUpsert,
@@ -11,6 +15,14 @@ import type {
 const STORE_NAME = 'notification-state';
 const SNAPSHOT_STORE_NAME = 'notification-snapshot';
 const DATABASE_VERSION = 2;
+
+export interface MirroredNotificationMedia {
+  contentSha256: Uint8Array;
+  mimeType: NotificationMediaMimeType;
+  width: number;
+  height: number;
+  encodedBytes: Uint8Array;
+}
 
 export interface MirroredNotificationState {
   tuple: string;
@@ -22,6 +34,8 @@ export interface MirroredNotificationState {
   payloadSha256: Uint8Array;
   title?: string;
   body?: string;
+  appIcon?: MirroredNotificationMedia;
+  avatar?: MirroredNotificationMedia;
 }
 
 export interface NotificationStateReconciliation {
@@ -56,6 +70,8 @@ export class IndexedDbNotificationStateStore {
       payloadSha256: await sha256(canonicalPayload),
       ...(notification.title === undefined ? {} : { title: notification.title }),
       ...(notification.body === undefined ? {} : { body: notification.body }),
+      ...(notification.appIcon === undefined ? {} : { appIcon: storeMedia(notification.appIcon) }),
+      ...(notification.avatar === undefined ? {} : { avatar: storeMedia(notification.avatar) }),
     });
   }
 
@@ -302,6 +318,8 @@ function validateStored(state: MirroredNotificationState): void {
   if (!(state.payloadSha256 instanceof Uint8Array) || state.payloadSha256.byteLength !== 32) {
     throw new Error('Stored notification digest is corrupt');
   }
+  if (state.appIcon !== undefined) validateStoredMedia(state.appIcon);
+  if (state.avatar !== undefined) validateStoredMedia(state.avatar);
 }
 
 function validateStoredSnapshot(snapshot: StoredNotificationSnapshot): void {
@@ -323,7 +341,41 @@ function copyState(state: MirroredNotificationState): MirroredNotificationState 
     ...state,
     sourceDeviceId: state.sourceDeviceId.slice(),
     payloadSha256: state.payloadSha256.slice(),
+    ...(state.appIcon === undefined ? {} : { appIcon: copyMedia(state.appIcon) }),
+    ...(state.avatar === undefined ? {} : { avatar: copyMedia(state.avatar) }),
   };
+}
+
+function storeMedia(media: NotificationMedia): MirroredNotificationMedia {
+  return {
+    contentSha256: media.contentSha256.slice(),
+    mimeType: media.mimeType,
+    width: media.width,
+    height: media.height,
+    encodedBytes: media.encodedBytes.slice(),
+  };
+}
+
+function copyMedia(media: MirroredNotificationMedia): MirroredNotificationMedia {
+  return {
+    ...media,
+    contentSha256: media.contentSha256.slice(),
+    encodedBytes: media.encodedBytes.slice(),
+  };
+}
+
+function validateStoredMedia(media: MirroredNotificationMedia): void {
+  if (!(media.contentSha256 instanceof Uint8Array) || media.contentSha256.byteLength !== 32 ||
+      !(media.encodedBytes instanceof Uint8Array) || media.encodedBytes.byteLength < 1 ||
+      media.encodedBytes.byteLength > ENCRYPTED_PAYLOAD_LIMITS.maxNotificationMediaBytes ||
+      !Number.isInteger(media.width) || !Number.isInteger(media.height) ||
+      media.width < 1 || media.width > ENCRYPTED_PAYLOAD_LIMITS.maxNotificationMediaDimension ||
+      media.height < 1 || media.height > ENCRYPTED_PAYLOAD_LIMITS.maxNotificationMediaDimension ||
+      (media.mimeType !== NotificationMediaMimeType.PNG &&
+       media.mimeType !== NotificationMediaMimeType.WEBP) ||
+      !bytesEqual(media.contentSha256, sha256Sync(media.encodedBytes))) {
+    throw new Error('Stored notification media is corrupt');
+  }
 }
 
 function sameStateSet(

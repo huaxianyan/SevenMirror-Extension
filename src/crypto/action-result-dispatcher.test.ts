@@ -1,6 +1,12 @@
 import 'fake-indexeddb/auto';
+import { create } from '@bufbuild/protobuf';
 import { describe, expect, it } from 'vitest';
-import { ActionResultStatus } from '../protocol/generated/notification/v1/payload_pb';
+import {
+  ActionResultStatus,
+  NotificationMediaMimeType,
+  NotificationMediaSchema,
+} from '../protocol/generated/notification/v1/payload_pb';
+import payloadVector from '../../protocol/test-vectors/encrypted-payload-v1.json';
 import { encodeEncryptedEnvelopeV1 } from '../protocol/encrypted-envelope';
 import {
   createActionResultPayload,
@@ -60,6 +66,7 @@ describe('ActionResultDispatcher', () => {
     const fixture = await createFixture();
     const visible = new Map<string, chrome.notifications.NotificationOptions<true>>();
     const programmaticMarkers: string[] = [];
+    const mediaAttempts: number[] = [];
     const notifications: NotificationsApi = {
       getAll: (callback) => callback(Object.fromEntries([...visible.keys()].map((key) => [key, true]))),
       create: (id, options, callback) => { visible.set(id, options); callback?.(id); },
@@ -71,6 +78,12 @@ describe('ActionResultDispatcher', () => {
       async (id) => { programmaticMarkers.push(id); },
       async () => undefined,
       () => 'extension://notification-icon',
+      async (media) => {
+        mediaAttempts.push(media.width);
+        return media.width === payloadVector.notificationAvatar.width
+          ? undefined
+          : 'data:image/png;base64,app-icon';
+      },
     );
     try {
       fixture.authorize();
@@ -82,10 +95,30 @@ describe('ActionResultDispatcher', () => {
         'first body',
         false,
         6,
+        true,
       )));
       expect(upsert.kind).toBe('notification');
       if (upsert.kind === 'notification') await presenter.present(upsert.receipt);
       expect([...visible.values()][0]?.message).toBe('first body');
+      expect([...visible.values()][0]?.iconUrl).toBe('data:image/png;base64,app-icon');
+      expect(mediaAttempts).toEqual([1, 2]);
+
+      mediaAttempts.length = 0;
+      const exactRetry = await fixture.dispatcher.receiveBusiness(toArrayBuffer(await notificationFrame(
+        fixture.androidIdentity,
+        fixture.androidPublicKey,
+        fixture.chromePublicKey,
+        7n,
+        'first body',
+        false,
+        16,
+        true,
+      )));
+      if (exactRetry.kind === 'notification') await presenter.present(exactRetry.receipt);
+      expect(exactRetry.kind === 'notification' && exactRetry.receipt.kind === 'item'
+        ? exactRetry.receipt.reconciliation.disposition
+        : undefined).toBe('already-applied');
+      expect(mediaAttempts).toEqual([1, 2]);
 
       const update = await fixture.dispatcher.receiveBusiness(toArrayBuffer(await notificationFrame(
         fixture.androidIdentity,
@@ -98,6 +131,7 @@ describe('ActionResultDispatcher', () => {
       )));
       if (update.kind === 'notification') await presenter.present(update.receipt);
       expect([...visible.values()][0]?.message).toBe('updated body');
+      expect([...visible.values()][0]?.iconUrl).toBe('extension://notification-icon');
 
       const activeSnapshot = await fixture.dispatcher.receiveBusiness(toArrayBuffer(await snapshotFrame(
         fixture.androidIdentity,
@@ -328,6 +362,7 @@ async function notificationFrame(
   body: string | undefined,
   removed: boolean,
   messageByte: number,
+  includeMedia = false,
 ): Promise<Uint8Array> {
   const routingHeader = encodeRoutingHeaderV1({
     workspaceId,
@@ -350,6 +385,10 @@ async function notificationFrame(
       notificationRevision: revision,
       title: 'Synthetic notification',
       body,
+      ...(includeMedia ? {
+        appIcon: vectorMedia(payloadVector.notificationAppIcon),
+        avatar: vectorMedia(payloadVector.notificationAvatar),
+      } : {}),
     });
   const plaintext = encodeEncryptedPayloadV1(payload);
   const encrypted = await sealWithIdentity(
@@ -399,6 +438,20 @@ async function snapshotFrame(
     encapsulatedKey: encrypted.encapsulatedKey,
     ciphertext: encrypted.ciphertext,
   });
+}
+
+function vectorMedia(media: typeof payloadVector.notificationAppIcon) {
+  return create(NotificationMediaSchema, {
+    contentSha256: fromHex(media.contentSha256Hex),
+    mimeType: NotificationMediaMimeType.PNG,
+    width: media.width,
+    height: media.height,
+    encodedBytes: fromHex(media.encodedHex),
+  });
+}
+
+function fromHex(value: string): Uint8Array {
+  return Uint8Array.from(value.match(/.{2}/g) ?? [], (byte) => Number.parseInt(byte, 16));
 }
 
 function toArrayBuffer(value: Uint8Array): ArrayBuffer {
