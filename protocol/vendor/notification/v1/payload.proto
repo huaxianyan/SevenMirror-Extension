@@ -78,13 +78,32 @@ message IdentityKeyTransitionCommit {
   bytes ack_sha256 = 5;
 }
 
-// NotificationUpsert carries the current text state of one source-device
+// NotificationUpsert carries the bounded display state of one source-device
 // notification. The authenticated envelope sender supplies sourceDeviceId.
 message NotificationUpsert {
   string notification_id = 1;
   uint64 notification_revision = 2;
   optional string title = 3;
   optional string body = 4;
+  optional NotificationMedia app_icon = 5;
+  optional NotificationMedia avatar = 6;
+  bool contains_content_image = 7;
+}
+
+// NotificationMedia carries one normalized static image inside the same E2EE
+// plaintext as its notification. Resource references and external URLs are forbidden.
+message NotificationMedia {
+  bytes content_sha256 = 1;
+  NotificationMediaMimeType mime_type = 2;
+  uint32 width = 3;
+  uint32 height = 4;
+  bytes encoded_bytes = 5;
+}
+
+enum NotificationMediaMimeType {
+  NOTIFICATION_MEDIA_MIME_TYPE_UNSPECIFIED = 0;
+  NOTIFICATION_MEDIA_MIME_TYPE_PNG = 1;
+  NOTIFICATION_MEDIA_MIME_TYPE_WEBP = 2;
 }
 
 // NotificationRemoved is authoritative for one notification revision. Chrome

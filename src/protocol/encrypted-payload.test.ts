@@ -1,3 +1,4 @@
+import { create } from '@bufbuild/protobuf';
 import { describe, expect, it } from 'vitest';
 import vector from '../../protocol/test-vectors/encrypted-payload-v1.json';
 import {
@@ -10,10 +11,23 @@ import {
   decodeEncryptedPayloadV1,
   encodeEncryptedPayloadV1,
 } from './encrypted-payload';
-import { ActionResultStatus } from './generated/notification/v1/payload_pb';
+import {
+  ActionResultStatus,
+  NotificationMediaMimeType,
+  NotificationMediaSchema,
+} from './generated/notification/v1/payload_pb';
 
 const fromHex = (value: string): Uint8Array =>
   Uint8Array.from(value.match(/.{2}/g) ?? [], (byte) => Number.parseInt(byte, 16));
+
+const mediaFromVector = (media: typeof vector.notificationAppIcon) =>
+  create(NotificationMediaSchema, {
+    contentSha256: fromHex(media.contentSha256Hex),
+    mimeType: NotificationMediaMimeType.PNG,
+    width: media.width,
+    height: media.height,
+    encodedBytes: fromHex(media.encodedHex),
+  });
 
 const validPayload = () => createActionInvokePayload({
   notificationId: vector.notificationId,
@@ -76,6 +90,9 @@ describe('Encrypted Payload v1', () => {
       notificationRevision: BigInt(vector.notificationUpsertRevision),
       title: vector.notificationTitle,
       body: vector.notificationBody,
+      appIcon: mediaFromVector(vector.notificationAppIcon),
+      avatar: mediaFromVector(vector.notificationAvatar),
+      containsContentImage: vector.notificationContainsContentImage,
     });
     const encodedUpsert = encodeEncryptedPayloadV1(upsert);
     expect(encodedUpsert).toEqual(fromHex(vector.notificationUpsertEncodedHex));
@@ -136,6 +153,51 @@ describe('Encrypted Payload v1', () => {
     });
     expect(decodeEncryptedPayloadV1(encodeEncryptedPayloadV1(empty)).body.case)
       .toBe('notificationSnapshotManifest');
+  });
+
+  it('rejects invalid notification media', () => {
+    const validMediaPayload = () => createNotificationUpsertPayload({
+      notificationId: vector.notificationPayloadId,
+      notificationRevision: 7n,
+      title: vector.notificationTitle,
+      appIcon: mediaFromVector(vector.notificationAppIcon),
+    });
+
+    const wrongDigest = validMediaPayload();
+    if (wrongDigest.body.case === 'notificationUpsert') {
+      wrongDigest.body.value.appIcon!.contentSha256 = new Uint8Array(32);
+    }
+    expect(() => encodeEncryptedPayloadV1(wrongDigest)).toThrow(/SHA-256/i);
+
+    const unsupportedMime = validMediaPayload();
+    if (unsupportedMime.body.case === 'notificationUpsert') {
+      unsupportedMime.body.value.appIcon!.mimeType = NotificationMediaMimeType.UNSPECIFIED;
+    }
+    expect(() => encodeEncryptedPayloadV1(unsupportedMime)).toThrow(/MIME/i);
+
+    const invalidDimension = validMediaPayload();
+    if (invalidDimension.body.case === 'notificationUpsert') {
+      invalidDimension.body.value.appIcon!.width = 0;
+    }
+    expect(() => encodeEncryptedPayloadV1(invalidDimension)).toThrow(/dimensions/i);
+
+    const oversized = validMediaPayload();
+    if (oversized.body.case === 'notificationUpsert') {
+      oversized.body.value.appIcon!.encodedBytes = new Uint8Array(128 * 1_024 + 1);
+    }
+    expect(() => encodeEncryptedPayloadV1(oversized)).toThrow(/bytes/i);
+
+    const wrongSignature = validMediaPayload();
+    if (wrongSignature.body.case === 'notificationUpsert') {
+      wrongSignature.body.value.appIcon!.mimeType = NotificationMediaMimeType.WEBP;
+    }
+    expect(() => encodeEncryptedPayloadV1(wrongSignature)).toThrow(/WebP signature/i);
+
+    const missingPlaceholder = validMediaPayload();
+    if (missingPlaceholder.body.case === 'notificationUpsert') {
+      missingPlaceholder.body.value.containsContentImage = true;
+    }
+    expect(() => encodeEncryptedPayloadV1(missingPlaceholder)).toThrow(/placeholder/i);
   });
 
   it('rejects invalid notification fields and schema mismatch', () => {

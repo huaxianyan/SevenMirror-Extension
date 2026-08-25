@@ -1,10 +1,12 @@
 import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
+import { sha256 } from '@noble/hashes/sha256';
 import {
   ActionInvokeSchema,
   ActionResultSchema,
   ActionResultAckSchema,
   ActionResultStatus,
   EncryptedPayloadSchema,
+  NotificationMediaMimeType,
   NotificationRemovedSchema,
   NotificationSnapshotManifestSchema,
   NotificationUpsertSchema,
@@ -12,6 +14,7 @@ import {
   type ActionResult,
   type ActionResultAck,
   type EncryptedPayload,
+  type NotificationMedia,
   type NotificationRemoved,
   type NotificationSnapshotManifest,
   type NotificationUpsert,
@@ -19,11 +22,13 @@ import {
 
 export const ENCRYPTED_PAYLOAD_LIMITS = {
   schemaVersion: 1,
-  notificationSchemaVersion: 3,
+  notificationSchemaVersion: 4,
   maxPlaintextSize: 524_272,
   maxNotificationIdBytes: 512,
   maxNotificationTitleBytes: 512,
   maxNotificationBodyBytes: 4_000,
+  maxNotificationMediaBytes: 128 * 1_024,
+  maxNotificationMediaDimension: 256,
   maxSnapshotEntries: 200,
   maxReplyTextBytes: 4_000,
   maxResultDetailBytes: 256,
@@ -33,9 +38,14 @@ export const ENCRYPTED_PAYLOAD_LIMITS = {
 } as const;
 
 const encoder = new TextEncoder();
+const PNG_SIGNATURE = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const RIFF_SIGNATURE = encoder.encode('RIFF');
+const WEBP_SIGNATURE = encoder.encode('WEBP');
 
 export function createNotificationUpsertPayload(
-  notification: Omit<NotificationUpsert, '$typeName'>,
+  notification: Omit<NotificationUpsert, '$typeName' | 'containsContentImage'> & {
+    containsContentImage?: boolean;
+  },
 ): EncryptedPayload {
   return create(EncryptedPayloadSchema, {
     schemaVersion: ENCRYPTED_PAYLOAD_LIMITS.notificationSchemaVersion,
@@ -183,6 +193,54 @@ function validateNotificationUpsert(notification: NotificationUpsert): void {
   if (notification.body !== undefined) {
     validateText(notification.body, ENCRYPTED_PAYLOAD_LIMITS.maxNotificationBodyBytes, 'Notification body');
   }
+  if (notification.containsContentImage &&
+      (notification.body === undefined || !notification.body.includes('[图片]'))) {
+    throw new Error('Notification content image requires a body placeholder');
+  }
+  if (notification.appIcon !== undefined) {
+    validateNotificationMedia(notification.appIcon);
+  }
+  if (notification.avatar !== undefined) {
+    validateNotificationMedia(notification.avatar);
+  }
+}
+
+function validateNotificationMedia(media: NotificationMedia): void {
+  if (media.$unknown?.length) {
+    throw new Error('Notification media contains unknown fields');
+  }
+  if (media.encodedBytes.byteLength < 1 ||
+      media.encodedBytes.byteLength > ENCRYPTED_PAYLOAD_LIMITS.maxNotificationMediaBytes) {
+    throw new Error('Notification media bytes are out of range');
+  }
+  if (media.width < 1 || media.width > ENCRYPTED_PAYLOAD_LIMITS.maxNotificationMediaDimension ||
+      media.height < 1 || media.height > ENCRYPTED_PAYLOAD_LIMITS.maxNotificationMediaDimension) {
+    throw new Error('Notification media dimensions are out of range');
+  }
+  if (!arraysEqual(media.contentSha256, sha256(media.encodedBytes))) {
+    throw new Error('Notification media SHA-256 does not match encoded bytes');
+  }
+  switch (media.mimeType) {
+    case NotificationMediaMimeType.PNG:
+      if (!hasBytesAt(media.encodedBytes, 0, PNG_SIGNATURE)) {
+        throw new Error('Notification media does not have a PNG signature');
+      }
+      return;
+    case NotificationMediaMimeType.WEBP:
+      if (media.encodedBytes.byteLength < 12 ||
+          !hasBytesAt(media.encodedBytes, 0, RIFF_SIGNATURE) ||
+          !hasBytesAt(media.encodedBytes, 8, WEBP_SIGNATURE)) {
+        throw new Error('Notification media does not have a WebP signature');
+      }
+      return;
+    default:
+      throw new Error('Notification media MIME type is unsupported');
+  }
+}
+
+function hasBytesAt(value: Uint8Array, offset: number, expected: Uint8Array): boolean {
+  return value.byteLength >= offset + expected.byteLength &&
+    expected.every((byte, index) => value[offset + index] === byte);
 }
 
 function validateNotificationRemoved(notification: NotificationRemoved): void {

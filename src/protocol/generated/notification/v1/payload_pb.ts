@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file notification/v1/payload.proto.
  */
 export const file_notification_v1_payload: GenFile = /*@__PURE__*/
-  fileDesc("Ch1ub3RpZmljYXRpb24vdjEvcGF5bG9hZC5wcm90bxIZbm90aWZpY2F0aW9uLm1pcnJvcmluZy52MSKTBgoQRW5jcnlwdGVkUGF5bG9hZBIWCg5zY2hlbWFfdmVyc2lvbhgBIAEoDRJACg1hY3Rpb25faW52b2tlGAogASgLMicubm90aWZpY2F0aW9uLm1pcnJvcmluZy52MS5BY3Rpb25JbnZva2VIABJACg1hY3Rpb25fcmVzdWx0GAsgASgLMicubm90aWZpY2F0aW9uLm1pcnJvcmluZy52MS5BY3Rpb25SZXN1bHRIABJHChFhY3Rpb25fcmVzdWx0X2FjaxgMIAEoCzIqLm5vdGlmaWNhdGlvbi5taXJyb3JpbmcudjEuQWN0aW9uUmVzdWx0QWNrSAASUwoXaWRlbnRpdHlfa2V5X3RyYW5zaXRpb24YDSABKAsyMC5ub3RpZmljYXRpb24ubWlycm9yaW5nLnYxLklkZW50aXR5S2V5VHJhbnNpdGlvbkgAEloKG2lkZW50aXR5X2tleV90cmFuc2l0aW9uX2FjaxgOIAEoCzIzLm5vdGlmaWNhdGlvbi5taXJyb3JpbmcudjEuSWRlbnRpdHlLZXlUcmFuc2l0aW9uQWNrSAASYAoeaWRlbnRpdHlfa2V5X3RyYW5zaXRpb25fY29tbWl0GA8gASgLMjYubm90aWZpY2F0aW9uLm1pcnJvcmluZy52MS5JZGVudGl0eUtleVRyYW5zaXRpb25Db21taXRIABJMChNub3RpZmljYXRpb25fdXBzZXJ0GBAgASgLMi0ubm90aWZpY2F0aW9uLm1pcnJvcmluZy52MS5Ob3RpZmljYXRpb25VcHNlcnRIABJOChRub3RpZmljYXRpb25fcmVtb3ZlZBgRIAEoCzIuLm5vdGlmaWNhdGlvbi5taXJyb3JpbmcudjEuTm90aWZpY2F0aW9uUmVtb3ZlZEgAEmEKHm5vdGlmaWNhdGlvbl9zbmFwc2hvdF9tYW5pZmVzdBgSIAEoCzI3Lm5vdGlmaWNhdGlvbi5taXJyb3JpbmcudjEuTm90aWZpY2F0aW9uU25hcHNob3RNYW5pZmVzdEgAQgYKBGJvZHkimgEKDEFjdGlvbkludm9rZRIXCg9ub3RpZmljYXRpb25faWQYASABKAkSHQoVbm90aWZpY2F0aW9uX3JldmlzaW9uGAIgASgEEhEKCWFjdGlvbl9pZBgDIAEoDBIXCg9pZGVtcG90ZW5jeV9rZXkYBCABKAwSFwoKcmVwbHlfdGV4dBgFIAEoCUgAiAEBQg0KC19yZXBseV90ZXh0IoYBCgxBY3Rpb25SZXN1bHQSFwoPaWRlbXBvdGVuY3lfa2V5GAEgASgMEj0KBnN0YXR1cxgCIAEoDjItLm5vdGlmaWNhdGlvbi5taXJyb3JpbmcudjEuQWN0aW9uUmVzdWx0U3RhdHVzEhMKBmRldGFpbBgDIAEoCUgAiAEBQgkKB19kZXRhaWwiQQoPQWN0aW9uUmVzdWx0QWNrEhcKD2lkZW1wb3RlbmN5X2tleRgBIAEoDBIVCg1yZXN1bHRfc2hhMjU2GAIgASgMInMKFUlkZW50aXR5S2V5VHJhbnNpdGlvbhIVCg10cmFuc2l0aW9uX2lkGAEgASgMEhcKD3ByZXZpb3VzX2tleV9pZBgCIAEoDBIWCg5uZXdfcHVibGljX2tleRgDIAEoDBISCgpuZXdfa2V5X2lkGAQgASgMInkKGElkZW50aXR5S2V5VHJhbnNpdGlvbkFjaxIVCg10cmFuc2l0aW9uX2lkGAEgASgMEhcKD3ByZXZpb3VzX2tleV9pZBgCIAEoDBISCgpuZXdfa2V5X2lkGAMgASgMEhkKEXRyYW5zaXRpb25fc2hhMjU2GAQgASgMIpABChtJZGVudGl0eUtleVRyYW5zaXRpb25Db21taXQSFQoNdHJhbnNpdGlvbl9pZBgBIAEoDBIXCg9wcmV2aW91c19rZXlfaWQYAiABKAwSEgoKbmV3X2tleV9pZBgDIAEoDBIZChF0cmFuc2l0aW9uX3NoYTI1NhgEIAEoDBISCgphY2tfc2hhMjU2GAUgASgMIoYBChJOb3RpZmljYXRpb25VcHNlcnQSFwoPbm90aWZpY2F0aW9uX2lkGAEgASgJEh0KFW5vdGlmaWNhdGlvbl9yZXZpc2lvbhgCIAEoBBISCgV0aXRsZRgDIAEoCUgAiAEBEhEKBGJvZHkYBCABKAlIAYgBAUIICgZfdGl0bGVCBwoFX2JvZHkiTQoTTm90aWZpY2F0aW9uUmVtb3ZlZBIXCg9ub3RpZmljYXRpb25faWQYASABKAkSHQoVbm90aWZpY2F0aW9uX3JldmlzaW9uGAIgASgEIo8BChxOb3RpZmljYXRpb25TbmFwc2hvdE1hbmlmZXN0EhsKE2hpZ2hfd2F0ZXJfcmV2aXNpb24YASABKAQSUgoUYWN0aXZlX25vdGlmaWNhdGlvbnMYAiADKAsyNC5ub3RpZmljYXRpb24ubWlycm9yaW5nLnYxLk5vdGlmaWNhdGlvblNuYXBzaG90RW50cnkiUwoZTm90aWZpY2F0aW9uU25hcHNob3RFbnRyeRIXCg9ub3RpZmljYXRpb25faWQYASABKAkSHQoVbm90aWZpY2F0aW9uX3JldmlzaW9uGAIgASgEKsoDChJBY3Rpb25SZXN1bHRTdGF0dXMSJAogQUNUSU9OX1JFU1VMVF9TVEFUVVNfVU5TUEVDSUZJRUQQABIiCh5BQ1RJT05fUkVTVUxUX1NUQVRVU19TVUNDRUVERUQQARIvCitBQ1RJT05fUkVTVUxUX1NUQVRVU19OT1RJRklDQVRJT05fTk9UX0ZPVU5EEAISMwovQUNUSU9OX1JFU1VMVF9TVEFUVVNfU1RBTEVfTk9USUZJQ0FUSU9OX1ZFUlNJT04QAxIpCiVBQ1RJT05fUkVTVUxUX1NUQVRVU19BQ1RJT05fTk9UX0ZPVU5EEAQSJgoiQUNUSU9OX1JFU1VMVF9TVEFUVVNfVEVYVF9SRVFVSVJFRBAFEisKJ0FDVElPTl9SRVNVTFRfU1RBVFVTX1RFWFRfTk9UX1NVUFBPUlRFRBAGEjEKLUFDVElPTl9SRVNVTFRfU1RBVFVTX1BFTkRJTkdfSU5URU5UX0NBTkNFTExFRBAHEicKI0FDVElPTl9SRVNVTFRfU1RBVFVTX0lOVEVSTkFMX0VSUk9SEAgSKAokQUNUSU9OX1JFU1VMVF9TVEFUVVNfT1VUQ09NRV9VTktOT1dOEAlCowEKL2Rldi5ub3RpZmljYXRpb25taXJyb3JpbmcucHJvdG9jb2wuZ2VuZXJhdGVkLnYxQgxQYXlsb2FkUHJvdG9QAVpgZ2l0aHViLmNvbS9odWF4aWFueWFuL1N5bmNOb3RpZmljYXRpb25zLVNlcnZlci9wcm90b2NvbC9nZW5lcmF0ZWQvbm90aWZpY2F0aW9uL3YxO25vdGlmaWNhdGlvbnYxYgZwcm90bzM");
+  fileDesc("Ch1ub3RpZmljYXRpb24vdjEvcGF5bG9hZC5wcm90bxIZbm90aWZpY2F0aW9uLm1pcnJvcmluZy52MSKTBgoQRW5jcnlwdGVkUGF5bG9hZBIWCg5zY2hlbWFfdmVyc2lvbhgBIAEoDRJACg1hY3Rpb25faW52b2tlGAogASgLMicubm90aWZpY2F0aW9uLm1pcnJvcmluZy52MS5BY3Rpb25JbnZva2VIABJACg1hY3Rpb25fcmVzdWx0GAsgASgLMicubm90aWZpY2F0aW9uLm1pcnJvcmluZy52MS5BY3Rpb25SZXN1bHRIABJHChFhY3Rpb25fcmVzdWx0X2FjaxgMIAEoCzIqLm5vdGlmaWNhdGlvbi5taXJyb3JpbmcudjEuQWN0aW9uUmVzdWx0QWNrSAASUwoXaWRlbnRpdHlfa2V5X3RyYW5zaXRpb24YDSABKAsyMC5ub3RpZmljYXRpb24ubWlycm9yaW5nLnYxLklkZW50aXR5S2V5VHJhbnNpdGlvbkgAEloKG2lkZW50aXR5X2tleV90cmFuc2l0aW9uX2FjaxgOIAEoCzIzLm5vdGlmaWNhdGlvbi5taXJyb3JpbmcudjEuSWRlbnRpdHlLZXlUcmFuc2l0aW9uQWNrSAASYAoeaWRlbnRpdHlfa2V5X3RyYW5zaXRpb25fY29tbWl0GA8gASgLMjYubm90aWZpY2F0aW9uLm1pcnJvcmluZy52MS5JZGVudGl0eUtleVRyYW5zaXRpb25Db21taXRIABJMChNub3RpZmljYXRpb25fdXBzZXJ0GBAgASgLMi0ubm90aWZpY2F0aW9uLm1pcnJvcmluZy52MS5Ob3RpZmljYXRpb25VcHNlcnRIABJOChRub3RpZmljYXRpb25fcmVtb3ZlZBgRIAEoCzIuLm5vdGlmaWNhdGlvbi5taXJyb3JpbmcudjEuTm90aWZpY2F0aW9uUmVtb3ZlZEgAEmEKHm5vdGlmaWNhdGlvbl9zbmFwc2hvdF9tYW5pZmVzdBgSIAEoCzI3Lm5vdGlmaWNhdGlvbi5taXJyb3JpbmcudjEuTm90aWZpY2F0aW9uU25hcHNob3RNYW5pZmVzdEgAQgYKBGJvZHkimgEKDEFjdGlvbkludm9rZRIXCg9ub3RpZmljYXRpb25faWQYASABKAkSHQoVbm90aWZpY2F0aW9uX3JldmlzaW9uGAIgASgEEhEKCWFjdGlvbl9pZBgDIAEoDBIXCg9pZGVtcG90ZW5jeV9rZXkYBCABKAwSFwoKcmVwbHlfdGV4dBgFIAEoCUgAiAEBQg0KC19yZXBseV90ZXh0IoYBCgxBY3Rpb25SZXN1bHQSFwoPaWRlbXBvdGVuY3lfa2V5GAEgASgMEj0KBnN0YXR1cxgCIAEoDjItLm5vdGlmaWNhdGlvbi5taXJyb3JpbmcudjEuQWN0aW9uUmVzdWx0U3RhdHVzEhMKBmRldGFpbBgDIAEoCUgAiAEBQgkKB19kZXRhaWwiQQoPQWN0aW9uUmVzdWx0QWNrEhcKD2lkZW1wb3RlbmN5X2tleRgBIAEoDBIVCg1yZXN1bHRfc2hhMjU2GAIgASgMInMKFUlkZW50aXR5S2V5VHJhbnNpdGlvbhIVCg10cmFuc2l0aW9uX2lkGAEgASgMEhcKD3ByZXZpb3VzX2tleV9pZBgCIAEoDBIWCg5uZXdfcHVibGljX2tleRgDIAEoDBISCgpuZXdfa2V5X2lkGAQgASgMInkKGElkZW50aXR5S2V5VHJhbnNpdGlvbkFjaxIVCg10cmFuc2l0aW9uX2lkGAEgASgMEhcKD3ByZXZpb3VzX2tleV9pZBgCIAEoDBISCgpuZXdfa2V5X2lkGAMgASgMEhkKEXRyYW5zaXRpb25fc2hhMjU2GAQgASgMIpABChtJZGVudGl0eUtleVRyYW5zaXRpb25Db21taXQSFQoNdHJhbnNpdGlvbl9pZBgBIAEoDBIXCg9wcmV2aW91c19rZXlfaWQYAiABKAwSEgoKbmV3X2tleV9pZBgDIAEoDBIZChF0cmFuc2l0aW9uX3NoYTI1NhgEIAEoDBISCgphY2tfc2hhMjU2GAUgASgMIsYCChJOb3RpZmljYXRpb25VcHNlcnQSFwoPbm90aWZpY2F0aW9uX2lkGAEgASgJEh0KFW5vdGlmaWNhdGlvbl9yZXZpc2lvbhgCIAEoBBISCgV0aXRsZRgDIAEoCUgAiAEBEhEKBGJvZHkYBCABKAlIAYgBARJDCghhcHBfaWNvbhgFIAEoCzIsLm5vdGlmaWNhdGlvbi5taXJyb3JpbmcudjEuTm90aWZpY2F0aW9uTWVkaWFIAogBARJBCgZhdmF0YXIYBiABKAsyLC5ub3RpZmljYXRpb24ubWlycm9yaW5nLnYxLk5vdGlmaWNhdGlvbk1lZGlhSAOIAQESHgoWY29udGFpbnNfY29udGVudF9pbWFnZRgHIAEoCEIICgZfdGl0bGVCBwoFX2JvZHlCCwoJX2FwcF9pY29uQgkKB19hdmF0YXIiqgEKEU5vdGlmaWNhdGlvbk1lZGlhEhYKDmNvbnRlbnRfc2hhMjU2GAEgASgMEkcKCW1pbWVfdHlwZRgCIAEoDjI0Lm5vdGlmaWNhdGlvbi5taXJyb3JpbmcudjEuTm90aWZpY2F0aW9uTWVkaWFNaW1lVHlwZRINCgV3aWR0aBgDIAEoDRIOCgZoZWlnaHQYBCABKA0SFQoNZW5jb2RlZF9ieXRlcxgFIAEoDCJNChNOb3RpZmljYXRpb25SZW1vdmVkEhcKD25vdGlmaWNhdGlvbl9pZBgBIAEoCRIdChVub3RpZmljYXRpb25fcmV2aXNpb24YAiABKAQijwEKHE5vdGlmaWNhdGlvblNuYXBzaG90TWFuaWZlc3QSGwoTaGlnaF93YXRlcl9yZXZpc2lvbhgBIAEoBBJSChRhY3RpdmVfbm90aWZpY2F0aW9ucxgCIAMoCzI0Lm5vdGlmaWNhdGlvbi5taXJyb3JpbmcudjEuTm90aWZpY2F0aW9uU25hcHNob3RFbnRyeSJTChlOb3RpZmljYXRpb25TbmFwc2hvdEVudHJ5EhcKD25vdGlmaWNhdGlvbl9pZBgBIAEoCRIdChVub3RpZmljYXRpb25fcmV2aXNpb24YAiABKAQqlgEKGU5vdGlmaWNhdGlvbk1lZGlhTWltZVR5cGUSLAooTk9USUZJQ0FUSU9OX01FRElBX01JTUVfVFlQRV9VTlNQRUNJRklFRBAAEiQKIE5PVElGSUNBVElPTl9NRURJQV9NSU1FX1RZUEVfUE5HEAESJQohTk9USUZJQ0FUSU9OX01FRElBX01JTUVfVFlQRV9XRUJQEAIqygMKEkFjdGlvblJlc3VsdFN0YXR1cxIkCiBBQ1RJT05fUkVTVUxUX1NUQVRVU19VTlNQRUNJRklFRBAAEiIKHkFDVElPTl9SRVNVTFRfU1RBVFVTX1NVQ0NFRURFRBABEi8KK0FDVElPTl9SRVNVTFRfU1RBVFVTX05PVElGSUNBVElPTl9OT1RfRk9VTkQQAhIzCi9BQ1RJT05fUkVTVUxUX1NUQVRVU19TVEFMRV9OT1RJRklDQVRJT05fVkVSU0lPThADEikKJUFDVElPTl9SRVNVTFRfU1RBVFVTX0FDVElPTl9OT1RfRk9VTkQQBBImCiJBQ1RJT05fUkVTVUxUX1NUQVRVU19URVhUX1JFUVVJUkVEEAUSKwonQUNUSU9OX1JFU1VMVF9TVEFUVVNfVEVYVF9OT1RfU1VQUE9SVEVEEAYSMQotQUNUSU9OX1JFU1VMVF9TVEFUVVNfUEVORElOR19JTlRFTlRfQ0FOQ0VMTEVEEAcSJwojQUNUSU9OX1JFU1VMVF9TVEFUVVNfSU5URVJOQUxfRVJST1IQCBIoCiRBQ1RJT05fUkVTVUxUX1NUQVRVU19PVVRDT01FX1VOS05PV04QCUKjAQovZGV2Lm5vdGlmaWNhdGlvbm1pcnJvcmluZy5wcm90b2NvbC5nZW5lcmF0ZWQudjFCDFBheWxvYWRQcm90b1ABWmBnaXRodWIuY29tL2h1YXhpYW55YW4vU3luY05vdGlmaWNhdGlvbnMtU2VydmVyL3Byb3RvY29sL2dlbmVyYXRlZC9ub3RpZmljYXRpb24vdjE7bm90aWZpY2F0aW9udjFiBnByb3RvMw");
 
 /**
  * EncryptedPayload is serialized before HPKE sealing. Its type and every
@@ -297,7 +297,7 @@ export const IdentityKeyTransitionCommitSchema: GenMessage<IdentityKeyTransition
   messageDesc(file_notification_v1_payload, 6);
 
 /**
- * NotificationUpsert carries the current text state of one source-device
+ * NotificationUpsert carries the bounded display state of one source-device
  * notification. The authenticated envelope sender supplies sourceDeviceId.
  *
  * @generated from message notification.mirroring.v1.NotificationUpsert
@@ -322,6 +322,21 @@ export type NotificationUpsert = Message<"notification.mirroring.v1.Notification
    * @generated from field: optional string body = 4;
    */
   body?: string;
+
+  /**
+   * @generated from field: optional notification.mirroring.v1.NotificationMedia app_icon = 5;
+   */
+  appIcon?: NotificationMedia;
+
+  /**
+   * @generated from field: optional notification.mirroring.v1.NotificationMedia avatar = 6;
+   */
+  avatar?: NotificationMedia;
+
+  /**
+   * @generated from field: bool contains_content_image = 7;
+   */
+  containsContentImage: boolean;
 };
 
 /**
@@ -330,6 +345,46 @@ export type NotificationUpsert = Message<"notification.mirroring.v1.Notification
  */
 export const NotificationUpsertSchema: GenMessage<NotificationUpsert> = /*@__PURE__*/
   messageDesc(file_notification_v1_payload, 7);
+
+/**
+ * NotificationMedia carries one normalized static image inside the same E2EE
+ * plaintext as its notification. Resource references and external URLs are forbidden.
+ *
+ * @generated from message notification.mirroring.v1.NotificationMedia
+ */
+export type NotificationMedia = Message<"notification.mirroring.v1.NotificationMedia"> & {
+  /**
+   * @generated from field: bytes content_sha256 = 1;
+   */
+  contentSha256: Uint8Array;
+
+  /**
+   * @generated from field: notification.mirroring.v1.NotificationMediaMimeType mime_type = 2;
+   */
+  mimeType: NotificationMediaMimeType;
+
+  /**
+   * @generated from field: uint32 width = 3;
+   */
+  width: number;
+
+  /**
+   * @generated from field: uint32 height = 4;
+   */
+  height: number;
+
+  /**
+   * @generated from field: bytes encoded_bytes = 5;
+   */
+  encodedBytes: Uint8Array;
+};
+
+/**
+ * Describes the message notification.mirroring.v1.NotificationMedia.
+ * Use `create(NotificationMediaSchema)` to create a new message.
+ */
+export const NotificationMediaSchema: GenMessage<NotificationMedia> = /*@__PURE__*/
+  messageDesc(file_notification_v1_payload, 8);
 
 /**
  * NotificationRemoved is authoritative for one notification revision. Chrome
@@ -354,7 +409,7 @@ export type NotificationRemoved = Message<"notification.mirroring.v1.Notificatio
  * Use `create(NotificationRemovedSchema)` to create a new message.
  */
 export const NotificationRemovedSchema: GenMessage<NotificationRemoved> = /*@__PURE__*/
-  messageDesc(file_notification_v1_payload, 8);
+  messageDesc(file_notification_v1_payload, 9);
 
 /**
  * NotificationSnapshotManifest declares the complete active notification set
@@ -380,7 +435,7 @@ export type NotificationSnapshotManifest = Message<"notification.mirroring.v1.No
  * Use `create(NotificationSnapshotManifestSchema)` to create a new message.
  */
 export const NotificationSnapshotManifestSchema: GenMessage<NotificationSnapshotManifest> = /*@__PURE__*/
-  messageDesc(file_notification_v1_payload, 9);
+  messageDesc(file_notification_v1_payload, 10);
 
 /**
  * @generated from message notification.mirroring.v1.NotificationSnapshotEntry
@@ -402,7 +457,33 @@ export type NotificationSnapshotEntry = Message<"notification.mirroring.v1.Notif
  * Use `create(NotificationSnapshotEntrySchema)` to create a new message.
  */
 export const NotificationSnapshotEntrySchema: GenMessage<NotificationSnapshotEntry> = /*@__PURE__*/
-  messageDesc(file_notification_v1_payload, 10);
+  messageDesc(file_notification_v1_payload, 11);
+
+/**
+ * @generated from enum notification.mirroring.v1.NotificationMediaMimeType
+ */
+export enum NotificationMediaMimeType {
+  /**
+   * @generated from enum value: NOTIFICATION_MEDIA_MIME_TYPE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: NOTIFICATION_MEDIA_MIME_TYPE_PNG = 1;
+   */
+  PNG = 1,
+
+  /**
+   * @generated from enum value: NOTIFICATION_MEDIA_MIME_TYPE_WEBP = 2;
+   */
+  WEBP = 2,
+}
+
+/**
+ * Describes the enum notification.mirroring.v1.NotificationMediaMimeType.
+ */
+export const NotificationMediaMimeTypeSchema: GenEnum<NotificationMediaMimeType> = /*@__PURE__*/
+  enumDesc(file_notification_v1_payload, 0);
 
 /**
  * @generated from enum notification.mirroring.v1.ActionResultStatus
@@ -466,5 +547,5 @@ export enum ActionResultStatus {
  * Describes the enum notification.mirroring.v1.ActionResultStatus.
  */
 export const ActionResultStatusSchema: GenEnum<ActionResultStatus> = /*@__PURE__*/
-  enumDesc(file_notification_v1_payload, 0);
+  enumDesc(file_notification_v1_payload, 1);
 

@@ -17,8 +17,8 @@ Receivers MUST reject a plaintext unless all of the following hold:
 4. `schema_version` matches the body: version `1` for `action_invoke`,
    `action_result`, or `action_result_ack`; version `2` for the E2EE identity
    lifecycle bodies defined by `e2ee-identity-key-transition-v1.md`; or version
-   `3` for `notification_upsert`, `notification_removed`, and
-   `notification_snapshot_manifest`;
+   `4` for `notification_upsert`, `notification_removed`, and
+   `notification_snapshot_manifest`;},{
 5. exactly one supported `body` is present;
 6. every message-specific semantic constraint below or in the identity
    lifecycle specification holds; and
@@ -51,15 +51,46 @@ state backward. Envelope replay protection remains a separate security guard.
 
 ## `notification_upsert`
 
-`notification_upsert` carries the current text state of one notification. At
-least one of `title` and `body` MUST be present. When present:
+`notification_upsert` carries the bounded display state of one notification.
+At least one of `title` and `body` MUST be present. When present:
 
 - `title`: valid UTF-8, 1..512 encoded bytes;
 - `body`: valid UTF-8, 1..4000 encoded bytes.
 
-The internal alpha sends only application-owned synthetic notification text.
-It does not send icons, avatars, rich media, action capabilities, package-private
-tokens, or third-party notification content.
+`app_icon` and `avatar` are independently optional, with at most one instance
+of each. Every present `NotificationMedia` MUST satisfy all of the following:
+
+- `content_sha256`: exactly SHA-256 of `encoded_bytes`;
+- `mime_type`: `PNG` or `WEBP`, never unspecified;
+- `width` and `height`: each `1..256`;
+- `encoded_bytes`: `1..131072` bytes;
+- PNG bytes begin with the exact eight-byte PNG signature;
+- WebP bytes contain exact `RIFF` and `WEBP` signatures in the standard
+  positions.
+
+These checks establish a bounded canonical transport object; a receiver MUST
+still decode the image in a bounded platform decoder and verify that the actual
+decoded dimensions equal the declared dimensions before presentation. Decode
+failure or dimension mismatch omits that media and uses the local default icon
+without suppressing valid notification text. Receivers MUST NOT resolve a
+resource identifier, content URI, file path or external URL from media bytes.
+The avatar is preferred for the single image position exposed by
+`chrome.notifications`; the app icon is the fallback.
+
+When `contains_content_image` is true, `body` MUST contain the exact `[图片]`
+placeholder. The original body image, URI and encoded bytes are forbidden from
+this field; only normalized app icon and avatar media may be present. A literal
+`[图片]` in source text is not sufficient to infer the flag when the sender did
+not observe content media.
+
+Media is part of the same deterministic notification plaintext and therefore
+receives a separate Auth HPKE ciphertext for every recipient. The relay may
+observe bounded ciphertext size and timing but cannot read media type, hash,
+dimensions or bytes.
+
+The internal alpha continues to send only application-owned synthetic
+notifications. Action capabilities, package-private tokens and third-party
+notification content remain outside this slice.
 
 ## `notification_removed`
 
