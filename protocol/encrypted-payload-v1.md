@@ -27,8 +27,13 @@ Receivers MUST reject a plaintext unless all of the following hold:
 The final check rejects duplicate fields, alternate field ordering and other
 non-canonical wire encodings rather than relying on parser-specific behavior.
 Protocol evolution must add an explicitly supported schema version before new
-fields are emitted. A body is accepted only under its version above; schema
-versions are not interchangeable.
+fields are emitted. Current encoders emit action bodies only under version `2`.
+Decoders additionally accept canonical version-`1` `action_invoke`,
+`action_result`, and `action_result_ack` bytes that were durably persisted by
+an earlier client. This compatibility is decode-only: a version-`1`
+`action_invoke` MUST use a 16-byte `action_id`, MUST NOT select dismissal, and
+MUST satisfy the original reply constraints. All other bodies are accepted only
+under their version above; schema versions are not interchangeable.
 
 ## Notification identity and revisions
 

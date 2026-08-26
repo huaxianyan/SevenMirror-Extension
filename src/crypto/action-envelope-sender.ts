@@ -144,11 +144,9 @@ function createPayloadFromCanonical(
   if (decoded.body.case !== expectedBody) {
     throw new Error(`Expected canonical ${expectedBody} payload`);
   }
-  const canonical = encodeEncryptedPayloadV1(decoded);
-  if (!bytesEqual(canonical, value)) {
-    throw new Error('Stored encrypted payload is not canonical');
-  }
-  return canonical;
+  // decodeEncryptedPayloadV1 already proves exact canonical encoding. Preserve schema-v1
+  // durable bytes across upgrades instead of re-emitting them under the current schema.
+  return value.slice();
 }
 
 export async function actionInvokeOperationDigest(request: ActionInvokeRequest): Promise<{
@@ -157,15 +155,6 @@ export async function actionInvokeOperationDigest(request: ActionInvokeRequest):
 }> {
   const canonicalPayload = encodeEncryptedPayloadV1(createActionInvokePayload(request));
   return { canonicalPayload, digest: await sha256(canonicalPayload) };
-}
-
-function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
-  if (left.byteLength !== right.byteLength) return false;
-  let difference = 0;
-  for (let index = 0; index < left.byteLength; index += 1) {
-    difference |= left[index]! ^ right[index]!;
-  }
-  return difference === 0;
 }
 
 async function sha256(value: Uint8Array): Promise<Uint8Array> {

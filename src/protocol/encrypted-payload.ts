@@ -144,7 +144,7 @@ export function decodeEncryptedPayloadV1(encoded: Uint8Array): EncryptedPayload 
   const payload = fromBinary(EncryptedPayloadSchema, encoded, {
     readUnknownFields: true,
   });
-  validateEncryptedPayloadV1(payload);
+  validateEncryptedPayloadV1(payload, true);
   const canonical = toBinary(EncryptedPayloadSchema, payload);
   if (!arraysEqual(encoded, canonical)) {
     throw new Error('Encrypted payload is not canonically encoded');
@@ -152,21 +152,28 @@ export function decodeEncryptedPayloadV1(encoded: Uint8Array): EncryptedPayload 
   return payload;
 }
 
-export function validateEncryptedPayloadV1(payload: EncryptedPayload): void {
+export function validateEncryptedPayloadV1(
+  payload: EncryptedPayload,
+  allowLegacyActionSchema = false,
+): void {
   if (payload.$unknown?.length) {
     throw new Error('Encrypted payload contains unknown fields');
   }
   switch (payload.body.case) {
     case 'actionInvoke':
-      requireSchema(payload, ENCRYPTED_PAYLOAD_LIMITS.schemaVersion);
+      requireActionSchema(
+        payload,
+        allowLegacyActionSchema,
+        payload.body.value.dismissNotification,
+      );
       validateAction(payload.body.value);
       return;
     case 'actionResult':
-      requireSchema(payload, ENCRYPTED_PAYLOAD_LIMITS.schemaVersion);
+      requireActionSchema(payload, allowLegacyActionSchema, false);
       validateResult(payload.body.value);
       return;
     case 'actionResultAck':
-      requireSchema(payload, ENCRYPTED_PAYLOAD_LIMITS.schemaVersion);
+      requireActionSchema(payload, allowLegacyActionSchema, false);
       validateResultAck(payload.body.value);
       return;
     case 'notificationUpsert':
@@ -184,6 +191,16 @@ export function validateEncryptedPayloadV1(payload: EncryptedPayload): void {
     default:
       throw new Error('Exactly one supported encrypted payload body is required');
   }
+}
+
+function requireActionSchema(
+  payload: EncryptedPayload,
+  allowLegacy: boolean,
+  dismissNotification: boolean,
+): void {
+  if (payload.schemaVersion === ENCRYPTED_PAYLOAD_LIMITS.schemaVersion) return;
+  if (allowLegacy && payload.schemaVersion === 1 && !dismissNotification) return;
+  throw new Error('Encrypted payload schema version does not match body');
 }
 
 function requireSchema(payload: EncryptedPayload, expected: number): void {

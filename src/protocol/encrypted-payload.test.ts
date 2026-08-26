@@ -1,4 +1,4 @@
-import { create } from '@bufbuild/protobuf';
+import { create, toBinary } from '@bufbuild/protobuf';
 import { describe, expect, it } from 'vitest';
 import vector from '../../protocol/test-vectors/encrypted-payload-v1.json';
 import {
@@ -13,6 +13,7 @@ import {
 } from './encrypted-payload';
 import {
   ActionResultStatus,
+  EncryptedPayloadSchema,
   NotificationActionDescriptorSchema,
   NotificationMediaMimeType,
   NotificationMediaSchema,
@@ -56,6 +57,21 @@ describe('Encrypted Payload v1', () => {
       expect(decoded.body.value.notificationRevision).toBe(7n);
       expect(decoded.body.value.replyText).toBe('acknowledged');
     }
+  });
+
+  it('decodes legacy durable actions but does not emit them or accept legacy dismiss', () => {
+    const legacy = validPayload();
+    legacy.schemaVersion = 1;
+    const encoded = toBinary(EncryptedPayloadSchema, legacy);
+    expect(decodeEncryptedPayloadV1(encoded).body.case).toBe('actionInvoke');
+    expect(() => encodeEncryptedPayloadV1(legacy)).toThrow(/schema version/i);
+
+    if (legacy.body.case !== 'actionInvoke') throw new Error('unexpected test payload');
+    legacy.body.value.actionId = new Uint8Array();
+    legacy.body.value.replyText = undefined;
+    legacy.body.value.dismissNotification = true;
+    expect(() => decodeEncryptedPayloadV1(toBinary(EncryptedPayloadSchema, legacy)))
+      .toThrow(/schema version/i);
   });
 
   it('matches the canonical dismiss operation and rejects mixed operations', () => {

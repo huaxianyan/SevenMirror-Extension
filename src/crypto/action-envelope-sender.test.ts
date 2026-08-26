@@ -1,6 +1,8 @@
+import { toBinary } from '@bufbuild/protobuf';
 import { describe, expect, it } from 'vitest';
 import {
   createActionInvokeEnvelope,
+  createActionInvokeEnvelopeFromPayload,
   prepareActionInvokeEnvelope,
 } from './action-envelope-sender';
 import {
@@ -8,7 +10,11 @@ import {
   serializeIdentityPublicKey,
 } from './auth-hpke';
 import { openEnvelopeOnce, type ReplayLedgerWriter } from './envelope-receiver';
-import { decodeEncryptedPayloadV1 } from '../protocol/encrypted-payload';
+import {
+  createActionInvokePayload,
+  decodeEncryptedPayloadV1,
+} from '../protocol/encrypted-payload';
+import { EncryptedPayloadSchema } from '../protocol/generated/notification/v1/payload_pb';
 
 class MemoryReplayLedger implements ReplayLedgerWriter {
   private readonly seen = new Set<string>();
@@ -110,5 +116,31 @@ describe('action envelope sender', () => {
       recipientIdentity: recipient,
       pinnedSenderPublicKey: senderPublicKey,
     }, ledger, now)).rejects.toMatchObject({ code: 'DUPLICATE' });
+
+    const legacyPayload = createActionInvokePayload({
+      notificationId: 'private.notification/legacy',
+      notificationRevision: 8n,
+      actionId: new Uint8Array(16).fill(0xa2),
+      idempotencyKey: new Uint8Array(16).fill(0xb3),
+    });
+    legacyPayload.schemaVersion = 1;
+    const legacyFrame = await createActionInvokeEnvelopeFromPayload({
+      workspaceId,
+      senderDeviceId: new Uint8Array(16).fill(2),
+      recipientDeviceId,
+      senderIdentity: sender,
+      recipientPublicKey,
+      messageId: new Uint8Array(16).fill(5),
+      sequence: 2n,
+      createdAtUnixMs: now,
+      expiresAtUnixMs: now + 60_000,
+    }, toBinary(EncryptedPayloadSchema, legacyPayload));
+    const legacyOpened = await openEnvelopeOnce(legacyFrame, {
+      workspaceId,
+      recipientDeviceId,
+      recipientIdentity: recipient,
+      pinnedSenderPublicKey: senderPublicKey,
+    }, new MemoryReplayLedger(), now);
+    expect(decodeEncryptedPayloadV1(legacyOpened.plaintext).schemaVersion).toBe(1);
   });
 });
