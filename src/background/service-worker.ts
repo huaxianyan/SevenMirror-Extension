@@ -3,6 +3,7 @@ import {
   createLifecycleTestNotification,
   getLifecycleSpikeStatus,
   handleNotificationClosed,
+  markProgrammaticClose,
   recordWorkerStart,
 } from './lifecycle-spike';
 import { DEFAULT_CONNECTION_STATE } from '../shared/status';
@@ -14,8 +15,11 @@ import { IndexedDbOutboundSequenceStore } from '../crypto/indexeddb-outbound-seq
 import { IndexedDbPendingActionStore } from '../crypto/indexeddb-pending-action-store';
 import { IndexedDbReplayLedger } from '../crypto/indexeddb-replay-ledger';
 import { ActionResultDispatcher } from '../crypto/action-result-dispatcher';
-import { IndexedDbNotificationStateStore } from '../crypto/indexeddb-notification-state-store';
-import { NotificationPresenter, notificationButtonActions } from './notification-presenter';
+import {
+  IndexedDbNotificationStateStore,
+  type MirroredNotificationState,
+} from '../crypto/indexeddb-notification-state-store';
+import { NotificationPresenter, notificationButtons } from './notification-presenter';
 import {
   IndexedDbTransportCredentialStore,
   type StoredTransportCredential,
@@ -135,11 +139,25 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 
 chrome.notifications.onClosed.addListener((notificationId, byUser) => {
-  void handleNotificationClosed(notificationId, byUser);
+  void handleNotificationClosed(notificationId, byUser).then((audit) => {
+    if (audit?.decision === 'request-remote-dismiss') {
+      return requestNotificationDismiss(notificationId);
+    }
+    return undefined;
+  }).catch(() => transportRuntime.failClosed());
+});
+
+chrome.notifications.onClicked.addListener((notificationId) => {
+  // The full interaction window is the next product slice. Persist suppression now so a
+  // browser-generated close accompanying this click can never dismiss the Android source.
+  void markProgrammaticClose(notificationId, 'body-click');
 });
 
 chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
-  void invokeNotificationButton(notificationId, buttonIndex).catch(() => transportRuntime.failClosed());
+  // Persist the close reason before resolving state, authorization, or transport.
+  void markProgrammaticClose(notificationId, 'action-click')
+    .then(() => invokeNotificationButton(notificationId, buttonIndex))
+    .catch(() => transportRuntime.failClosed());
 });
 
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
@@ -475,8 +493,26 @@ async function invokeNotificationButton(notificationId: string, buttonIndex: num
   if (!Number.isInteger(buttonIndex) || buttonIndex < 0) return;
   const state = await notificationStateStore.findVisibleByChromeNotificationId(notificationId);
   if (state === undefined) return;
-  const action = notificationButtonActions(state)[buttonIndex];
-  if (action === undefined) return;
+  const button = notificationButtons(state)[buttonIndex];
+  if (button === undefined) return;
+  if (button.kind === 'dismiss') {
+    await markProgrammaticClose(notificationId, 'explicit-clear');
+    await queueStateOperation(state, { dismissNotification: true });
+  } else {
+    await queueStateOperation(state, { actionId: button.action.actionId });
+  }
+}
+
+async function requestNotificationDismiss(notificationId: string): Promise<void> {
+  const state = await notificationStateStore.findVisibleByChromeNotificationId(notificationId);
+  if (state === undefined) return;
+  await queueStateOperation(state, { dismissNotification: true });
+}
+
+async function queueStateOperation(
+  state: MirroredNotificationState,
+  operation: { actionId: Uint8Array } | { dismissNotification: true },
+): Promise<void> {
   const credential = await credentialStore.load();
   if (credential === undefined) return;
   try {
@@ -493,7 +529,9 @@ async function invokeNotificationButton(notificationId: string, buttonIndex: num
       targetKeyId: toHex(recipient.keyId),
       notificationId: state.notificationId,
       notificationRevision: state.revision,
-      actionId: toHex(action.actionId),
+      ...('actionId' in operation
+        ? { actionId: toHex(operation.actionId) }
+        : { dismissNotification: true }),
     });
   } finally {
     credential.authToken.fill(0);
@@ -507,7 +545,11 @@ async function queueActionInvoke(message: Record<string, unknown>): Promise<{
 }> {
   const targetDeviceId = parseHex(message.targetDeviceId, 16, 'targetDeviceId');
   const targetKeyId = parseHex(message.targetKeyId, 32, 'targetKeyId');
-  const actionId = parseHex(message.actionId, 16, 'actionId');
+  const dismissNotification = message.dismissNotification === true;
+  if (message.dismissNotification !== undefined && !dismissNotification) {
+    throw new Error('dismissNotification is invalid');
+  }
+  const actionId = dismissNotification ? undefined : parseHex(message.actionId, 16, 'actionId');
   const idempotencyKey = message.idempotencyKey === undefined
     ? randomIdentifier()
     : parseHex(message.idempotencyKey, 16, 'idempotencyKey');
@@ -521,20 +563,30 @@ async function queueActionInvoke(message: Record<string, unknown>): Promise<{
   }
   const notificationRevision = BigInt(message.notificationRevision);
   const replyText = message.replyText;
-  if (replyText !== undefined && (typeof replyText !== 'string' || replyText.length < 1 ||
-      new TextEncoder().encode(replyText).byteLength > 4_096)) {
+  if (replyText !== undefined && (dismissNotification || typeof replyText !== 'string' ||
+      replyText.length < 1 || new TextEncoder().encode(replyText).byteLength > 4_000)) {
     throw new Error('replyText is invalid');
+  }
+  if (dismissNotification && message.actionId !== undefined) {
+    throw new Error('dismiss operation cannot include actionId');
   }
   try {
     const result = await actionInvokeOutbox.queueAndSend(
       { deviceId: targetDeviceId, keyId: targetKeyId },
-      {
-        notificationId: message.notificationId,
-        notificationRevision,
-        actionId,
-        idempotencyKey,
-        ...(typeof replyText === 'string' ? { replyText } : {}),
-      },
+      dismissNotification
+        ? {
+          notificationId: message.notificationId,
+          notificationRevision,
+          idempotencyKey,
+          dismissNotification: true,
+        }
+        : {
+          notificationId: message.notificationId,
+          notificationRevision,
+          actionId: requireDefined(actionId),
+          idempotencyKey,
+          ...(typeof replyText === 'string' ? { replyText } : {}),
+        },
     );
     if (result.nextWakeDelayMs !== undefined) {
       await chrome.alarms.create(ACTION_INVOKE_RETRY_ALARM, {
@@ -546,6 +598,11 @@ async function queueActionInvoke(message: Record<string, unknown>): Promise<{
     // Preserve the generated business key for callers even when persistence/send fails.
     return { queued: false, accepted: false, idempotencyKey: toHex(idempotencyKey) };
   }
+}
+
+function requireDefined<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error('Required action value is unavailable');
+  return value;
 }
 
 function randomIdentifier(): Uint8Array {

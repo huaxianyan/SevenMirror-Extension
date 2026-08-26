@@ -167,8 +167,8 @@ describe('ActionInvokeOutbox', () => {
       }, {
         notificationId: 'synthetic.notification/42',
         notificationRevision: 7n,
-        actionId: new Uint8Array(16).fill(9),
         idempotencyKey,
+        dismissNotification: true,
       })).accepted).toBe(false);
       expect((await pending.get(idempotencyKey))?.invokeAttemptCount).toBe(0);
 
@@ -188,6 +188,8 @@ describe('ActionInvokeOutbox', () => {
       const payload = decodeEncryptedPayloadV1(opened.plaintext);
       expect(payload.body.case === 'actionInvoke' && payload.body.value.idempotencyKey)
         .toEqual(idempotencyKey);
+      expect(payload.body.case === 'actionInvoke' && payload.body.value.dismissNotification)
+        .toBe(true);
     } finally {
       await Promise.all([pending.clear(), sequences.clear()]);
     }

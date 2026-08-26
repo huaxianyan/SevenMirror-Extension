@@ -32,6 +32,7 @@ export class NotificationPresenter {
     private readonly consumeProgrammatic = consumeProgrammaticCloseMarker,
     private readonly notificationIconUrl = () => chrome.runtime.getURL('icons/notification.png'),
     private readonly mediaIconUrl = notificationMediaDataUrl,
+    private readonly dismissButtonTitle = () => chrome.i18n.getMessage('notificationDismissButton') || 'Clear',
   ) {}
 
   async present(receipt: NotificationReceipt): Promise<void> {
@@ -50,7 +51,7 @@ export class NotificationPresenter {
     }
 
     const sourceRef = toHex(state.sourceDeviceId).slice(0, 12);
-    const actions = notificationButtonActions(state);
+    const buttons = notificationButtons(state, this.dismissButtonTitle());
     const options: chrome.notifications.NotificationOptions<true> = {
       type: 'basic',
       iconUrl: await this.resolveIconUrl(state.avatar, state.appIcon),
@@ -58,9 +59,7 @@ export class NotificationPresenter {
       message: state.body ?? '',
       priority: 0,
       requireInteraction: true,
-      ...(actions.length === 0 ? {} : {
-        buttons: actions.map((action) => ({ title: action.title })),
-      }),
+      buttons: buttons.map((button) => ({ title: button.title })),
     };
     const existing = await this.getAll();
     if (existing[state.chromeNotificationId]) {
@@ -127,13 +126,25 @@ export class NotificationPresenter {
   }
 }
 
-export function notificationButtonActions(
+export type NotificationButton =
+  | { kind: 'action'; title: string; action: MirroredNotificationAction }
+  | { kind: 'dismiss'; title: string };
+
+/** Default Alpha allocation: one source action plus the always-visible SevenMirror clear command. */
+export function notificationButtons(
   state: MirroredNotificationState,
-): MirroredNotificationAction[] {
-  return (state.actions ?? [])
-    .filter((action) => !action.requiresTextInput)
-    .slice(0, 2)
-    .map((action) => ({ ...action, actionId: action.actionId.slice() }));
+  dismissTitle = 'Clear',
+): NotificationButton[] {
+  const sourceAction = (state.actions ?? [])
+    .find((action) => !action.requiresTextInput);
+  return [
+    ...(sourceAction === undefined ? [] : [{
+      kind: 'action' as const,
+      title: sourceAction.title,
+      action: { ...sourceAction, actionId: sourceAction.actionId.slice() },
+    }]),
+    { kind: 'dismiss' as const, title: dismissTitle },
+  ];
 }
 
 interface DecodedImage {

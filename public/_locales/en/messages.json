@@ -44,5 +44,6 @@
   "registering": { "message": "Registering…" },
   "waitingForAdminApproval": { "message": "Registration received. Ask your server administrator to approve this Chrome profile." },
   "registrationFailed": { "message": "Registration failed. Verify the server address, one-time code, and device name." },
-  "registrationUnreadable": { "message": "Stored registration state could not be read. Reopen this page; if the problem remains, register again." }
+  "registrationUnreadable": { "message": "Stored registration state could not be read. Reopen this page; if the problem remains, register again." },
+  "notificationDismissButton": { "message": "Clear" }
 }

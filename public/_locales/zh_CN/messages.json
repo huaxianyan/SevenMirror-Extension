@@ -44,5 +44,6 @@
   "registering": { "message": "正在注册……" },
   "waitingForAdminApproval": { "message": "注册申请已提交，请联系服务器管理员批准此 Chrome 配置文件。" },
   "registrationFailed": { "message": "注册失败。请检查服务器地址、一次性配对码和设备名称。" },
-  "registrationUnreadable": { "message": "无法读取已保存的注册状态。请重新打开此页面；如果问题仍然存在，请重新注册。" }
+  "registrationUnreadable": { "message": "无法读取已保存的注册状态。请重新打开此页面；如果问题仍然存在，请重新注册。" },
+  "notificationDismissButton": { "message": "清除" }
 }

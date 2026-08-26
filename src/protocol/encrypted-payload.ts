@@ -22,7 +22,7 @@ import {
 } from './generated/notification/v1/payload_pb';
 
 export const ENCRYPTED_PAYLOAD_LIMITS = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   notificationSchemaVersion: 5,
   maxPlaintextSize: 524_272,
   maxNotificationIdBytes: 512,
@@ -87,8 +87,17 @@ export function createNotificationSnapshotManifestPayload(
   });
 }
 
+export interface ActionInvokeInput {
+  notificationId: string;
+  notificationRevision: bigint;
+  actionId?: Uint8Array;
+  idempotencyKey: Uint8Array;
+  replyText?: string;
+  dismissNotification?: boolean;
+}
+
 export function createActionInvokePayload(
-  action: Omit<ActionInvoke, '$typeName'>,
+  action: ActionInvokeInput,
 ): EncryptedPayload {
   return create(EncryptedPayloadSchema, {
     schemaVersion: ENCRYPTED_PAYLOAD_LIMITS.schemaVersion,
@@ -343,12 +352,18 @@ function validateAction(action: ActionInvoke): void {
     throw new Error('Action invocation contains unknown fields');
   }
   validateNotificationBinding(action.notificationId, action.notificationRevision);
-  if (action.actionId.byteLength !== ENCRYPTED_PAYLOAD_LIMITS.identifierSize) {
-    throw new Error('Action id must be 16 bytes');
-  }
   if (action.idempotencyKey.byteLength !== ENCRYPTED_PAYLOAD_LIMITS.identifierSize ||
       action.idempotencyKey.every((value) => value === 0)) {
     throw new Error('Idempotency key must be a non-zero 16-byte value');
+  }
+  if (action.dismissNotification) {
+    if (action.actionId.byteLength !== 0 || action.replyText !== undefined) {
+      throw new Error('Dismiss invocation cannot include an action id or reply text');
+    }
+    return;
+  }
+  if (action.actionId.byteLength !== ENCRYPTED_PAYLOAD_LIMITS.identifierSize) {
+    throw new Error('Action id must be 16 bytes');
   }
   if (action.replyText !== undefined) {
     const replySize = encoder.encode(action.replyText).byteLength;

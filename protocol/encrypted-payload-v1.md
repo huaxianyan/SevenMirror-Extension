@@ -14,11 +14,11 @@ Receivers MUST reject a plaintext unless all of the following hold:
    16-byte AES-GCM tag);
 2. protobuf parsing succeeds;
 3. no unknown fields occur at any message level;
-4. `schema_version` matches the body: version `1` for `action_invoke`,
-   `action_result`, or `action_result_ack`; version `2` for the E2EE identity
-   lifecycle bodies defined by `e2ee-identity-key-transition-v1.md`; or version
-   `4` for `notification_upsert`, `notification_removed`, and
-   `notification_snapshot_manifest`;},{
+4. `schema_version` matches the body: version `2` for `action_invoke`,
+   `action_result`, `action_result_ack`, and the E2EE identity lifecycle bodies
+   defined by `e2ee-identity-key-transition-v1.md`; or version `5` for
+   `notification_upsert`, `notification_removed`, and
+   `notification_snapshot_manifest`;
 5. exactly one supported `body` is present;
 6. every message-specific semantic constraint below or in the identity
    lifecycle specification holds; and
@@ -163,25 +163,34 @@ history queue, or proof that a system notification was visibly presented.
 
 ## `action_invoke`
 
-An action invocation contains only opaque local identifiers. Android resolves
-`notification_id` and `action_id` against its local notification/action table;
-a `PendingIntent`, `RemoteInput`, package-private token, or other executable
+An action invocation contains only opaque local identifiers and selects exactly
+one operation. A source action sets a 16-byte `action_id` and may include
+`reply_text`. A SevenMirror-owned notification dismissal sets
+`dismiss_notification = true` and MUST omit both `action_id` and `reply_text`.
+A `PendingIntent`, `RemoteInput`, package-private token, or other executable
 capability is never serialized.
 
 Constraints:
 
 - `notification_id`: valid UTF-8, 1..512 encoded bytes;
 - `notification_revision`: `1..2^63-1`;
-- `action_id`: exactly 16 bytes;
 - `idempotency_key`: exactly 16 bytes and not all zero;
-- `reply_text`: absent for ordinary actions; when present, valid UTF-8 and
-  1..4000 encoded bytes.
+- source action: `action_id` is exactly 16 bytes and `dismiss_notification` is
+  false;
+- dismissal: `dismiss_notification` is true and `action_id` is empty;
+- `reply_text`: absent for ordinary actions and dismissal; when present for a
+  source action, valid UTF-8 and 1..4000 encoded bytes.
 
 The source Android must validate the current notification revision and atomically
-record `idempotency_key` before invoking any local side effect. Replay Ledger
-acceptance happens before payload parsing; operation idempotency is a separate,
-longer-lived guard against a logically duplicated request with a new envelope
-message ID.
+record `idempotency_key` before invoking any local side effect. A dismissal is
+not a source-application action: Android requests `cancelNotification(key)` and
+waits for the notification listener's authoritative removal callback. A
+`SUCCEEDED` action result means only that the local dismissal request was
+accepted; `notification_removed` remains the sole final lifecycle state.
+
+Replay Ledger acceptance happens before payload parsing; operation idempotency
+is a separate, longer-lived guard against a logically duplicated request with a
+new envelope message ID.
 
 ## `action_result`
 

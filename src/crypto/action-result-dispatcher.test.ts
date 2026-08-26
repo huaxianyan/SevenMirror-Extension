@@ -85,6 +85,7 @@ describe('ActionResultDispatcher', () => {
           ? undefined
           : 'data:image/png;base64,app-icon';
       },
+      () => 'Clear',
     );
     try {
       fixture.authorize();
@@ -103,7 +104,10 @@ describe('ActionResultDispatcher', () => {
       expect([...visible.values()][0]?.message).toBe('first body');
       expect([...visible.values()][0]?.iconUrl).toBe('data:image/png;base64,app-icon');
       expect([...visible.values()][0]?.requireInteraction).toBe(true);
-      expect([...visible.values()][0]?.buttons).toEqual([{ title: 'Mark handled' }]);
+      expect([...visible.values()][0]?.buttons).toEqual([
+        { title: 'Mark handled' },
+        { title: 'Clear' },
+      ]);
       expect(mediaAttempts).toEqual([1, 2]);
 
       mediaAttempts.length = 0;

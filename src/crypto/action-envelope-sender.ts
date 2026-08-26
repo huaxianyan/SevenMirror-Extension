@@ -35,13 +35,24 @@ export interface PendingActionRegistrar {
   ): Promise<'registered' | 'already-registered' | 'capacity-exceeded'>;
 }
 
-export interface ActionInvokeRequest {
+interface ActionInvokeRequestBase {
   notificationId: string;
   notificationRevision: bigint;
-  actionId: Uint8Array;
   idempotencyKey: Uint8Array;
-  replyText?: string;
 }
+
+export type ActionInvokeRequest = ActionInvokeRequestBase & (
+  | {
+    actionId: Uint8Array;
+    replyText?: string;
+    dismissNotification?: false;
+  }
+  | {
+    actionId?: never;
+    replyText?: never;
+    dismissNotification: true;
+  }
+);
 
 export const PENDING_ACTION_RETENTION_MS = 30 * 24 * 60 * 60 * 1_000;
 

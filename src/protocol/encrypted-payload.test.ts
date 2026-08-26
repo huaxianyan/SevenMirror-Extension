@@ -58,6 +58,28 @@ describe('Encrypted Payload v1', () => {
     }
   });
 
+  it('matches the canonical dismiss operation and rejects mixed operations', () => {
+    const dismiss = createActionInvokePayload({
+      notificationId: vector.notificationId,
+      notificationRevision: BigInt(vector.dismissNotificationRevision),
+      idempotencyKey: fromHex(vector.dismissIdempotencyKeyHex),
+      dismissNotification: true,
+    });
+    expect(encodeEncryptedPayloadV1(dismiss)).toEqual(fromHex(vector.dismissEncodedHex));
+    const decoded = decodeEncryptedPayloadV1(fromHex(vector.dismissEncodedHex));
+    expect(decoded.body.case).toBe('actionInvoke');
+    if (decoded.body.case === 'actionInvoke') {
+      expect(decoded.body.value.dismissNotification).toBe(true);
+    }
+
+    if (dismiss.body.case !== 'actionInvoke') throw new Error('unexpected test payload');
+    dismiss.body.value.actionId = new Uint8Array(16).fill(1);
+    expect(() => encodeEncryptedPayloadV1(dismiss)).toThrow(/cannot include/i);
+    dismiss.body.value.actionId = new Uint8Array();
+    dismiss.body.value.replyText = 'reply';
+    expect(() => encodeEncryptedPayloadV1(dismiss)).toThrow(/cannot include/i);
+  });
+
   it('round-trips a canonical action result', () => {
     const encoded = encodeEncryptedPayloadV1(createActionResultPayload({
       idempotencyKey: fromHex(vector.idempotencyKeyHex),

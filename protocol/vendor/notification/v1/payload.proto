@@ -25,14 +25,16 @@ message EncryptedPayload {
   }
 }
 
-// ActionInvoke asks the source Android device to invoke one action currently
-// exposed by a specific notification revision. pendingIntent is never sent.
+// ActionInvoke asks the source Android device to execute exactly one operation
+// against a specific notification revision. pendingIntent is never sent.
 message ActionInvoke {
   string notification_id = 1;
   uint64 notification_revision = 2;
   bytes action_id = 3;
   bytes idempotency_key = 4;
   optional string reply_text = 5;
+  // SevenMirror-owned dismissal. It is mutually exclusive with action_id and reply_text.
+  bool dismiss_notification = 6;
 }
 
 // ActionResult reports the locally observed result without claiming that the
