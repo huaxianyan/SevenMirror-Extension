@@ -92,11 +92,36 @@ export class WorkspaceBusinessPeerResolver implements BusinessSenderResolver, Bu
     }));
   }
 
+  async resolveNotificationSourceName(
+    workspaceId: Uint8Array,
+    localDeviceId: Uint8Array,
+    sourceDeviceId: Uint8Array,
+    nowUnixMs: number,
+  ): Promise<string | undefined> {
+    if (!Number.isSafeInteger(nowUnixMs) || nowUnixMs < 1) throw new Error('Current time is invalid');
+    const state = await this.memberships.load(workspaceId, localDeviceId);
+    if (state === undefined || !state.localDeviceActive ||
+        state.signedCertificate === undefined || state.signedRoster === undefined) return undefined;
+    const roster = decodeSignedWorkspaceRoster(state.signedRoster).roster!;
+    const local = roster.activeCertificates.find((candidate) =>
+      equal(candidate.certificate!.deviceId, localDeviceId) &&
+      equal(encodeSignedDeviceCertificate(candidate), state.signedCertificate!))?.certificate;
+    const source = roster.activeCertificates.find((candidate) =>
+      equal(candidate.certificate!.deviceId, sourceDeviceId))?.certificate;
+    if (local === undefined || source === undefined ||
+        authorizeBusinessSender(local, source, nowUnixMs)?.mayReceiveNotifications !== true) return undefined;
+    return source.displayName;
+  }
+
   private async actionRecipients(
     workspaceId: Uint8Array,
     localDeviceId: Uint8Array,
     nowUnixMs: number,
-  ): Promise<Array<{ deviceId: Uint8Array; keyId: Uint8Array; publicKey: Uint8Array }>> {
+  ): Promise<Array<{
+    deviceId: Uint8Array;
+    keyId: Uint8Array;
+    publicKey: Uint8Array;
+  }>> {
     if (!Number.isSafeInteger(nowUnixMs) || nowUnixMs < 1) throw new Error('Current time is invalid');
     const state = await this.memberships.load(workspaceId, localDeviceId);
     if (state === undefined || !state.localDeviceActive ||

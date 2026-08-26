@@ -45,5 +45,19 @@
   "waitingForAdminApproval": { "message": "注册申请已提交，请联系服务器管理员批准此 Chrome 配置文件。" },
   "registrationFailed": { "message": "注册失败。请检查服务器地址、一次性配对码和设备名称。" },
   "registrationUnreadable": { "message": "无法读取已保存的注册状态。请重新打开此页面；如果问题仍然存在，请重新注册。" },
-  "notificationDismissButton": { "message": "清除" }
+  "notificationDismissButton": { "message": "清除" },
+  "interactionPageTitle": { "message": "SevenMirror" },
+  "interactionActionsTitle": { "message": "操作" },
+  "interactionLoading": { "message": "正在加载通知……" },
+  "interactionSource": { "message": "来自 $DEVICE$", "placeholders": { "device": { "content": "$1" } } },
+  "interactionUntitledNotification": { "message": "通知" },
+  "interactionNoSourceActions": { "message": "这条通知没有提供可用操作。" },
+  "interactionReplyNextStep": { "message": "回复功能将在下一次更新中提供。" },
+  "interactionSending": { "message": "正在发送请求……" },
+  "interactionRequestSent": { "message": "请求已发送，Android 设备响应后会同步结果。" },
+  "interactionRequestQueued": { "message": "请求已保存，将在连接恢复后发送。" },
+  "interactionRequestUnavailable": { "message": "暂时无法发送请求。请检查连接后重试。" },
+  "interactionChanged": { "message": "通知已经发生变化。请重新打开通知，使用最新操作。" },
+  "interactionUnavailableTitle": { "message": "这条通知已不可用" },
+  "interactionUnavailableBody": { "message": "它可能已在 Android 设备上被清除或更新。" }
 }

@@ -45,5 +45,19 @@
   "waitingForAdminApproval": { "message": "Registration received. Ask your server administrator to approve this Chrome profile." },
   "registrationFailed": { "message": "Registration failed. Verify the server address, one-time code, and device name." },
   "registrationUnreadable": { "message": "Stored registration state could not be read. Reopen this page; if the problem remains, register again." },
-  "notificationDismissButton": { "message": "Clear" }
+  "notificationDismissButton": { "message": "Clear" },
+  "interactionPageTitle": { "message": "SevenMirror" },
+  "interactionActionsTitle": { "message": "Actions" },
+  "interactionLoading": { "message": "Loading notification…" },
+  "interactionSource": { "message": "From $DEVICE$", "placeholders": { "device": { "content": "$1" } } },
+  "interactionUntitledNotification": { "message": "Notification" },
+  "interactionNoSourceActions": { "message": "This notification does not provide any actions." },
+  "interactionReplyNextStep": { "message": "Reply will be available in the next update." },
+  "interactionSending": { "message": "Sending request…" },
+  "interactionRequestSent": { "message": "Request sent. The result will be synchronized when your Android device responds." },
+  "interactionRequestQueued": { "message": "Request saved. It will be sent when the connection returns." },
+  "interactionRequestUnavailable": { "message": "The request could not be sent. Check the connection and try again." },
+  "interactionChanged": { "message": "The notification changed. Open it again to use its latest actions." },
+  "interactionUnavailableTitle": { "message": "This notification is no longer available" },
+  "interactionUnavailableBody": { "message": "It may have been cleared or updated on your Android device." }
 }

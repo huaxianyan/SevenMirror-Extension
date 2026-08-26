@@ -33,6 +33,11 @@ import {
 import { TransportRuntime } from '../transport/transport-runtime';
 import { WorkspaceBusinessPeerResolver } from '../crypto/workspace-business-peer-resolver';
 import { isAppOwnedSyntheticInvoke } from './synthetic-ack-hold';
+import {
+  interactionPageUrl,
+  interactionSummary,
+  resolveCurrentAction,
+} from './notification-interaction';
 
 const CONNECTION_STATE_KEY = 'connectionState';
 const TRANSPORT_RECONNECT_ALARM = 'transport-reconnect-v1';
@@ -148,9 +153,11 @@ chrome.notifications.onClosed.addListener((notificationId, byUser) => {
 });
 
 chrome.notifications.onClicked.addListener((notificationId) => {
-  // The full interaction window is the next product slice. Persist suppression now so a
-  // browser-generated close accompanying this click can never dismiss the Android source.
-  void markProgrammaticClose(notificationId, 'body-click');
+  // Persist the close reason before opening the interaction page so a browser-generated close
+  // accompanying this click can never dismiss the Android source.
+  void markProgrammaticClose(notificationId, 'body-click')
+    .then(() => openNotificationInteraction(notificationId).catch(() => undefined))
+    .catch(() => transportRuntime.failClosed());
 });
 
 chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
@@ -236,6 +243,20 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
       void queueActionInvoke(message).then(
         (result) => sendResponse(result),
         () => sendResponse({ queued: false, accepted: false }),
+      );
+      return true;
+
+    case 'get-notification-interaction':
+      void getNotificationInteraction(message).then(
+        (notification) => sendResponse({ notification }),
+        () => sendResponse({ notification: undefined }),
+      );
+      return true;
+
+    case 'invoke-notification-interaction':
+      void invokeNotificationInteraction(message).then(
+        (result) => sendResponse(result),
+        () => sendResponse({ outcome: 'unavailable' }),
       );
       return true;
 
@@ -489,6 +510,61 @@ async function drainActionInvokes(): Promise<void> {
   }
 }
 
+async function openNotificationInteraction(notificationId: string): Promise<void> {
+  const state = await notificationStateStore.findVisibleByChromeNotificationId(notificationId);
+  if (state === undefined) return;
+  await chrome.tabs.create({
+    url: interactionPageUrl(chrome.runtime.getURL('/'), notificationId),
+  });
+}
+
+async function getNotificationInteraction(
+  message: Record<string, unknown>,
+): Promise<ReturnType<typeof interactionSummary> | undefined> {
+  if (typeof message.chromeNotificationId !== 'string') return undefined;
+  const state = await notificationStateStore.findVisibleByChromeNotificationId(
+    message.chromeNotificationId,
+  );
+  if (state === undefined) return undefined;
+  const credential = await credentialStore.load();
+  if (credential === undefined) return undefined;
+  try {
+    const sourceName = await businessPeerResolver.resolveNotificationSourceName(
+      credential.workspaceId,
+      credential.deviceId,
+      state.sourceDeviceId,
+      Date.now(),
+    );
+    return sourceName === undefined ? undefined : interactionSummary(state, sourceName);
+  } finally {
+    credential.authToken.fill(0);
+  }
+}
+
+async function invokeNotificationInteraction(message: Record<string, unknown>): Promise<{
+  outcome: 'sent' | 'queued' | 'unavailable' | 'changed';
+}> {
+  if (typeof message.chromeNotificationId !== 'string' ||
+      typeof message.revision !== 'string') return { outcome: 'unavailable' };
+  const state = await notificationStateStore.findVisibleByChromeNotificationId(
+    message.chromeNotificationId,
+  );
+  if (state === undefined || state.revision !== message.revision) return { outcome: 'changed' };
+
+  let result: Awaited<ReturnType<typeof queueStateOperation>>;
+  if (message.operation === 'dismiss') {
+    result = await queueStateOperation(state, { dismissNotification: true });
+  } else if (message.operation === 'action' && typeof message.actionId === 'string') {
+    const action = resolveCurrentAction(state, message.revision, message.actionId);
+    if (action === undefined || action.requiresTextInput) return { outcome: 'unavailable' };
+    result = await queueStateOperation(state, { actionId: action.actionId });
+  } else {
+    return { outcome: 'unavailable' };
+  }
+  if (result === undefined || !result.queued) return { outcome: 'unavailable' };
+  return { outcome: result.accepted ? 'sent' : 'queued' };
+}
+
 async function invokeNotificationButton(notificationId: string, buttonIndex: number): Promise<void> {
   if (!Number.isInteger(buttonIndex) || buttonIndex < 0) return;
   const state = await notificationStateStore.findVisibleByChromeNotificationId(notificationId);
@@ -512,9 +588,9 @@ async function requestNotificationDismiss(notificationId: string): Promise<void>
 async function queueStateOperation(
   state: MirroredNotificationState,
   operation: { actionId: Uint8Array } | { dismissNotification: true },
-): Promise<void> {
+): Promise<{ queued: boolean; accepted: boolean; idempotencyKey: string } | undefined> {
   const credential = await credentialStore.load();
-  if (credential === undefined) return;
+  if (credential === undefined) return undefined;
   try {
     const recipients = await businessPeerResolver.listActionRecipients(
       credential.workspaceId,
@@ -523,8 +599,8 @@ async function queueStateOperation(
     );
     const recipient = recipients.find((candidate) =>
       toHex(candidate.deviceId) === toHex(state.sourceDeviceId));
-    if (recipient === undefined) return;
-    await queueActionInvoke({
+    if (recipient === undefined) return undefined;
+    return await queueActionInvoke({
       targetDeviceId: toHex(recipient.deviceId),
       targetKeyId: toHex(recipient.keyId),
       notificationId: state.notificationId,
