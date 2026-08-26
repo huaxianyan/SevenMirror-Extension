@@ -28,6 +28,7 @@ export interface PendingActionRecord {
   recipientKeyId?: Uint8Array;
   nextAttemptAtUnixMs?: number;
   invokeAttemptCount?: number;
+  invokeDeliveryMode?: 'retry' | 'once';
   canonicalResultAckPayload?: Uint8Array;
   nextAckAttemptAtUnixMs?: number;
   ackAttemptCount?: number;
@@ -39,6 +40,7 @@ export interface PendingInvokeDelivery {
   recipientKeyId: Uint8Array;
   canonicalInvokePayload: Uint8Array;
   attemptCount: number;
+  deliveryMode: 'retry' | 'once';
   expiresAtUnixMs: number;
 }
 
@@ -83,6 +85,7 @@ export class IndexedDbPendingActionStore {
     expiresAtUnixMs: number,
     canonicalInvokePayload?: Uint8Array,
     recipientKeyId?: Uint8Array,
+    invokeDeliveryMode: 'retry' | 'once' = 'retry',
   ): Promise<PendingActionRegistration> {
     validateIdentifier(idempotencyKey, 'idempotencyKey', true);
     validateIdentifier(senderDeviceId, 'senderDeviceId', true);
@@ -91,6 +94,9 @@ export class IndexedDbPendingActionStore {
     validateTimestamp(expiresAtUnixMs, 'expiresAtUnixMs');
     if (expiresAtUnixMs <= createdAtUnixMs) {
       throw new Error('expiresAtUnixMs must be greater than createdAtUnixMs');
+    }
+    if (invokeDeliveryMode !== 'retry' && invokeDeliveryMode !== 'once') {
+      throw new Error('Invoke delivery mode is invalid');
     }
     if ((canonicalInvokePayload === undefined) !== (recipientKeyId === undefined)) {
       throw new Error('Invoke delivery payload and recipient key must be provided together');
@@ -116,6 +122,9 @@ export class IndexedDbPendingActionStore {
           if (existing.state === 'completed') {
             throw new Error('Idempotency key already has a terminal result');
           }
+          if ((existing.invokeDeliveryMode ?? 'retry') !== invokeDeliveryMode) {
+            throw new Error('Idempotency key is already bound to another delivery mode');
+          }
           if (existing.canonicalInvokePayload !== undefined &&
               !bytesEqual(existing.canonicalInvokePayload, canonicalInvokePayload)) {
             throw new Error('Idempotency key is already bound to different invoke bytes');
@@ -131,6 +140,7 @@ export class IndexedDbPendingActionStore {
               recipientKeyId: recipientKeyId.slice(),
               nextAttemptAtUnixMs: createdAtUnixMs,
               invokeAttemptCount: 0,
+              invokeDeliveryMode,
             } satisfies PendingActionRecord));
           }
         }
@@ -151,6 +161,7 @@ export class IndexedDbPendingActionStore {
           recipientKeyId: recipientKeyId.slice(),
           nextAttemptAtUnixMs: createdAtUnixMs,
           invokeAttemptCount: 0,
+          invokeDeliveryMode,
         }),
       } satisfies PendingActionRecord));
       return 'registered';
@@ -231,6 +242,7 @@ export class IndexedDbPendingActionStore {
       records.forEach(validateDeliveryRecord);
       return records
         .filter((record) => record.state === 'pending' &&
+          (record.invokeDeliveryMode ?? 'retry') === 'retry' &&
           record.canonicalInvokePayload !== undefined && record.recipientKeyId !== undefined &&
           record.nextAttemptAtUnixMs !== undefined && record.nextAttemptAtUnixMs <= nowUnixMs)
         .sort((left, right) =>
@@ -243,6 +255,7 @@ export class IndexedDbPendingActionStore {
           recipientKeyId: record.recipientKeyId!.slice(),
           canonicalInvokePayload: record.canonicalInvokePayload!.slice(),
           attemptCount: record.invokeAttemptCount ?? 0,
+          deliveryMode: record.invokeDeliveryMode ?? 'retry',
           expiresAtUnixMs: record.expiresAtUnixMs,
         }));
     });
@@ -364,6 +377,7 @@ export class IndexedDbPendingActionStore {
       recipientKeyId: record.recipientKeyId.slice(),
       canonicalInvokePayload: record.canonicalInvokePayload.slice(),
       attemptCount: record.invokeAttemptCount ?? 0,
+      deliveryMode: record.invokeDeliveryMode ?? 'retry',
       expiresAtUnixMs: record.expiresAtUnixMs,
     };
   }
@@ -439,6 +453,10 @@ function validateDeliveryRecord(record: PendingActionRecord): void {
     record.nextAttemptAtUnixMs,
     record.invokeAttemptCount,
   ];
+  if (record.invokeDeliveryMode !== undefined &&
+      record.invokeDeliveryMode !== 'retry' && record.invokeDeliveryMode !== 'once') {
+    throw new Error('Stored invoke delivery mode is corrupt');
+  }
   if (values.some((value) => value !== undefined)) {
     if (values.some((value) => value === undefined)) {
       throw new Error('Stored invoke delivery state is partial');

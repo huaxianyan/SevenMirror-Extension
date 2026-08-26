@@ -65,36 +65,17 @@ export class ActionInvokeOutbox {
     accepted: boolean;
     nextWakeDelayMs?: number;
   }> {
-    return this.runExclusive(async () => {
-      const active = await this.loadActiveContext(target);
-      try {
-        const nowUnixMs = this.now();
-        const sequence = await this.sequences.allocate(target.keyId);
-        const frame = await prepareActionInvokeEnvelope({
-          workspaceId: active.credential.workspaceId,
-          senderDeviceId: active.credential.deviceId,
-          recipientDeviceId: target.deviceId,
-          senderIdentity: active.identity,
-          recipientPublicKey: active.recipientPublicKey,
-          messageId: this.nextMessageId(),
-          sequence,
-          createdAtUnixMs: nowUnixMs,
-          expiresAtUnixMs: nowUnixMs + ENVELOPE_TTL_MS,
-        }, request, this.pendingActions);
-        const accepted = this.sendFrame(frame);
-        if (accepted) {
-          await this.pendingActions.recordInvokeSendAttempt(
-            request.idempotencyKey,
-            nowUnixMs + BASE_RETRY_MS,
-            MAXIMUM_ATTEMPTS,
-          );
-        }
-        return { accepted, ...(accepted ? { nextWakeDelayMs: BASE_RETRY_MS } : {}) };
-      } finally {
-        active.credential.authToken.fill(0);
-        active.recipientPublicKey.fill(0);
-      }
-    });
+    return this.queueAndSendWithMode(target, request, 'retry');
+  }
+
+  /** Sends a reply once while retaining only correlation state for its authenticated result. */
+  sendOnce(target: ActionInvokeTarget, request: ActionInvokeRequest): Promise<{
+    accepted: boolean;
+  }> {
+    if (!('replyText' in request) || request.replyText === undefined) {
+      throw new Error('One-shot invoke requires reply text');
+    }
+    return this.queueAndSendWithMode(target, request, 'once');
   }
 
   /** Sends one fresh envelope for the exact durable operation, including a completed one. */
@@ -102,6 +83,7 @@ export class ActionInvokeOutbox {
     return this.runExclusive(async () => {
       const entry = await this.pendingActions.getInvokeDelivery(idempotencyKey);
       if (entry === undefined) throw new Error('Durable invoke delivery is unavailable');
+      if (entry.deliveryMode === 'once') throw new Error('One-shot invoke cannot be resent');
       const credential = await this.credentialStore.load();
       if (credential === undefined) throw new Error('Transport is not configured');
       try {
@@ -222,6 +204,46 @@ export class ActionInvokeOutbox {
         }
       } finally {
         credential.authToken.fill(0);
+      }
+    });
+  }
+
+  private queueAndSendWithMode(
+    target: ActionInvokeTarget,
+    request: ActionInvokeRequest,
+    deliveryMode: 'retry' | 'once',
+  ): Promise<{ accepted: boolean; nextWakeDelayMs?: number }> {
+    return this.runExclusive(async () => {
+      const active = await this.loadActiveContext(target);
+      try {
+        const nowUnixMs = this.now();
+        const sequence = await this.sequences.allocate(target.keyId);
+        const frame = await prepareActionInvokeEnvelope({
+          workspaceId: active.credential.workspaceId,
+          senderDeviceId: active.credential.deviceId,
+          recipientDeviceId: target.deviceId,
+          senderIdentity: active.identity,
+          recipientPublicKey: active.recipientPublicKey,
+          messageId: this.nextMessageId(),
+          sequence,
+          createdAtUnixMs: nowUnixMs,
+          expiresAtUnixMs: nowUnixMs + ENVELOPE_TTL_MS,
+        }, request, this.pendingActions, deliveryMode);
+        const accepted = this.sendFrame(frame);
+        if (accepted) {
+          await this.pendingActions.recordInvokeSendAttempt(
+            request.idempotencyKey,
+            nowUnixMs + BASE_RETRY_MS,
+            deliveryMode === 'once' ? 1 : MAXIMUM_ATTEMPTS,
+          );
+        }
+        return {
+          accepted,
+          ...(accepted && deliveryMode === 'retry' ? { nextWakeDelayMs: BASE_RETRY_MS } : {}),
+        };
+      } finally {
+        active.credential.authToken.fill(0);
+        active.recipientPublicKey.fill(0);
       }
     });
   }

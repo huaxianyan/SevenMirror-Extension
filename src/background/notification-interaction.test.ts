@@ -4,6 +4,7 @@ import {
   interactionPageUrl,
   interactionSummary,
   resolveCurrentAction,
+  validateReplyText,
 } from './notification-interaction';
 
 const state = (): MirroredNotificationState => ({
@@ -49,6 +50,12 @@ describe('Notification interaction window', () => {
       ['Mark read', false],
     ]);
     expect(JSON.stringify(summary)).not.toContain('0101010101010101');
+  });
+
+  it('accepts only non-blank replies within the protocol byte limit', () => {
+    expect(validateReplyText('hello')).toBe('valid');
+    expect(validateReplyText('  \n')).toBe('required');
+    expect(validateReplyText('你'.repeat(1_334))).toBe('too-long');
   });
 
   it('resolves an action only while the interaction page revision is current', () => {

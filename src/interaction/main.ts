@@ -1,12 +1,20 @@
 import { localizeDocument, message } from '../shared/i18n';
-import type { NotificationInteractionSummary } from '../background/notification-interaction';
+import {
+  validateReplyText,
+  type NotificationInteractionSummary,
+} from '../background/notification-interaction';
 
 interface InteractionResponse {
   notification?: NotificationInteractionSummary;
 }
 
 interface OperationResponse {
-  outcome: 'sent' | 'queued' | 'unavailable' | 'changed';
+  outcome: 'sent' | 'queued' | 'awaiting-result' | 'unavailable' | 'changed';
+  idempotencyKey?: string;
+}
+
+interface ReplyOperationResponse {
+  state: 'pending' | 'succeeded' | 'changed' | 'failed' | 'unknown' | 'unavailable';
 }
 
 const source = requireElement<HTMLParagraphElement>('source');
@@ -63,13 +71,42 @@ function renderNotification(notification: NotificationInteractionSummary): void 
 
 function renderAction(action: NotificationInteractionSummary['actions'][number]): HTMLElement {
   if (action.requiresTextInput) {
-    const container = document.createElement('div');
+    const container = document.createElement('form');
     container.className = 'input-action';
-    const title = document.createElement('strong');
-    title.textContent = action.title;
+    const label = document.createElement('label');
+    label.textContent = action.title;
+    const input = document.createElement('textarea');
+    input.rows = 3;
+    input.placeholder = message('interactionReplyPlaceholder');
+    input.disabled = !action.allowsFreeFormInput;
+    if (!action.allowsFreeFormInput) input.dataset.permanentlyDisabled = 'true';
+    label.append(input);
     const hint = document.createElement('p');
-    hint.textContent = message('interactionReplyNextStep');
-    container.append(title, hint);
+    hint.textContent = action.allowsFreeFormInput
+      ? message('interactionReplyLimit')
+      : message('interactionReplyOnAndroid');
+    const submit = document.createElement('button');
+    submit.type = 'submit';
+    submit.textContent = message('interactionSendReply');
+    submit.disabled = !action.allowsFreeFormInput;
+    if (!action.allowsFreeFormInput) submit.dataset.permanentlyDisabled = 'true';
+    container.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const validation = validateReplyText(input.value);
+      if (validation !== 'valid') {
+        status.textContent = message(validation === 'too-long'
+          ? 'interactionReplyTooLong'
+          : 'interactionReplyRequired');
+        input.focus();
+        return;
+      }
+      void invoke({
+        operation: 'reply',
+        actionId: action.actionId,
+        replyText: input.value,
+      });
+    });
+    container.append(label, hint, submit);
     return container;
   }
   const button = document.createElement('button');
@@ -83,7 +120,10 @@ function renderAction(action: NotificationInteractionSummary['actions'][number])
 }
 
 async function invoke(
-  operation: { operation: 'dismiss' } | { operation: 'action'; actionId: string },
+  operation:
+    | { operation: 'dismiss' }
+    | { operation: 'action'; actionId: string }
+    | { operation: 'reply'; actionId: string; replyText: string },
 ): Promise<void> {
   if (current === undefined) return;
   setControlsDisabled(true);
@@ -97,6 +137,14 @@ async function invoke(
   switch (response.outcome) {
     case 'sent':
       status.textContent = message('interactionRequestSent');
+      return;
+    case 'awaiting-result':
+      if (response.idempotencyKey === undefined) {
+        status.textContent = message('interactionReplyUnknown');
+        return;
+      }
+      status.textContent = message('interactionReplyWaiting');
+      await waitForReplyResult(response.idempotencyKey);
       return;
     case 'queued':
       status.textContent = message('interactionRequestQueued');
@@ -114,6 +162,35 @@ async function invoke(
   }
 }
 
+async function waitForReplyResult(idempotencyKey: string): Promise<void> {
+  const deadline = Date.now() + 8_000;
+  while (Date.now() < deadline) {
+    const response = (await chrome.runtime.sendMessage({
+      type: 'get-notification-interaction-operation',
+      idempotencyKey,
+    })) as ReplyOperationResponse;
+    switch (response.state) {
+      case 'pending':
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        continue;
+      case 'succeeded':
+        status.textContent = message('interactionReplySucceeded');
+        return;
+      case 'changed':
+        status.textContent = message('interactionChanged');
+        return;
+      case 'failed':
+        status.textContent = message('interactionReplyFailed');
+        return;
+      case 'unknown':
+      case 'unavailable':
+        status.textContent = message('interactionReplyUnknown');
+        return;
+    }
+  }
+  status.textContent = message('interactionReplyUnknown');
+}
+
 function showUnavailable(): void {
   current = undefined;
   notificationCard.hidden = true;
@@ -123,9 +200,10 @@ function showUnavailable(): void {
 }
 
 function setControlsDisabled(disabled: boolean): void {
-  actions.querySelectorAll<HTMLButtonElement>('button').forEach((button) => {
-    button.disabled = disabled;
-  });
+  actions.querySelectorAll<HTMLButtonElement | HTMLTextAreaElement>('button, textarea')
+    .forEach((control) => {
+      control.disabled = disabled || control.dataset.permanentlyDisabled === 'true';
+    });
   dismiss.disabled = disabled;
 }
 

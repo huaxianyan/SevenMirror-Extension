@@ -32,6 +32,7 @@ export interface PendingActionRegistrar {
     expiresAtUnixMs: number,
     canonicalInvokePayload?: Uint8Array,
     recipientKeyId?: Uint8Array,
+    invokeDeliveryMode?: 'retry' | 'once',
   ): Promise<'registered' | 'already-registered' | 'capacity-exceeded'>;
 }
 
@@ -64,6 +65,7 @@ export async function prepareActionInvokeEnvelope(
   context: ActionEnvelopeContext,
   request: ActionInvokeRequest,
   pendingActions: PendingActionRegistrar,
+  invokeDeliveryMode: 'retry' | 'once' = 'retry',
 ): Promise<Uint8Array> {
   const canonicalRequest = encodeEncryptedPayloadV1(createActionInvokePayload(request));
   const registration = await pendingActions.register(
@@ -74,6 +76,7 @@ export async function prepareActionInvokeEnvelope(
     context.createdAtUnixMs + PENDING_ACTION_RETENTION_MS,
     canonicalRequest,
     await sha256(context.recipientPublicKey),
+    invokeDeliveryMode,
   );
   if (registration === 'capacity-exceeded') {
     throw new Error('Pending action capacity exceeded');

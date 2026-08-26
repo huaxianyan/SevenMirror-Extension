@@ -42,6 +42,11 @@ export function interactionSummary(
   };
 }
 
+export function validateReplyText(value: string): 'valid' | 'required' | 'too-long' {
+  if (value.trim().length === 0) return 'required';
+  return new TextEncoder().encode(value).byteLength <= 4_000 ? 'valid' : 'too-long';
+}
+
 export function resolveCurrentAction(
   state: MirroredNotificationState,
   expectedRevision: string,

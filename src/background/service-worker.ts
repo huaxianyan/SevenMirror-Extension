@@ -33,10 +33,12 @@ import {
 import { TransportRuntime } from '../transport/transport-runtime';
 import { WorkspaceBusinessPeerResolver } from '../crypto/workspace-business-peer-resolver';
 import { isAppOwnedSyntheticInvoke } from './synthetic-ack-hold';
+import { ActionResultStatus } from '../protocol/generated/notification/v1/payload_pb';
 import {
   interactionPageUrl,
   interactionSummary,
   resolveCurrentAction,
+  validateReplyText,
 } from './notification-interaction';
 
 const CONNECTION_STATE_KEY = 'connectionState';
@@ -257,6 +259,13 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
       void invokeNotificationInteraction(message).then(
         (result) => sendResponse(result),
         () => sendResponse({ outcome: 'unavailable' }),
+      );
+      return true;
+
+    case 'get-notification-interaction-operation':
+      void getNotificationInteractionOperation(message).then(
+        (result) => sendResponse(result),
+        () => sendResponse({ state: 'unavailable' }),
       );
       return true;
 
@@ -542,7 +551,8 @@ async function getNotificationInteraction(
 }
 
 async function invokeNotificationInteraction(message: Record<string, unknown>): Promise<{
-  outcome: 'sent' | 'queued' | 'unavailable' | 'changed';
+  outcome: 'sent' | 'queued' | 'awaiting-result' | 'unavailable' | 'changed';
+  idempotencyKey?: string;
 }> {
   if (typeof message.chromeNotificationId !== 'string' ||
       typeof message.revision !== 'string') return { outcome: 'unavailable' };
@@ -558,11 +568,47 @@ async function invokeNotificationInteraction(message: Record<string, unknown>): 
     const action = resolveCurrentAction(state, message.revision, message.actionId);
     if (action === undefined || action.requiresTextInput) return { outcome: 'unavailable' };
     result = await queueStateOperation(state, { actionId: action.actionId });
+  } else if (message.operation === 'reply' && typeof message.actionId === 'string' &&
+      typeof message.replyText === 'string') {
+    const action = resolveCurrentAction(state, message.revision, message.actionId);
+    if (action === undefined || !action.requiresTextInput || !action.allowsFreeFormInput ||
+        validateReplyText(message.replyText) !== 'valid') {
+      return { outcome: 'unavailable' };
+    }
+    result = await queueStateOperation(state, {
+      actionId: action.actionId,
+      replyText: message.replyText,
+      sendOnce: true,
+    });
   } else {
     return { outcome: 'unavailable' };
   }
   if (result === undefined || !result.queued) return { outcome: 'unavailable' };
+  if (message.operation === 'reply') {
+    return result.accepted
+      ? { outcome: 'awaiting-result', idempotencyKey: result.idempotencyKey }
+      : { outcome: 'unavailable' };
+  }
   return { outcome: result.accepted ? 'sent' : 'queued' };
+}
+
+async function getNotificationInteractionOperation(message: Record<string, unknown>): Promise<{
+  state: 'pending' | 'succeeded' | 'changed' | 'failed' | 'unknown' | 'unavailable';
+}> {
+  const key = parseHex(message.idempotencyKey, 16, 'idempotencyKey');
+  const record = await pendingActionStore.get(key);
+  if (record === undefined || record.invokeDeliveryMode !== 'once') return { state: 'unavailable' };
+  if (record.state === 'pending') return { state: 'pending' };
+  switch (record.resultStatus) {
+    case ActionResultStatus.SUCCEEDED:
+      return { state: 'succeeded' };
+    case ActionResultStatus.STALE_NOTIFICATION_VERSION:
+      return { state: 'changed' };
+    case ActionResultStatus.OUTCOME_UNKNOWN:
+      return { state: 'unknown' };
+    default:
+      return { state: 'failed' };
+  }
 }
 
 async function invokeNotificationButton(notificationId: string, buttonIndex: number): Promise<void> {
@@ -587,7 +633,9 @@ async function requestNotificationDismiss(notificationId: string): Promise<void>
 
 async function queueStateOperation(
   state: MirroredNotificationState,
-  operation: { actionId: Uint8Array } | { dismissNotification: true },
+  operation:
+    | { actionId: Uint8Array; replyText?: string; sendOnce?: boolean }
+    | { dismissNotification: true },
 ): Promise<{ queued: boolean; accepted: boolean; idempotencyKey: string } | undefined> {
   const credential = await credentialStore.load();
   if (credential === undefined) return undefined;
@@ -606,7 +654,11 @@ async function queueStateOperation(
       notificationId: state.notificationId,
       notificationRevision: state.revision,
       ...('actionId' in operation
-        ? { actionId: toHex(operation.actionId) }
+        ? {
+          actionId: toHex(operation.actionId),
+          ...(operation.replyText === undefined ? {} : { replyText: operation.replyText }),
+          ...(operation.sendOnce === true ? { sendOnce: true } : {}),
+        }
         : { dismissNotification: true }),
     });
   } finally {
@@ -639,6 +691,13 @@ async function queueActionInvoke(message: Record<string, unknown>): Promise<{
   }
   const notificationRevision = BigInt(message.notificationRevision);
   const replyText = message.replyText;
+  const sendOnce = message.sendOnce === true;
+  if (message.sendOnce !== undefined && !sendOnce) {
+    throw new Error('sendOnce is invalid');
+  }
+  if (sendOnce && (dismissNotification || typeof replyText !== 'string')) {
+    throw new Error('sendOnce is only valid for replies');
+  }
   if (replyText !== undefined && (dismissNotification || typeof replyText !== 'string' ||
       replyText.length < 1 || new TextEncoder().encode(replyText).byteLength > 4_000)) {
     throw new Error('replyText is invalid');
@@ -647,23 +706,26 @@ async function queueActionInvoke(message: Record<string, unknown>): Promise<{
     throw new Error('dismiss operation cannot include actionId');
   }
   try {
-    const result = await actionInvokeOutbox.queueAndSend(
-      { deviceId: targetDeviceId, keyId: targetKeyId },
-      dismissNotification
-        ? {
-          notificationId: message.notificationId,
-          notificationRevision,
-          idempotencyKey,
-          dismissNotification: true,
-        }
-        : {
-          notificationId: message.notificationId,
-          notificationRevision,
-          actionId: requireDefined(actionId),
-          idempotencyKey,
-          ...(typeof replyText === 'string' ? { replyText } : {}),
-        },
-    );
+    const target = { deviceId: targetDeviceId, keyId: targetKeyId };
+    const request = dismissNotification
+      ? {
+        notificationId: message.notificationId,
+        notificationRevision,
+        idempotencyKey,
+        dismissNotification: true as const,
+      }
+      : {
+        notificationId: message.notificationId,
+        notificationRevision,
+        actionId: requireDefined(actionId),
+        idempotencyKey,
+        ...(typeof replyText === 'string' ? { replyText } : {}),
+      };
+    if (sendOnce) {
+      const result = await actionInvokeOutbox.sendOnce(target, request);
+      return { queued: true, accepted: result.accepted, idempotencyKey: toHex(idempotencyKey) };
+    }
+    const result = await actionInvokeOutbox.queueAndSend(target, request);
     if (result.nextWakeDelayMs !== undefined) {
       await chrome.alarms.create(ACTION_INVOKE_RETRY_ALARM, {
         when: Date.now() + Math.max(1_000, result.nextWakeDelayMs),

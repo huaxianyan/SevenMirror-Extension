@@ -66,7 +66,6 @@ describe('ActionInvokeOutbox', () => {
         notificationRevision: 7n,
         actionId: new Uint8Array(16).fill(9),
         idempotencyKey,
-        replyText: 'synthetic reply',
       });
       expect(queued).toEqual({ accepted: true, nextWakeDelayMs: 1_000 });
       expect((await pending.get(idempotencyKey))?.invokeAttemptCount).toBe(1);
@@ -190,6 +189,28 @@ describe('ActionInvokeOutbox', () => {
         .toEqual(idempotencyKey);
       expect(payload.body.case === 'actionInvoke' && payload.body.value.dismissNotification)
         .toBe(true);
+      await pending.reconcile(
+        idempotencyKey,
+        recipientDeviceId,
+        1,
+        undefined,
+        nowBase + 2,
+      );
+
+      const replyKey = new Uint8Array(16).fill(10);
+      expect(await reconstructed.sendOnce({
+        deviceId: recipientDeviceId,
+        keyId: recipientKeyId,
+      }, {
+        notificationId: 'synthetic.notification/42',
+        notificationRevision: 8n,
+        actionId: new Uint8Array(16).fill(11),
+        idempotencyKey: replyKey,
+        replyText: 'private reply',
+      })).toEqual({ accepted: true });
+      expect((await pending.get(replyKey))?.invokeDeliveryMode).toBe('once');
+      expect(await reconstructed.drainDue()).toEqual({ acceptedSends: 0, attemptedEntries: 0 });
+      await expect(reconstructed.resendExact(replyKey)).rejects.toThrow('cannot be resent');
     } finally {
       await Promise.all([pending.clear(), sequences.clear()]);
     }
