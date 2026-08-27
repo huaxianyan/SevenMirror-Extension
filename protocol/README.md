@@ -22,6 +22,8 @@ Run `npm run protocol:verify` after updating the schema. Do not edit the vendore
 
 `transport-heartbeat-v1.md` defines the post-authentication `SNH1`/`SNH2` liveness exchange consumed outside encrypted-envelope routing. `TRANSPORT_HEARTBEAT_SPEC_SHA256` pins the server-owned copy.
 
+`relay-delivery-v1.md` and its vector define explicit online-only versus durable ciphertext submission, recipient-specific cursor resume, cumulative ACK, caught-up markers, and snapshot-required gaps. `RELAY_DELIVERY_SPEC_SHA256` and `RELAY_DELIVERY_VECTOR_SHA256` pin these server-owned assets.
+
 `transport-credential-rotation-v1.md` defines client-generated pending credentials, exact-device-bound administrator authorization, atomic server replacement, and `SNO1`-gated client promotion. `TRANSPORT_CREDENTIAL_ROTATION_SPEC_SHA256` pins the server-owned copy.
 
 `workspace-membership-v1.md`, `vendor/membership/v1/membership.proto`, and their vector define ADR-005 identity-possession proof, authority-signed device certificates, monotonic signed rosters, roles, and revocation. `MEMBERSHIP_SCHEMA_SHA256`, `MEMBERSHIP_SPEC_SHA256`, and `MEMBERSHIP_VECTOR_SHA256` pin these assets.

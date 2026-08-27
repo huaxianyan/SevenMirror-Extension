@@ -41,6 +41,11 @@ await verify(
 );
 await verify('./device-auth-frame-v1.md', './DEVICE_AUTH_SPEC_SHA256');
 await verify('./transport-heartbeat-v1.md', './TRANSPORT_HEARTBEAT_SPEC_SHA256');
+await verify('./relay-delivery-v1.md', './RELAY_DELIVERY_SPEC_SHA256');
+await verify(
+  './test-vectors/relay-delivery-v1.json',
+  './RELAY_DELIVERY_VECTOR_SHA256',
+);
 await verify(
   './transport-credential-rotation-v1.md',
   './TRANSPORT_CREDENTIAL_ROTATION_SPEC_SHA256',

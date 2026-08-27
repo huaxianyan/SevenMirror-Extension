@@ -2,6 +2,7 @@ import { decodeEncryptedPayloadV1 } from '../protocol/encrypted-payload';
 import {
   authenticateAndOpen,
   consumeReplay,
+  EnvelopeRejectedError,
   type EnvelopeRecipientContext,
   type ReplayLedgerWriter,
 } from './envelope-receiver';
@@ -29,6 +30,7 @@ export async function receiveNotificationOnce(
   replayLedger: ReplayLedgerWriter,
   notifications: IndexedDbNotificationStateStore,
   nowUnixMs: number,
+  allowReplayDuplicate = false,
 ): Promise<NotificationReceipt> {
   const opened = await authenticateAndOpen(frameBytes, context, nowUnixMs);
   const payload = decodeEncryptedPayloadV1(opened.plaintext);
@@ -58,6 +60,11 @@ export async function receiveNotificationOnce(
     default:
       throw new NotificationRejectedError('UNEXPECTED_PAYLOAD');
   }
-  await consumeReplay(opened.header, replayLedger, nowUnixMs);
+  try {
+    await consumeReplay(opened.header, replayLedger, nowUnixMs);
+  } catch (error) {
+    if (!allowReplayDuplicate || !(error instanceof EnvelopeRejectedError) ||
+        error.code !== 'DUPLICATE') throw error;
+  }
   return receipt;
 }

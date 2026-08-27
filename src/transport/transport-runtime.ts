@@ -13,6 +13,11 @@ import type {
   TransportCredentialCandidate,
 } from './indexeddb-transport-credential-store';
 import { FAIL_CLOSED_WEBSOCKET_CODE } from './websocket-close-policy';
+import {
+  decodeRelayServerMessage,
+  encodeRelayAcknowledgement,
+  encodeRelayResume,
+} from './relay-delivery';
 
 interface CredentialStore {
   load(): Promise<StoredTransportCredential | undefined>;
@@ -32,6 +37,23 @@ type SocketOpener = (
 
 type TimerHandle = ReturnType<typeof setTimeout>;
 
+export interface DeliveryCursorStore {
+  load(workspaceId: Uint8Array, deviceId: Uint8Array): Promise<{
+    committedDeliveryId: bigint;
+    snapshotRequiredHighWater?: bigint;
+  }>;
+  commitDelivery(
+    workspaceId: Uint8Array,
+    deviceId: Uint8Array,
+    deliveryId: bigint,
+  ): Promise<unknown>;
+  requireSnapshot(
+    workspaceId: Uint8Array,
+    deviceId: Uint8Array,
+    highWater: bigint,
+  ): Promise<unknown>;
+}
+
 export interface TransportReconnectOptions {
   initialDelayMs?: number;
   maximumDelayMs?: number;
@@ -43,6 +65,8 @@ export interface TransportReconnectOptions {
   onAuthenticated?: () => void;
   beforeConnect?: () => Promise<void>;
   beforeAuthenticate?: (credential: StoredTransportCredential) => Promise<void>;
+  deliveryCursorStore?: DeliveryCursorStore;
+  onHistoryGap?: (highWater: bigint) => void;
 }
 
 interface ReconnectPolicy {
@@ -78,23 +102,32 @@ export class TransportRuntime {
   private readonly onAuthenticated: () => void;
   private readonly beforeConnect: () => Promise<void>;
   private readonly beforeAuthenticate: (credential: StoredTransportCredential) => Promise<void>;
+  private readonly deliveryCursorStore?: DeliveryCursorStore;
+  private readonly onHistoryGap: (highWater: bigint) => void;
   private readonly reconnectPolicy: ReconnectPolicy;
 
   constructor(
     private readonly credentialStore: CredentialStore,
     private readonly identityStore: IdentityStore,
     private readonly writeState: StateWriter,
-    private readonly onEnvelope: ((frame: ArrayBuffer) => Promise<void>) | undefined,
+    private readonly onEnvelope: ((
+      frame: ArrayBuffer,
+      options?: { allowReplayDuplicate: boolean },
+    ) => Promise<void>) | undefined,
     private readonly openSocket: SocketOpener = openAuthenticatedWebSocket,
     reconnectOptions: TransportReconnectOptions = {},
   ) {
     this.onAuthenticated = reconnectOptions.onAuthenticated ?? (() => undefined);
     this.beforeConnect = reconnectOptions.beforeConnect ?? (async () => undefined);
     this.beforeAuthenticate = reconnectOptions.beforeAuthenticate ?? (async () => undefined);
+    this.deliveryCursorStore = reconnectOptions.deliveryCursorStore;
+    this.onHistoryGap = reconnectOptions.onHistoryGap ?? (() => undefined);
     const {
       onAuthenticated: _onAuthenticated,
       beforeConnect: _beforeConnect,
       beforeAuthenticate: _beforeAuthenticate,
+      deliveryCursorStore: _deliveryCursorStore,
+      onHistoryGap: _onHistoryGap,
       ...policyOptions
     } = reconnectOptions;
     this.reconnectPolicy = validateReconnectPolicy({
@@ -231,7 +264,7 @@ export class TransportRuntime {
         if (generation !== this.generation) return;
         if (event === 'authenticated') {
           this.sno1Generation = generation;
-          void this.completeAuthentication(generation, socket, credentialSource);
+          void this.completeAuthentication(generation, socket, credentialSource, credential);
         } else if (event === 'socket-error' || event === 'socket-closed') {
           this.handleSocketTermination(generation, socket, credentialSource);
         }
@@ -266,7 +299,7 @@ export class TransportRuntime {
       const frame = event.data.slice(0);
       inboundQueue = inboundQueue.then(async () => {
         if (generation !== this.generation || !acceptingFrames) return;
-        await this.onEnvelope?.(frame);
+        await this.receiveRelayMessage(generation, socket, credential, frame);
       }).catch(() => {
         if (generation !== this.generation) return;
         acceptingFrames = false;
@@ -274,6 +307,56 @@ export class TransportRuntime {
       });
     });
     this.socket = socket;
+  }
+
+  private async receiveRelayMessage(
+    generation: number,
+    socket: WebSocket,
+    credential: StoredTransportCredential,
+    encoded: ArrayBuffer,
+  ): Promise<void> {
+    const message = decodeRelayServerMessage(encoded);
+    if (message.kind === 'online-envelope') {
+      await this.onEnvelope?.(
+        message.envelope.slice().buffer,
+        { allowReplayDuplicate: false },
+      );
+      return;
+    }
+    const cursorStore = this.deliveryCursorStore;
+    if (cursorStore === undefined) {
+      throw new Error('Durable relay delivery cursor is unavailable');
+    }
+    if (message.kind === 'delivery') {
+      await this.onEnvelope?.(
+        message.envelope.slice().buffer,
+        { allowReplayDuplicate: true },
+      );
+      await cursorStore.commitDelivery(
+        credential.workspaceId,
+        credential.deviceId,
+        message.deliveryId,
+      );
+      if (generation !== this.generation || this.socket !== socket || !this.isAuthenticated()) {
+        return;
+      }
+      socket.send(encodeRelayAcknowledgement(message.deliveryId));
+      return;
+    }
+    if (message.kind === 'caught-up') {
+      const state = await cursorStore.load(credential.workspaceId, credential.deviceId);
+      if (state.snapshotRequiredHighWater !== undefined ||
+          state.committedDeliveryId !== message.highWater) {
+        throw new Error('Relay caught-up marker does not match the committed cursor');
+      }
+      return;
+    }
+    await cursorStore.requireSnapshot(
+      credential.workspaceId,
+      credential.deviceId,
+      message.highWater,
+    );
+    this.onHistoryGap(message.highWater);
   }
 
   private async loadCurrentCandidate(): Promise<TransportCredentialCandidate | undefined> {
@@ -285,6 +368,7 @@ export class TransportRuntime {
     generation: number,
     socket: WebSocket,
     credentialSource: 'current' | 'pending',
+    credential: StoredTransportCredential,
   ): Promise<void> {
     try {
       if (credentialSource === 'pending') {
@@ -309,6 +393,27 @@ export class TransportRuntime {
     if (generation !== this.generation || this.socket !== socket) return;
     this.preferCurrentFallback = false;
     this.reconnectAttempt = 0;
+    try {
+      if (this.deliveryCursorStore !== undefined) {
+        const cursor = await this.deliveryCursorStore.load(
+          credential.workspaceId,
+          credential.deviceId,
+        );
+        socket.send(encodeRelayResume(cursor.committedDeliveryId));
+      }
+    } catch {
+      if (generation === this.generation) {
+        this.cancelReconnect();
+        ++this.generation;
+        this.authenticatedGeneration = undefined;
+        this.sno1Generation = undefined;
+        if (this.socket === socket) this.socket = undefined;
+        socket.close(FAIL_CLOSED_WEBSOCKET_CODE, 'relay delivery cursor initialization failed');
+        await this.writeState('offline');
+      }
+      return;
+    }
+    if (generation !== this.generation || this.socket !== socket) return;
     this.authenticatedGeneration = generation;
     await this.writeState('online');
     this.onAuthenticated();

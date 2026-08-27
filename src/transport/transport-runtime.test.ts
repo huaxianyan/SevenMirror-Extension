@@ -13,6 +13,8 @@ import {
   type StoredTransportCredential,
 } from './indexeddb-transport-credential-store';
 import { TransportRuntime } from './transport-runtime';
+import { IndexedDbRelayDeliveryCursorStore } from './indexeddb-relay-delivery-cursor-store';
+import relayDeliveryVector from '../../protocol/test-vectors/relay-delivery-v1.json';
 
 class FakeSocket extends EventTarget {
   closed = false;
@@ -68,6 +70,52 @@ describe('TransportRuntime', () => {
     expect(runtime.sendEnvelope(new Uint8Array([4]))).toBe(false);
     expect(socket.closeCode).toBe(4008);
     expect(states.at(-1)).toBe('offline');
+  });
+
+  it('commits a durable delivery before sending its cumulative acknowledgement', async () => {
+    const identity = await generateNonExtractableIdentity();
+    const credential = await credentialFor(identity);
+    const cursorStore = new IndexedDbRelayDeliveryCursorStore(
+      `runtime-relay-cursor-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    );
+    const socket = new FakeSocket();
+    let observer: ((event: TransportDiagnosticEvent) => void) | undefined;
+    let releaseBusiness: (() => void) | undefined;
+    const businessFinished = new Promise<void>((resolve) => { releaseBusiness = resolve; });
+    const received: Uint8Array[] = [];
+    const runtime = new TransportRuntime(
+      { load: async () => copyCredential(credential) },
+      { loadExisting: async () => identity },
+      async () => undefined,
+      async (frame) => {
+        received.push(new Uint8Array(frame));
+        await businessFinished;
+      },
+      (_loaded, observe) => {
+        observer = observe;
+        return socket as unknown as WebSocket;
+      },
+      { deliveryCursorStore: cursorStore },
+    );
+
+    await runtime.connect();
+    observer?.('authenticated');
+    await waitFor(() => runtime.hasAuthenticatedConnection());
+    expect(toHex(socket.sent[0]!)).toBe(relayDeliveryVector.resumeZeroHex);
+
+    const delivery = fromHex(relayDeliveryVector.deliveryHex);
+    new DataView(delivery.buffer).setBigUint64(4, 1n, false);
+    socket.dispatchEvent(new MessageEvent('message', { data: delivery.buffer }));
+    await waitFor(() => received.length === 1);
+    expect((await cursorStore.load(credential.workspaceId, credential.deviceId)).committedDeliveryId)
+      .toBe(0n);
+    expect(socket.sent).toHaveLength(1);
+
+    releaseBusiness?.();
+    await waitFor(() => socket.sent.length === 2);
+    expect((await cursorStore.load(credential.workspaceId, credential.deviceId)).committedDeliveryId)
+      .toBe(1n);
+    expect(toHex(socket.sent[1]!)).toBe('534e43320000000000000001');
   });
 
   it('runs promotion recovery before reading any transport credential', async () => {
@@ -553,6 +601,14 @@ async function waitFor(predicate: () => boolean): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
   throw new Error('Condition was not reached');
+}
+
+function fromHex(value: string): Uint8Array {
+  return Uint8Array.from(value.match(/.{2}/g) ?? [], (byte) => Number.parseInt(byte, 16));
+}
+
+function toHex(value: Uint8Array): string {
+  return Array.from(value, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function copyCredential(value: StoredTransportCredential): StoredTransportCredential {

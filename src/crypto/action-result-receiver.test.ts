@@ -81,6 +81,16 @@ describe('action result receiver', () => {
         (await pending.dueAcks(now)).at(0)!.canonicalAckPayload,
       );
       expect(ack.body.case).toBe('actionResultAck');
+      await expect(receiveActionResultOnce(firstFrame, context, replay, pending, now + 1))
+        .rejects.toMatchObject({ code: 'DUPLICATE' });
+      expect((await receiveActionResultOnce(
+        firstFrame,
+        context,
+        replay,
+        pending,
+        now + 1,
+        true,
+      )).reconciliation).toBe('already-completed');
 
       const recoveredFrame = await resultFrame(
         androidIdentity,

@@ -64,7 +64,10 @@ export class ActionResultDispatcher {
     );
   }
 
-  async receiveBusiness(frame: ArrayBuffer): Promise<BusinessDispatchReceipt> {
+  async receiveBusiness(
+    frame: ArrayBuffer,
+    allowReplayDuplicate = false,
+  ): Promise<BusinessDispatchReceipt> {
     const resolved = await this.resolve(frame);
     if (resolved.authorization.mayReceiveNotifications && this.notifications !== undefined) {
       try {
@@ -74,6 +77,7 @@ export class ActionResultDispatcher {
           this.replayLedger,
           this.notifications,
           this.now(),
+          allowReplayDuplicate,
         );
         return { kind: 'notification', receipt };
       } catch (error) {
@@ -91,6 +95,7 @@ export class ActionResultDispatcher {
         this.replayLedger,
         this.pendingActions,
         this.now(),
+        allowReplayDuplicate,
       );
       return { kind: 'action-result', receipt };
     } catch (error) {

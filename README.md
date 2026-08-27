@@ -50,6 +50,8 @@ The current `0.1.0-dev` schema is unreleased and provisional.
 
 The transport core accepts only HTTPS origins outside loopback, never puts credentials in URLs or `chrome.storage.sync`, rejects silent credential replacement, and refuses to send the first authentication frame if the WebSocket endpoint changes. The bearer credential must remain available as bytes for the browser WebSocket API, so extension-origin IndexedDB and a minimal in-memory lifetime are the practical Chrome boundary; the HPKE private identity remains non-extractable.
 
+Version `0.1.14` adds a durable recipient cursor for Relay Delivery v1. After exact `SNO1`, the Worker resumes from its highest committed delivery ID; it advances and cumulatively ACKs only after authenticated business reconciliation and presentation complete. Exact relay redelivery may reuse an already consumed replay tuple only when the existing durable business binding reconciles successfully. A history gap is persisted as snapshot-required and is never skipped automatically. The Android durable sender and snapshot-required recovery handshake remain incomplete.
+
 Version `0.1.12` adds one atomic `{current, pending, phase}` rotation record. Options durably prepares one client-generated pending credential and marks it attempted before the strict no-redirect HTTPS request can leave the extension. HTTP 200 never replaces current. After interruption or Worker reconstruction, transport probes pending, falls back to current after pre-authentication denial, and retains the exact pending secret for request retry. Only exact pending `SNO1` permits an atomic promotion that removes old current and pending metadata. Device/workspace and HPKE identity bindings remain unchanged.
 
 The Options page can consume an administrator-issued Chrome pairing code, request only the selected server's optional host access, persist the returned credential, and start a connection. `online` is reported only after `SNO1`; a socket open or local `SNA1` enqueue is not sufficient. Missing/replaced HPKE identity state fails closed.
@@ -60,7 +62,7 @@ Outbound `action.invoke` now persists the exact canonical invoke payload, Androi
 
 The Worker retries network/socket failures with jittered exponential backoff from 1 second up to 60 seconds. A single connection generation suppresses duplicate error/close retries, successful `SNO1` authentication resets the sequence, explicit connect/disconnect cancels pending work, and `chrome.alarms` preserves scheduled wakeups across MV3 Worker suspension. Persistent local identity or encrypted-delivery failures stop fail-closed rather than being retried as network failures.
 
-Server directory data can never populate the pin store implicitly. Textual trusted-device approval and Chrome transport-credential rotation are implemented, but camera QR UX, Android dual-slot rotation, E2EE identity rotation, lost-device recovery, the general relay cursor, multi-device offline convergence, and independent security review remain incomplete. No real notification content may use this transport yet.
+Server directory data can never populate the pin store implicitly. Textual trusted-device approval and Chrome transport-credential rotation are implemented, but camera QR UX, Android dual-slot rotation, E2EE identity rotation, lost-device recovery, snapshot-required recovery, Android durable submission, multi-device offline convergence, and independent security review remain incomplete. No real notification content may use this transport yet.
 
 ## License
 

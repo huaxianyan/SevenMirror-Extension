@@ -33,6 +33,7 @@ import {
   refreshActiveMembership,
 } from '../transport/membership-runtime-recovery';
 import { TransportRuntime } from '../transport/transport-runtime';
+import { IndexedDbRelayDeliveryCursorStore } from '../transport/indexeddb-relay-delivery-cursor-store';
 import { WorkspaceBusinessPeerResolver } from '../crypto/workspace-business-peer-resolver';
 import { isAppOwnedSyntheticInvoke } from './synthetic-ack-hold';
 import { ActionResultStatus } from '../protocol/generated/notification/v1/payload_pb';
@@ -61,6 +62,7 @@ const pendingActionStore = new IndexedDbPendingActionStore();
 const outboundSequenceStore = new IndexedDbOutboundSequenceStore();
 const inboundReplayLedger = new IndexedDbReplayLedger('action-results');
 const notificationStateStore = new IndexedDbNotificationStateStore();
+const relayDeliveryCursorStore = new IndexedDbRelayDeliveryCursorStore();
 const notificationButtonBindingStore = new NotificationButtonBindingStore();
 const notificationShortcutPreferencesStore = new NotificationShortcutPreferencesStore();
 const notificationPresenter = new NotificationPresenter({
@@ -99,8 +101,11 @@ transportRuntime = new TransportRuntime(
   credentialStore,
   identityStore,
   async (state) => chrome.storage.local.set({ [CONNECTION_STATE_KEY]: state }),
-  async (frame) => {
-    const result = await actionResultDispatcher.receiveBusiness(frame);
+  async (frame, options) => {
+    const result = await actionResultDispatcher.receiveBusiness(
+      frame,
+      options?.allowReplayDuplicate ?? false,
+    );
     if (result.kind === 'notification') {
       await notificationPresenter.present(result.receipt);
     }
@@ -129,6 +134,7 @@ transportRuntime = new TransportRuntime(
     },
     beforeConnect: recoverMembershipBeforeConnect,
     beforeAuthenticate: refreshMembershipBeforeAuthenticate,
+    deliveryCursorStore: relayDeliveryCursorStore,
   },
 );
 
