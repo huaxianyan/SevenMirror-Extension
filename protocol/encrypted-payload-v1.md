@@ -16,7 +16,7 @@ Receivers MUST reject a plaintext unless all of the following hold:
 3. no unknown fields occur at any message level;
 4. `schema_version` matches the body: version `2` for `action_invoke`,
    `action_result`, `action_result_ack`, and the E2EE identity lifecycle bodies
-   defined by `e2ee-identity-key-transition-v1.md`; or version `5` for
+   defined by `e2ee-identity-key-transition-v1.md`; or version `6` for
    `notification_upsert`, `notification_removed`, and
    `notification_snapshot_manifest`;
 5. exactly one supported `body` is present;
@@ -57,6 +57,16 @@ state backward. Envelope replay protection remains a separate security guard.
 ## `notification_upsert`
 
 `notification_upsert` carries the bounded display state of one notification.
+Every upsert identifies the source application inside the same E2EE plaintext:
+
+- `source_application_id`: stable Android package name, valid UTF-8, 1..255 encoded bytes;
+- `source_application_name`: user-visible Android application label, valid UTF-8, 1..512 encoded bytes.
+
+The application ID is used only for local filtering and shortcut-rule scope. The
+application name is source application data and is displayed without translation.
+Neither value appears in the authenticated routing header or relay metadata, and a
+receiver MUST NOT infer either value from the opaque `notification_id`.
+
 At least one of `title` and `body` MUST be present. When present:
 
 - `title`: valid UTF-8, 1..512 encoded bytes;

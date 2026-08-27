@@ -15,6 +15,8 @@ const state = (): MirroredNotificationState => ({
   revision: '7',
   phase: 'visible',
   payloadSha256: new Uint8Array(32).fill(2),
+  sourceApplicationId: 'chat.example',
+  sourceApplicationName: 'Example Chat',
   title: 'New message',
   body: 'Hello',
   actions: [
@@ -41,6 +43,7 @@ describe('Notification interaction window', () => {
     const summary = interactionSummary(state(), 'Pixel');
     expect(summary).toMatchObject({
       sourceName: 'Pixel',
+      sourceApplicationName: 'Example Chat',
       title: 'New message',
       body: 'Hello',
       revision: '7',

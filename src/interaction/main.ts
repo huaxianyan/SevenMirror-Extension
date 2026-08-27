@@ -18,6 +18,7 @@ interface ReplyOperationResponse {
 }
 
 const source = requireElement<HTMLParagraphElement>('source');
+const sourceApplication = requireElement<HTMLParagraphElement>('source-application');
 const notificationCard = requireElement<HTMLElement>('notification');
 const notificationTitle = requireElement<HTMLHeadingElement>('notification-title');
 const notificationBody = requireElement<HTMLParagraphElement>('notification-body');
@@ -53,6 +54,8 @@ async function loadNotification(): Promise<void> {
 function renderNotification(notification: NotificationInteractionSummary): void {
   document.title = notification.title || message('interactionPageTitle');
   source.textContent = message('interactionSource', notification.sourceName);
+  sourceApplication.textContent = notification.sourceApplicationName;
+  sourceApplication.hidden = notification.sourceApplicationName.length === 0;
   notificationTitle.textContent = notification.title || message('interactionUntitledNotification');
   notificationBody.textContent = notification.body;
   notificationBody.hidden = notification.body.length === 0;

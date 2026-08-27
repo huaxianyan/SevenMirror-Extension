@@ -6,8 +6,10 @@ export function message(key: string, substitutions?: MessageSubstitutions): stri
   return value;
 }
 
-export function localizeDocument(root: Document = document): void {
-  root.documentElement.lang = chrome.i18n.getUILanguage().replace('_', '-');
+export function localizeDocument(root: Document | DocumentFragment = document): void {
+  if (root instanceof Document) {
+    root.documentElement.lang = chrome.i18n.getUILanguage().replace('_', '-');
+  }
   root.querySelectorAll<HTMLElement>('[data-i18n]').forEach((element) => {
     element.textContent = message(requireAttribute(element, 'data-i18n'));
   });
@@ -15,6 +17,12 @@ export function localizeDocument(root: Document = document): void {
     element.setAttribute(
       'placeholder',
       message(requireAttribute(element, 'data-i18n-placeholder')),
+    );
+  });
+  root.querySelectorAll<HTMLElement>('[data-i18n-aria-label]').forEach((element) => {
+    element.setAttribute(
+      'aria-label',
+      message(requireAttribute(element, 'data-i18n-aria-label')),
     );
   });
 }

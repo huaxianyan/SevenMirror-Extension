@@ -74,19 +74,27 @@ describe('ActionResultDispatcher', () => {
       update: (id, options, callback) => { visible.set(id, options); callback?.(true); },
       clear: (id, callback) => callback?.(visible.delete(id)),
     };
-    const presenter = new NotificationPresenter(
+    const presenter = new NotificationPresenter({
       notifications,
-      async (id) => { programmaticMarkers.push(id); },
-      async () => undefined,
-      () => 'extension://notification-icon',
-      async (media) => {
+      markProgrammatic: async (id) => { programmaticMarkers.push(id); },
+      consumeProgrammatic: async () => undefined,
+      notificationIconUrl: () => 'extension://notification-icon',
+      mediaIconUrl: async (media) => {
         mediaAttempts.push(media.width);
         return media.width === payloadVector.notificationAvatar.width
           ? undefined
           : 'data:image/png;base64,app-icon';
       },
-      () => 'Clear',
-    );
+      dismissButtonTitle: () => 'Clear',
+      moreButtonTitle: () => 'More',
+      loadShortcutPreferences: async () => ({
+        pinDismiss: true,
+        rules: [{
+          id: '00000000000000000000000000000001',
+          match: { kind: 'title-exact', value: 'Mark handled' },
+        }],
+      }),
+    });
     try {
       fixture.authorize();
       const upsert = await fixture.dispatcher.receiveBusiness(toArrayBuffer(await notificationFrame(
@@ -390,6 +398,8 @@ async function notificationFrame(
     : createNotificationUpsertPayload({
       notificationId: 'synthetic.notification/42',
       notificationRevision: revision,
+      sourceApplicationId: 'dev.notificationmirroring.android',
+      sourceApplicationName: 'SevenMirror',
       title: 'Synthetic notification',
       body,
       ...(includeMedia ? {

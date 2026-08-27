@@ -7,6 +7,7 @@ export interface NotificationInteractionSummary {
   chromeNotificationId: string;
   revision: string;
   sourceName: string;
+  sourceApplicationName: string;
   title: string;
   body: string;
   actions: Array<{
@@ -31,6 +32,7 @@ export function interactionSummary(
     chromeNotificationId: state.chromeNotificationId,
     revision: state.revision,
     sourceName,
+    sourceApplicationName: state.sourceApplicationName ?? '',
     title: state.title ?? '',
     body: state.body ?? '',
     actions: (state.actions ?? []).map((action) => ({

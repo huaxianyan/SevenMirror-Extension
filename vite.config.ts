@@ -16,6 +16,7 @@ export default defineConfig({
         popup: resolve(projectRoot, 'src/popup/index.html'),
         options: resolve(projectRoot, 'src/options/index.html'),
         interaction: resolve(projectRoot, 'src/interaction/index.html'),
+        shortcuts: resolve(projectRoot, 'src/shortcuts/index.html'),
       },
       output: {
         entryFileNames: (chunk) =>

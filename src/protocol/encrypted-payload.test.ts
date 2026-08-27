@@ -135,6 +135,8 @@ describe('Encrypted Payload v1', () => {
     const upsert = createNotificationUpsertPayload({
       notificationId: vector.notificationPayloadId,
       notificationRevision: BigInt(vector.notificationUpsertRevision),
+      sourceApplicationId: vector.notificationSourceApplicationId,
+      sourceApplicationName: vector.notificationSourceApplicationName,
       title: vector.notificationTitle,
       body: vector.notificationBody,
       appIcon: mediaFromVector(vector.notificationAppIcon),
@@ -207,6 +209,8 @@ describe('Encrypted Payload v1', () => {
     const validMediaPayload = () => createNotificationUpsertPayload({
       notificationId: vector.notificationPayloadId,
       notificationRevision: 7n,
+      sourceApplicationId: vector.notificationSourceApplicationId,
+      sourceApplicationName: vector.notificationSourceApplicationName,
       title: vector.notificationTitle,
       appIcon: mediaFromVector(vector.notificationAppIcon),
     });
@@ -214,6 +218,8 @@ describe('Encrypted Payload v1', () => {
     const invalidAction = createNotificationUpsertPayload({
       notificationId: vector.notificationPayloadId,
       notificationRevision: 7n,
+      sourceApplicationId: vector.notificationSourceApplicationId,
+      sourceApplicationName: vector.notificationSourceApplicationName,
       title: vector.notificationTitle,
       actions: [create(NotificationActionDescriptorSchema, {
         actionId: new Uint8Array(16).fill(1),
@@ -264,8 +270,19 @@ describe('Encrypted Payload v1', () => {
     const missingText = createNotificationUpsertPayload({
       notificationId: vector.notificationPayloadId,
       notificationRevision: 7n,
+      sourceApplicationId: vector.notificationSourceApplicationId,
+      sourceApplicationName: vector.notificationSourceApplicationName,
     });
     expect(() => encodeEncryptedPayloadV1(missingText)).toThrow(/title or body/i);
+
+    const missingApplication = createNotificationUpsertPayload({
+      notificationId: vector.notificationPayloadId,
+      notificationRevision: 7n,
+      title: vector.notificationTitle,
+      sourceApplicationId: '',
+      sourceApplicationName: vector.notificationSourceApplicationName,
+    });
+    expect(() => encodeEncryptedPayloadV1(missingApplication)).toThrow(/application id/i);
 
     const wrongSchema = createNotificationRemovedPayload({
       notificationId: vector.notificationPayloadId,

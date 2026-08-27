@@ -23,9 +23,11 @@ import {
 
 export const ENCRYPTED_PAYLOAD_LIMITS = {
   schemaVersion: 2,
-  notificationSchemaVersion: 5,
+  notificationSchemaVersion: 6,
   maxPlaintextSize: 524_272,
   maxNotificationIdBytes: 512,
+  maxNotificationAppIdBytes: 255,
+  maxNotificationAppNameBytes: 512,
   maxNotificationTitleBytes: 512,
   maxNotificationBodyBytes: 4_000,
   maxNotificationActions: 16,
@@ -214,6 +216,16 @@ function validateNotificationUpsert(notification: NotificationUpsert): void {
     throw new Error('Notification upsert contains unknown fields');
   }
   validateNotificationBinding(notification.notificationId, notification.notificationRevision);
+  validateText(
+    notification.sourceApplicationId,
+    ENCRYPTED_PAYLOAD_LIMITS.maxNotificationAppIdBytes,
+    'Notification source application id',
+  );
+  validateText(
+    notification.sourceApplicationName,
+    ENCRYPTED_PAYLOAD_LIMITS.maxNotificationAppNameBytes,
+    'Notification source application name',
+  );
   if (notification.title === undefined && notification.body === undefined) {
     throw new Error('Notification upsert requires title or body');
   }

@@ -39,6 +39,8 @@ export interface MirroredNotificationState {
   revision: string;
   phase: 'visible' | 'removed';
   payloadSha256: Uint8Array;
+  sourceApplicationId?: string;
+  sourceApplicationName?: string;
   title?: string;
   body?: string;
   actions?: MirroredNotificationAction[];
@@ -76,6 +78,8 @@ export class IndexedDbNotificationStateStore {
       revision: notification.notificationRevision,
       phase: 'visible',
       payloadSha256: await sha256(canonicalPayload),
+      sourceApplicationId: notification.sourceApplicationId,
+      sourceApplicationName: notification.sourceApplicationName,
       ...(notification.title === undefined ? {} : { title: notification.title }),
       ...(notification.body === undefined ? {} : { body: notification.body }),
       actions: notification.actions.map((action) => ({
@@ -237,6 +241,22 @@ export class IndexedDbNotificationStateStore {
     });
   }
 
+  async listVisible(): Promise<MirroredNotificationState[]> {
+    const database = await this.openDatabase();
+    try {
+      const transaction = database.transaction(STORE_NAME, 'readonly');
+      const completed = transactionCompleted(transaction);
+      const states = await requestResult<MirroredNotificationState[]>(
+        transaction.objectStore(STORE_NAME).getAll(),
+      );
+      await completed;
+      for (const state of states) validateStored(state);
+      return states.filter((state) => state.phase === 'visible').map(copyState);
+    } finally {
+      database.close();
+    }
+  }
+
   async findVisibleByChromeNotificationId(
     chromeNotificationId: string,
   ): Promise<MirroredNotificationState | undefined> {
@@ -352,6 +372,20 @@ function validateStored(state: MirroredNotificationState): void {
   if (!(state.payloadSha256 instanceof Uint8Array) || state.payloadSha256.byteLength !== 32) {
     throw new Error('Stored notification digest is corrupt');
   }
+  if (state.sourceApplicationId !== undefined) {
+    validateStoredText(
+      state.sourceApplicationId,
+      ENCRYPTED_PAYLOAD_LIMITS.maxNotificationAppIdBytes,
+      'application id',
+    );
+  }
+  if (state.sourceApplicationName !== undefined) {
+    validateStoredText(
+      state.sourceApplicationName,
+      ENCRYPTED_PAYLOAD_LIMITS.maxNotificationAppNameBytes,
+      'application name',
+    );
+  }
   if (state.actions !== undefined) validateStoredActions(state.actions);
   if (state.appIcon !== undefined) validateStoredMedia(state.appIcon);
   if (state.avatar !== undefined) validateStoredMedia(state.avatar);
@@ -398,6 +432,13 @@ function copyMedia(media: MirroredNotificationMedia): MirroredNotificationMedia 
     contentSha256: media.contentSha256.slice(),
     encodedBytes: media.encodedBytes.slice(),
   };
+}
+
+function validateStoredText(value: string, maxBytes: number, field: string): void {
+  const byteLength = typeof value === 'string' ? new TextEncoder().encode(value).byteLength : 0;
+  if (byteLength < 1 || byteLength > maxBytes) {
+    throw new Error(`Stored notification ${field} is corrupt`);
+  }
 }
 
 function validateStoredActions(actions: MirroredNotificationAction[]): void {

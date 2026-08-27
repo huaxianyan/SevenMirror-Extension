@@ -4,11 +4,16 @@ import {
 } from './lifecycle-spike';
 import type { NotificationReceipt } from '../crypto/notification-receiver';
 import type {
-  MirroredNotificationAction,
   MirroredNotificationMedia,
   MirroredNotificationState,
 } from '../crypto/indexeddb-notification-state-store';
 import { NotificationMediaMimeType } from '../protocol/generated/notification/v1/payload_pb';
+import {
+  DEFAULT_SHORTCUT_PREFERENCES,
+  notificationButtons,
+  type NotificationButton,
+  type NotificationShortcutPreferences,
+} from './notification-shortcuts';
 
 export interface NotificationsApi {
   getAll(callback: (notifications: Object) => void): void;
@@ -25,19 +30,56 @@ export interface NotificationsApi {
   clear(notificationId: string, callback?: (wasCleared: boolean) => void): void;
 }
 
+export interface NotificationPresenterOptions {
+  notifications?: NotificationsApi;
+  markProgrammatic?: typeof markProgrammaticClose;
+  consumeProgrammatic?: typeof consumeProgrammaticCloseMarker;
+  notificationIconUrl?: () => string;
+  mediaIconUrl?: typeof notificationMediaDataUrl;
+  dismissButtonTitle?: () => string;
+  moreButtonTitle?: () => string;
+  loadShortcutPreferences?: () => Promise<NotificationShortcutPreferences>;
+  saveButtonBindings?: (
+    chromeNotificationId: string,
+    revision: string,
+    buttons: NotificationButton[],
+  ) => Promise<void>;
+  removeButtonBindings?: (chromeNotificationId: string) => Promise<void>;
+}
+
 export class NotificationPresenter {
-  constructor(
-    private readonly notifications: NotificationsApi = chrome.notifications,
-    private readonly markProgrammatic = markProgrammaticClose,
-    private readonly consumeProgrammatic = consumeProgrammaticCloseMarker,
-    private readonly notificationIconUrl = () => chrome.runtime.getURL('icons/notification.png'),
-    private readonly mediaIconUrl = notificationMediaDataUrl,
-    private readonly dismissButtonTitle = () => chrome.i18n.getMessage('notificationDismissButton') || 'Clear',
-  ) {}
+  private readonly notifications: NotificationsApi;
+  private readonly markProgrammatic: typeof markProgrammaticClose;
+  private readonly consumeProgrammatic: typeof consumeProgrammaticCloseMarker;
+  private readonly notificationIconUrl: () => string;
+  private readonly mediaIconUrl: typeof notificationMediaDataUrl;
+  private readonly dismissButtonTitle: () => string;
+  private readonly moreButtonTitle: () => string;
+  private readonly loadShortcutPreferences: () => Promise<NotificationShortcutPreferences>;
+  private readonly saveButtonBindings: NotificationPresenterOptions['saveButtonBindings'];
+  private readonly removeButtonBindings: NotificationPresenterOptions['removeButtonBindings'];
+
+  constructor(options: NotificationPresenterOptions = {}) {
+    this.notifications = options.notifications ?? chrome.notifications;
+    this.markProgrammatic = options.markProgrammatic ?? markProgrammaticClose;
+    this.consumeProgrammatic = options.consumeProgrammatic ?? consumeProgrammaticCloseMarker;
+    this.notificationIconUrl = options.notificationIconUrl ??
+      (() => chrome.runtime.getURL('icons/notification.png'));
+    this.mediaIconUrl = options.mediaIconUrl ?? notificationMediaDataUrl;
+    this.dismissButtonTitle = options.dismissButtonTitle ??
+      (() => chrome.i18n.getMessage('notificationDismissButton') || 'Clear');
+    this.moreButtonTitle = options.moreButtonTitle ??
+      (() => chrome.i18n.getMessage('notificationMoreButton') || 'More');
+    this.loadShortcutPreferences = options.loadShortcutPreferences ??
+      (async () => DEFAULT_SHORTCUT_PREFERENCES);
+    this.saveButtonBindings = options.saveButtonBindings;
+    this.removeButtonBindings = options.removeButtonBindings;
+  }
 
   async present(receipt: NotificationReceipt): Promise<void> {
     if (receipt.kind === 'snapshot') {
       for (const state of receipt.reconciliation.closedStates) {
+        await this.removeButtonBindings?.(state.chromeNotificationId);
         await this.closeProgrammatically(state.chromeNotificationId, 'snapshot-reconciliation');
       }
       return;
@@ -46,16 +88,28 @@ export class NotificationPresenter {
     const { disposition, state } = receipt.reconciliation;
     if (disposition === 'stale') return;
     if (state.phase === 'removed') {
+      await this.removeButtonBindings?.(state.chromeNotificationId);
       await this.closeProgrammatically(state.chromeNotificationId, 'source-notification-removed');
       return;
     }
+    await this.presentState(state);
+  }
 
+  async presentState(state: MirroredNotificationState): Promise<void> {
+    if (state.phase !== 'visible') return;
     const sourceRef = toHex(state.sourceDeviceId).slice(0, 12);
-    const buttons = notificationButtons(state, this.dismissButtonTitle());
+    const preferences = await this.loadShortcutPreferences()
+      .catch(() => DEFAULT_SHORTCUT_PREFERENCES);
+    const buttons = notificationButtons(state, preferences, {
+      dismiss: this.dismissButtonTitle(),
+      more: this.moreButtonTitle(),
+    });
+    await this.saveButtonBindings?.(state.chromeNotificationId, state.revision, buttons);
+    const applicationName = state.sourceApplicationName ?? 'Android';
     const options: chrome.notifications.NotificationOptions<true> = {
       type: 'basic',
       iconUrl: await this.resolveIconUrl(state.avatar, state.appIcon),
-      title: `${state.title ?? 'Notification'} · Android ${sourceRef}`,
+      title: `${state.title ?? 'Notification'} · ${applicationName} · Android ${sourceRef}`,
       message: state.body ?? '',
       priority: 0,
       requireInteraction: true,
@@ -124,27 +178,6 @@ export class NotificationPresenter {
   private clear(notificationId: string): Promise<boolean> {
     return new Promise((resolve) => this.notifications.clear(notificationId, resolve));
   }
-}
-
-export type NotificationButton =
-  | { kind: 'action'; title: string; action: MirroredNotificationAction }
-  | { kind: 'dismiss'; title: string };
-
-/** Default Alpha allocation: one source action plus the always-visible SevenMirror clear command. */
-export function notificationButtons(
-  state: MirroredNotificationState,
-  dismissTitle = 'Clear',
-): NotificationButton[] {
-  const sourceAction = (state.actions ?? [])
-    .find((action) => !action.requiresTextInput);
-  return [
-    ...(sourceAction === undefined ? [] : [{
-      kind: 'action' as const,
-      title: sourceAction.title,
-      action: { ...sourceAction, actionId: sourceAction.actionId.slice() },
-    }]),
-    { kind: 'dismiss' as const, title: dismissTitle },
-  ];
 }
 
 interface DecodedImage {

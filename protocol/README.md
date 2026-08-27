@@ -12,7 +12,7 @@ Run `npm run protocol:verify` after updating the schema. Do not edit the vendore
 
 `routing-header-v1.md` and `test-vectors/routing-header-v1.json` are vendored copies of the provisional fixed-width HPKE AAD codec specification and canonical vector.
 
-`encrypted-payload-v1.md`, `vendor/notification/v1/payload.proto`, and their vector define canonical encrypted action payloads, bounded synthetic notification media, `notification_removed` payloads, and active snapshot manifests.
+`encrypted-payload-v1.md`, `vendor/notification/v1/payload.proto`, and their vector define canonical encrypted action payloads, bounded source-application metadata and synthetic notification media, `notification_removed` payloads, and active snapshot manifests.
 
 `e2ee-identity-key-transition-v1.md` and its vector define schema-v2 old-key transition, new-key-addressed peer ACK, new-key commit, durable dual-key state, and the lost-identity recovery boundary. `E2EE_IDENTITY_TRANSITION_SPEC_SHA256` and `E2EE_IDENTITY_TRANSITION_VECTOR_SHA256` pin these server-owned assets.
 

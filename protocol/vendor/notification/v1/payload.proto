@@ -91,6 +91,10 @@ message NotificationUpsert {
   optional NotificationMedia avatar = 6;
   bool contains_content_image = 7;
   repeated NotificationActionDescriptor actions = 8;
+  // Stable Android package name used only inside E2EE content for local rules.
+  string source_application_id = 9;
+  // User-visible Android application label preserved as source application data.
+  string source_application_name = 10;
 }
 
 // NotificationActionDescriptor exposes only the bounded action metadata needed

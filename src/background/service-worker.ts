@@ -19,7 +19,9 @@ import {
   IndexedDbNotificationStateStore,
   type MirroredNotificationState,
 } from '../crypto/indexeddb-notification-state-store';
-import { NotificationPresenter, notificationButtons } from './notification-presenter';
+import { NotificationPresenter } from './notification-presenter';
+import { NotificationButtonBindingStore } from './notification-button-binding-store';
+import { NotificationShortcutPreferencesStore } from './notification-shortcuts';
 import {
   IndexedDbTransportCredentialStore,
   type StoredTransportCredential,
@@ -59,7 +61,14 @@ const pendingActionStore = new IndexedDbPendingActionStore();
 const outboundSequenceStore = new IndexedDbOutboundSequenceStore();
 const inboundReplayLedger = new IndexedDbReplayLedger('action-results');
 const notificationStateStore = new IndexedDbNotificationStateStore();
-const notificationPresenter = new NotificationPresenter();
+const notificationButtonBindingStore = new NotificationButtonBindingStore();
+const notificationShortcutPreferencesStore = new NotificationShortcutPreferencesStore();
+const notificationPresenter = new NotificationPresenter({
+  loadShortcutPreferences: () => notificationShortcutPreferencesStore.load(),
+  saveButtonBindings: (notificationId, revision, buttons) =>
+    notificationButtonBindingStore.save(notificationId, revision, buttons),
+  removeButtonBindings: (notificationId) => notificationButtonBindingStore.remove(notificationId),
+});
 const actionResultDispatcher = new ActionResultDispatcher(
   credentialStore,
   identityStore,
@@ -203,6 +212,17 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
       void connectTransportWithWatchdog().then(
         () => sendResponse({ started: true }),
         () => sendResponse({ started: false }),
+      );
+      return true;
+
+    case 'get-notification-shortcut-settings':
+      void getNotificationShortcutSettings().then(sendResponse, () => sendResponse(undefined));
+      return true;
+
+    case 'save-notification-shortcut-settings':
+      void saveNotificationShortcutSettings(message.preferences).then(
+        () => sendResponse({ saved: true }),
+        () => sendResponse({ saved: false }),
       );
       return true;
 
@@ -611,18 +631,53 @@ async function getNotificationInteractionOperation(message: Record<string, unkno
   }
 }
 
+async function getNotificationShortcutSettings(): Promise<{
+  preferences: Awaited<ReturnType<NotificationShortcutPreferencesStore['load']>>;
+  applications: Array<{ id: string; name: string }>;
+}> {
+  const [preferences, states] = await Promise.all([
+    notificationShortcutPreferencesStore.load(),
+    notificationStateStore.listVisible(),
+  ]);
+  const applications = new Map<string, string>();
+  for (const state of states) {
+    if (state.sourceApplicationId !== undefined && state.sourceApplicationName !== undefined) {
+      applications.set(state.sourceApplicationId, state.sourceApplicationName);
+    }
+  }
+  return {
+    preferences,
+    applications: [...applications].map(([id, name]) => ({ id, name }))
+      .sort((left, right) => left.name.localeCompare(right.name)),
+  };
+}
+
+async function saveNotificationShortcutSettings(value: unknown): Promise<void> {
+  await notificationShortcutPreferencesStore.save(value);
+  const states = await notificationStateStore.listVisible();
+  await Promise.allSettled(states.map((state) => notificationPresenter.presentState(state)));
+}
+
 async function invokeNotificationButton(notificationId: string, buttonIndex: number): Promise<void> {
-  if (!Number.isInteger(buttonIndex) || buttonIndex < 0) return;
+  if (!Number.isInteger(buttonIndex) || buttonIndex < 0 || buttonIndex > 1) return;
   const state = await notificationStateStore.findVisibleByChromeNotificationId(notificationId);
   if (state === undefined) return;
-  const button = notificationButtons(state)[buttonIndex];
+  const bindings = await notificationButtonBindingStore.load(notificationId, state.revision);
+  const button = bindings?.[buttonIndex];
   if (button === undefined) return;
   if (button.kind === 'dismiss') {
     await markProgrammaticClose(notificationId, 'explicit-clear');
     await queueStateOperation(state, { dismissNotification: true });
-  } else {
-    await queueStateOperation(state, { actionId: button.action.actionId });
+    return;
   }
+  if (button.kind === 'more' || button.requiresTextInput) {
+    await openNotificationInteraction(notificationId);
+    return;
+  }
+  const action = state.actions?.find((candidate) =>
+    toHex(candidate.actionId) === toHex(button.actionId));
+  if (action === undefined || action.requiresTextInput) return;
+  await queueStateOperation(state, { actionId: action.actionId });
 }
 
 async function requestNotificationDismiss(notificationId: string): Promise<void> {
