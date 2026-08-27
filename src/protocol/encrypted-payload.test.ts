@@ -7,6 +7,7 @@ import {
   createActionResultAckPayload,
   createNotificationRemovedPayload,
   createNotificationSnapshotManifestPayload,
+  createNotificationSnapshotRequestPayload,
   createNotificationUpsertPayload,
   decodeEncryptedPayloadV1,
   encodeEncryptedPayloadV1,
@@ -157,12 +158,23 @@ describe('Encrypted Payload v1', () => {
     expect(encodedRemoved).toEqual(fromHex(vector.notificationRemovedEncodedHex));
     expect(decodeEncryptedPayloadV1(encodedRemoved).body.case).toBe('notificationRemoved');
 
+    const recoveryRequestId = fromHex(vector.notificationSnapshotRecoveryRequestIdHex);
+    const request = createNotificationSnapshotRequestPayload({
+      recoveryRequestId,
+      resetHighWaterDeliveryId: BigInt(vector.notificationSnapshotResetHighWaterDeliveryId),
+    });
+    expect(encodeEncryptedPayloadV1(request))
+      .toEqual(fromHex(vector.notificationSnapshotRequestEncodedHex));
+    expect(decodeEncryptedPayloadV1(encodeEncryptedPayloadV1(request)).body.case)
+      .toBe('notificationSnapshotRequest');
+
     const manifest = createNotificationSnapshotManifestPayload({
       highWaterRevision: BigInt(vector.notificationSnapshotHighWaterRevision),
       activeNotifications: vector.notificationSnapshotEntries.map((entry) => ({
         notificationId: entry.notificationId,
         notificationRevision: BigInt(entry.notificationRevision),
       })),
+      recoveryRequestId,
     });
     const encodedManifest = encodeEncryptedPayloadV1(manifest);
     expect(encodedManifest).toEqual(fromHex(vector.notificationSnapshotManifestEncodedHex));
@@ -178,6 +190,18 @@ describe('Encrypted Payload v1', () => {
         { notificationId: 'synthetic.notification/99', notificationRevision: 9n },
       ],
     });
+
+    const zeroRecoveryId = validManifest();
+    if (zeroRecoveryId.body.case === 'notificationSnapshotManifest') {
+      zeroRecoveryId.body.value.recoveryRequestId = new Uint8Array(16);
+    }
+    expect(() => encodeEncryptedPayloadV1(zeroRecoveryId)).toThrow(/non-zero/i);
+
+    const invalidRequest = createNotificationSnapshotRequestPayload({
+      recoveryRequestId: new Uint8Array(16),
+      resetHighWaterDeliveryId: 9n,
+    });
+    expect(() => encodeEncryptedPayloadV1(invalidRequest)).toThrow(/non-zero/i);
 
     const aboveHighWater = validManifest();
     if (aboveHighWater.body.case === 'notificationSnapshotManifest') {

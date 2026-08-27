@@ -1,6 +1,6 @@
 {
   "name": "notification-mirroring-chrome-extension",
-  "version": "0.1.14-dev",
+  "version": "0.1.15-dev",
   "private": true,
   "license": "GPL-3.0-only",
   "type": "module",

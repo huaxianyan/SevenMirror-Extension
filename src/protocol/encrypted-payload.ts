@@ -9,6 +9,7 @@ import {
   NotificationMediaMimeType,
   NotificationRemovedSchema,
   NotificationSnapshotManifestSchema,
+  NotificationSnapshotRequestSchema,
   NotificationUpsertSchema,
   type ActionInvoke,
   type ActionResult,
@@ -18,12 +19,13 @@ import {
   type NotificationMedia,
   type NotificationRemoved,
   type NotificationSnapshotManifest,
+  type NotificationSnapshotRequest,
   type NotificationUpsert,
 } from './generated/notification/v1/payload_pb';
 
 export const ENCRYPTED_PAYLOAD_LIMITS = {
   schemaVersion: 2,
-  notificationSchemaVersion: 6,
+  notificationSchemaVersion: 7,
   maxPlaintextSize: 524_272,
   maxNotificationIdBytes: 512,
   maxNotificationAppIdBytes: 255,
@@ -78,6 +80,7 @@ export function createNotificationSnapshotManifestPayload(
   manifest: {
     highWaterRevision: bigint;
     activeNotifications: Array<{ notificationId: string; notificationRevision: bigint }>;
+    recoveryRequestId?: Uint8Array;
   },
 ): EncryptedPayload {
   return create(EncryptedPayloadSchema, {
@@ -85,6 +88,18 @@ export function createNotificationSnapshotManifestPayload(
     body: {
       case: 'notificationSnapshotManifest',
       value: create(NotificationSnapshotManifestSchema, manifest),
+    },
+  });
+}
+
+export function createNotificationSnapshotRequestPayload(
+  request: Omit<NotificationSnapshotRequest, '$typeName'>,
+): EncryptedPayload {
+  return create(EncryptedPayloadSchema, {
+    schemaVersion: ENCRYPTED_PAYLOAD_LIMITS.notificationSchemaVersion,
+    body: {
+      case: 'notificationSnapshotRequest',
+      value: create(NotificationSnapshotRequestSchema, request),
     },
   });
 }
@@ -189,6 +204,10 @@ export function validateEncryptedPayloadV1(
     case 'notificationSnapshotManifest':
       requireSchema(payload, ENCRYPTED_PAYLOAD_LIMITS.notificationSchemaVersion);
       validateNotificationSnapshotManifest(payload.body.value);
+      return;
+    case 'notificationSnapshotRequest':
+      requireSchema(payload, ENCRYPTED_PAYLOAD_LIMITS.notificationSchemaVersion);
+      validateNotificationSnapshotRequest(payload.body.value);
       return;
     default:
       throw new Error('Exactly one supported encrypted payload body is required');
@@ -326,6 +345,9 @@ function validateNotificationSnapshotManifest(manifest: NotificationSnapshotMani
   if (manifest.$unknown?.length) {
     throw new Error('Notification snapshot manifest contains unknown fields');
   }
+  if (manifest.recoveryRequestId !== undefined) {
+    validateNonZeroIdentifier(manifest.recoveryRequestId, 'Snapshot recovery request id');
+  }
   if (manifest.highWaterRevision < 0n ||
       manifest.highWaterRevision > ENCRYPTED_PAYLOAD_LIMITS.maxNotificationRevision) {
     throw new Error('Notification snapshot high-water revision is out of range');
@@ -347,6 +369,24 @@ function validateNotificationSnapshotManifest(manifest: NotificationSnapshotMani
       throw new Error('Notification snapshot entries are not unique and strictly sorted');
     }
     previousId = id;
+  }
+}
+
+function validateNotificationSnapshotRequest(request: NotificationSnapshotRequest): void {
+  if (request.$unknown?.length) {
+    throw new Error('Notification snapshot request contains unknown fields');
+  }
+  validateNonZeroIdentifier(request.recoveryRequestId, 'Snapshot recovery request id');
+  if (request.resetHighWaterDeliveryId < 0n ||
+      request.resetHighWaterDeliveryId > ENCRYPTED_PAYLOAD_LIMITS.maxNotificationRevision) {
+    throw new Error('Snapshot reset high-water delivery id is out of range');
+  }
+}
+
+function validateNonZeroIdentifier(value: Uint8Array, name: string): void {
+  if (value.byteLength !== ENCRYPTED_PAYLOAD_LIMITS.identifierSize ||
+      value.every((byte) => byte === 0)) {
+    throw new Error(`${name} must be a non-zero 16-byte value`);
   }
 }
 

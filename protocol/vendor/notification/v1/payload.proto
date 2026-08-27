@@ -22,6 +22,7 @@ message EncryptedPayload {
     NotificationUpsert notification_upsert = 16;
     NotificationRemoved notification_removed = 17;
     NotificationSnapshotManifest notification_snapshot_manifest = 18;
+    NotificationSnapshotRequest notification_snapshot_request = 19;
   }
 }
 
@@ -135,6 +136,15 @@ message NotificationRemoved {
 message NotificationSnapshotManifest {
   uint64 high_water_revision = 1;
   repeated NotificationSnapshotEntry active_notifications = 2;
+  // Present only when responding to an authenticated recovery request.
+  optional bytes recovery_request_id = 3;
+}
+
+// NotificationSnapshotRequest asks one authenticated Android source for a fresh,
+// complete snapshot after recipient relay history became unavailable.
+message NotificationSnapshotRequest {
+  bytes recovery_request_id = 1;
+  uint64 reset_high_water_delivery_id = 2;
 }
 
 message NotificationSnapshotEntry {

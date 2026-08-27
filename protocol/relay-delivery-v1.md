@@ -67,6 +67,8 @@ SNR1 (4 bytes) || high_water_delivery_id (8 bytes)
 
 The recipient cursor is older than retained history because unacknowledged ciphertext expired or was evicted by a documented capacity bound. The recipient MUST reconcile authoritative source snapshots before resuming from the supplied high-water ID. It MUST NOT interpret the reset as evidence that missing business events were applied.
 
+After every authority-certified source captured by the durable recovery session has returned a matching E2EE snapshot manifest, the recipient atomically persists the supplied high-water as its committed cursor and clears that recovery session. It then sends the existing `SNC1` resume frame with the accepted high-water; no separate reset-acceptance message exists. The relay treats that `SNC1` as the explicit cumulative acknowledgement and resumes delivery strictly after it.
+
 ## Ordering, persistence, and bounds
 
 - Delivery IDs are allocated independently for each `(workspace_id, recipient_device_id)`.

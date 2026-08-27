@@ -16,9 +16,9 @@ Receivers MUST reject a plaintext unless all of the following hold:
 3. no unknown fields occur at any message level;
 4. `schema_version` matches the body: version `2` for `action_invoke`,
    `action_result`, `action_result_ack`, and the E2EE identity lifecycle bodies
-   defined by `e2ee-identity-key-transition-v1.md`; or version `6` for
-   `notification_upsert`, `notification_removed`, and
-   `notification_snapshot_manifest`;
+   defined by `e2ee-identity-key-transition-v1.md`; or version `7` for
+   `notification_upsert`, `notification_removed`,
+   `notification_snapshot_manifest`, and `notification_snapshot_request`;
 5. exactly one supported `body` is present;
 6. every message-specific semantic constraint below or in the identity
    lifecycle specification holds; and
@@ -141,6 +141,8 @@ no title, body, action, media, or executable capability.
 
 Constraints:
 
+- `recovery_request_id`: absent for an ordinary reconnect snapshot; when present,
+  exactly 16 non-zero bytes copied from the authenticated recovery request;
 - `high_water_revision`: `0..2^63-1`; zero is valid only for an empty manifest
   from a source that has not allocated a notification revision;
 - `active_notifications`: `0..200` entries;
@@ -152,9 +154,11 @@ Constraints:
 The sender captures one internally consistent active set and high-water mark.
 It sends a current `notification_upsert` for each active entry, in the same
 entry order, before sending the manifest in a separate fresh encrypted
-envelope. If transport fails before the manifest is accepted, the sender retries
-the complete sequence after reconnect; the relay does not retain or interpret
-the snapshot.
+envelope. Ordinary reconnect snapshots use explicit durable submission. A
+recovery response bound to `recovery_request_id` is sent online-only so it can
+cross an unresolved recipient history gap. If that response is interrupted,
+Chrome retries the request with the same persisted recovery ID and Android sends
+a fresh complete sequence. The relay never interprets snapshot plaintext.
 
 The receiver durably reconciles one source device atomically:
 
@@ -175,6 +179,33 @@ Snapshot-derived closes are programmatic reconciliation and MUST NOT emit a
 user-dismiss operation. Snapshot business reconciliation is independent from
 envelope replay tuples. This mechanism is not a relay cursor, per-delivery ACK,
 history queue, or proof that a system notification was visibly presented.
+
+## `notification_snapshot_request`
+
+After `SNR1`, Chrome creates one fresh non-zero 16-byte `recovery_request_id`
+for the persisted recovery session and sends a separately Auth HPKE-encrypted
+request to every active authority-certified Android notification source. The
+request contains:
+
+- `recovery_request_id`: exactly 16 non-zero bytes;
+- `reset_high_water_delivery_id`: `0..2^63-1`, equal to the persisted `SNR1`
+  high-water for this recovery session.
+
+The request contains no notification identifiers or content. It is safe for
+durable relay submission, but its response is a complete snapshot sequence sent
+online-only so it can be processed while the recipient cursor remains behind the
+unavailable history. Android MUST authenticate the requesting Chrome certificate
+and its notification-receiver role before responding. It sends current upserts
+first and a manifest carrying the exact `recovery_request_id` last.
+
+Chrome accepts a source as recovered only after durable reconciliation of that
+source's matching manifest. A stale, unknown, or differently bound request ID
+cannot complete recovery. After every active source captured in the persisted
+recovery session has completed, Chrome atomically advances its relay cursor to
+the `SNR1` high-water, clears the recovery session, and sends `SNC1` with that
+cursor. A crash before sending `SNC1` is recovered by the normal connection
+resume. Missing or revoked sources require a refreshed authority roster; they
+must not be silently ignored from an existing recovery session.
 
 ## `action_invoke`
 
