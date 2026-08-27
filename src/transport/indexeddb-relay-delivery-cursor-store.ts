@@ -6,11 +6,21 @@ interface StoredRelayDeliveryCursor {
   tuple: string;
   committedDeliveryId: string;
   snapshotRequiredHighWater?: string;
+  recoveryRequestId?: string;
+  expectedSourceIds?: string[];
+  completedSourceIds?: string[];
+}
+
+export interface RelayDeliveryRecoverySession {
+  requestId: Uint8Array;
+  expectedSourceIds: Uint8Array[];
+  completedSourceIds: Uint8Array[];
 }
 
 export interface RelayDeliveryCursorState {
   committedDeliveryId: bigint;
   snapshotRequiredHighWater?: bigint;
+  recovery?: RelayDeliveryRecoverySession;
 }
 
 export class IndexedDbRelayDeliveryCursorStore {
@@ -63,12 +73,84 @@ export class IndexedDbRelayDeliveryCursorStore {
         throw new Error('Relay snapshot high-water is behind the committed cursor');
       }
       const existing = current.snapshotRequiredHighWater;
+      if (existing !== undefined && highWater === existing) return current;
       return {
         committedDeliveryId: current.committedDeliveryId,
         snapshotRequiredHighWater: existing === undefined || highWater > existing
           ? highWater
           : existing,
       };
+    });
+  }
+
+  async beginSnapshotRecovery(
+    workspaceId: Uint8Array,
+    deviceId: Uint8Array,
+    highWater: bigint,
+    requestId: Uint8Array,
+    expectedSourceIds: Uint8Array[],
+  ): Promise<RelayDeliveryCursorState> {
+    validateCursor(highWater, true);
+    validateId(requestId, 'recoveryRequestId');
+    const expected = canonicalSourceIds(expectedSourceIds);
+    return this.mutate(workspaceId, deviceId, (current) => {
+      if (current.snapshotRequiredHighWater !== highWater) {
+        throw new Error('Snapshot recovery high-water does not match relay reset');
+      }
+      if (current.recovery !== undefined) {
+        if (!equal(current.recovery.requestId, requestId) ||
+            !sameIds(current.recovery.expectedSourceIds, expected)) {
+          throw new Error('Snapshot recovery session is already bound');
+        }
+        return current;
+      }
+      return {
+        ...current,
+        recovery: {
+          requestId: requestId.slice(),
+          expectedSourceIds: expected,
+          completedSourceIds: [],
+        },
+      };
+    });
+  }
+
+  async recordSnapshotRecoverySource(
+    workspaceId: Uint8Array,
+    deviceId: Uint8Array,
+    requestId: Uint8Array,
+    sourceDeviceId: Uint8Array,
+  ): Promise<RelayDeliveryCursorState> {
+    validateId(requestId, 'recoveryRequestId');
+    validateId(sourceDeviceId, 'sourceDeviceId');
+    return this.mutate(workspaceId, deviceId, (current) => {
+      const recovery = current.recovery;
+      if (recovery === undefined || !equal(recovery.requestId, requestId)) {
+        throw new Error('Snapshot recovery request id is not active');
+      }
+      const source = toHex(sourceDeviceId);
+      if (!recovery.expectedSourceIds.some((candidate) => toHex(candidate) === source)) {
+        throw new Error('Snapshot source is not part of the recovery session');
+      }
+      const completed = canonicalSourceIds([...recovery.completedSourceIds, sourceDeviceId]);
+      return { ...current, recovery: { ...recovery, completedSourceIds: completed } };
+    });
+  }
+
+  async acceptSnapshotRecovery(
+    workspaceId: Uint8Array,
+    deviceId: Uint8Array,
+    requestId: Uint8Array,
+  ): Promise<RelayDeliveryCursorState> {
+    validateId(requestId, 'recoveryRequestId');
+    return this.mutate(workspaceId, deviceId, (current) => {
+      const recovery = current.recovery;
+      const highWater = current.snapshotRequiredHighWater;
+      if (recovery === undefined || highWater === undefined || !equal(recovery.requestId, requestId) ||
+          !sameIds(recovery.expectedSourceIds, recovery.completedSourceIds)) {
+        throw new Error('Snapshot recovery is incomplete');
+      }
+      return { committedDeliveryId: highWater };
     });
   }
 
@@ -99,13 +181,7 @@ export class IndexedDbRelayDeliveryCursorStore {
           : decodeStored(stored, tuple);
         const next = update(current);
         validateState(next);
-        await requestResult(store.put({
-          tuple,
-          committedDeliveryId: next.committedDeliveryId.toString(),
-          ...(next.snapshotRequiredHighWater === undefined
-            ? {}
-            : { snapshotRequiredHighWater: next.snapshotRequiredHighWater.toString() }),
-        } satisfies StoredRelayDeliveryCursor));
+        await requestResult(store.put(encodeStored(next, tuple)));
         await completed;
         return { ...next };
       } catch (error) {
@@ -143,11 +219,23 @@ function cursorTuple(workspaceId: Uint8Array, deviceId: Uint8Array): string {
 
 function decodeStored(stored: StoredRelayDeliveryCursor, expectedTuple: string): RelayDeliveryCursorState {
   if (stored.tuple !== expectedTuple) throw new Error('Stored relay cursor tuple is corrupt');
+  const recoveryFields = [stored.recoveryRequestId, stored.expectedSourceIds, stored.completedSourceIds];
+  if (recoveryFields.some((value) => value !== undefined) &&
+      recoveryFields.some((value) => value === undefined)) {
+    throw new Error('Stored relay snapshot recovery is corrupt');
+  }
   const state: RelayDeliveryCursorState = {
     committedDeliveryId: parseCursor(stored.committedDeliveryId, true),
     ...(stored.snapshotRequiredHighWater === undefined
       ? {}
       : { snapshotRequiredHighWater: parseCursor(stored.snapshotRequiredHighWater, true) }),
+    ...(stored.recoveryRequestId === undefined ? {} : {
+      recovery: {
+        requestId: fromHex(stored.recoveryRequestId, 'recovery request id'),
+        expectedSourceIds: stored.expectedSourceIds!.map((value) => fromHex(value, 'source device id')),
+        completedSourceIds: stored.completedSourceIds!.map((value) => fromHex(value, 'source device id')),
+      },
+    }),
   };
   validateState(state);
   return state;
@@ -161,6 +249,57 @@ function validateState(state: RelayDeliveryCursorState): void {
       throw new Error('Stored relay snapshot high-water is corrupt');
     }
   }
+  if (state.recovery !== undefined) {
+    if (state.snapshotRequiredHighWater === undefined) {
+      throw new Error('Stored relay snapshot recovery is corrupt');
+    }
+    validateId(state.recovery.requestId, 'recoveryRequestId');
+    const expected = canonicalSourceIds(state.recovery.expectedSourceIds);
+    const completed = canonicalSourceIds(state.recovery.completedSourceIds);
+    if (!sameIds(expected, state.recovery.expectedSourceIds) ||
+        !sameIds(completed, state.recovery.completedSourceIds) ||
+        completed.some((value) => !expected.some((candidate) => equal(value, candidate)))) {
+      throw new Error('Stored relay snapshot recovery is corrupt');
+    }
+  }
+}
+
+function encodeStored(state: RelayDeliveryCursorState, tuple: string): StoredRelayDeliveryCursor {
+  return {
+    tuple,
+    committedDeliveryId: state.committedDeliveryId.toString(),
+    ...(state.snapshotRequiredHighWater === undefined
+      ? {}
+      : { snapshotRequiredHighWater: state.snapshotRequiredHighWater.toString() }),
+    ...(state.recovery === undefined ? {} : {
+      recoveryRequestId: toHex(state.recovery.requestId),
+      expectedSourceIds: state.recovery.expectedSourceIds.map(toHex),
+      completedSourceIds: state.recovery.completedSourceIds.map(toHex),
+    }),
+  };
+}
+
+function canonicalSourceIds(values: Uint8Array[]): Uint8Array[] {
+  const unique = new Map<string, Uint8Array>();
+  for (const value of values) {
+    validateId(value, 'sourceDeviceId');
+    unique.set(toHex(value), value.slice());
+  }
+  return [...unique.entries()].sort(([left], [right]) => left.localeCompare(right))
+    .map(([, value]) => value);
+}
+
+function sameIds(left: Uint8Array[], right: Uint8Array[]): boolean {
+  return left.length === right.length && left.every((value, index) => equal(value, right[index]!));
+}
+
+function equal(left: Uint8Array, right: Uint8Array): boolean {
+  return left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
+}
+
+function fromHex(value: string, name: string): Uint8Array {
+  if (!/^[0-9a-f]{32}$/.test(value)) throw new Error(`Stored ${name} is corrupt`);
+  return Uint8Array.from({ length: 16 }, (_, index) => Number.parseInt(value.slice(index * 2, index * 2 + 2), 16));
 }
 
 function parseCursor(value: string, allowZero: boolean): bigint {

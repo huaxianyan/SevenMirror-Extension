@@ -15,6 +15,7 @@ import type {
 import { FAIL_CLOSED_WEBSOCKET_CODE } from './websocket-close-policy';
 import {
   decodeRelayServerMessage,
+  encodeDurableSubmission,
   encodeRelayAcknowledgement,
   encodeRelayResume,
 } from './relay-delivery';
@@ -52,6 +53,11 @@ export interface DeliveryCursorStore {
     deviceId: Uint8Array,
     highWater: bigint,
   ): Promise<unknown>;
+  acceptSnapshotRecovery?(
+    workspaceId: Uint8Array,
+    deviceId: Uint8Array,
+    requestId: Uint8Array,
+  ): Promise<{ committedDeliveryId: bigint }>;
 }
 
 export interface TransportReconnectOptions {
@@ -185,6 +191,30 @@ export class TransportRuntime {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  /** Requests durable relay delivery for a business message that is safe to delay. */
+  sendDurableEnvelope(frame: Uint8Array): boolean {
+    return this.sendEnvelope(encodeDurableSubmission(frame));
+  }
+
+  /** Atomically accepts a fully reconciled history reset and resumes after its high-water. */
+  async acceptSnapshotRecovery(requestId: Uint8Array): Promise<boolean> {
+    const cursorStore = this.deliveryCursorStore;
+    if (cursorStore?.acceptSnapshotRecovery === undefined || !this.isAuthenticated()) return false;
+    const credential = await this.credentialStore.load();
+    if (credential === undefined) return false;
+    try {
+      const accepted = await cursorStore.acceptSnapshotRecovery(
+        credential.workspaceId,
+        credential.deviceId,
+        requestId,
+      );
+      if (!this.isAuthenticated()) return false;
+      return this.sendEnvelope(encodeRelayResume(accepted.committedDeliveryId));
+    } finally {
+      credential.authToken.fill(0);
     }
   }
 

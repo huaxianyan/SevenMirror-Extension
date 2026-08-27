@@ -14,7 +14,12 @@ import type {
 
 export type NotificationReceipt =
   | { kind: 'item'; reconciliation: NotificationStateReconciliation }
-  | { kind: 'snapshot'; reconciliation: NotificationSnapshotReconciliation };
+  | {
+    kind: 'snapshot';
+    sourceDeviceId: Uint8Array;
+    recoveryRequestId?: Uint8Array;
+    reconciliation: NotificationSnapshotReconciliation;
+  };
 
 export class NotificationRejectedError extends Error {
   constructor(readonly code: 'UNEXPECTED_PAYLOAD') {
@@ -51,11 +56,18 @@ export async function receiveNotificationOnce(
       ) };
       break;
     case 'notificationSnapshotManifest':
-      receipt = { kind: 'snapshot', reconciliation: await notifications.reconcileSnapshot(
-        opened.header.senderDeviceId,
-        payload.body.value,
-        opened.plaintext,
-      ) };
+      receipt = {
+        kind: 'snapshot',
+        sourceDeviceId: opened.header.senderDeviceId.slice(),
+        ...(payload.body.value.recoveryRequestId === undefined
+          ? {}
+          : { recoveryRequestId: payload.body.value.recoveryRequestId.slice() }),
+        reconciliation: await notifications.reconcileSnapshot(
+          opened.header.senderDeviceId,
+          payload.body.value,
+          opened.plaintext,
+        ),
+      };
       break;
     default:
       throw new NotificationRejectedError('UNEXPECTED_PAYLOAD');

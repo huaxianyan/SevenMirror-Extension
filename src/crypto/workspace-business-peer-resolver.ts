@@ -26,6 +26,12 @@ export interface BusinessSenderResolver {
   ): Promise<BusinessSenderAuthorization | undefined>;
 }
 
+export interface NotificationSourceRecipient {
+  deviceId: Uint8Array;
+  keyId: Uint8Array;
+  publicKey: Uint8Array;
+}
+
 export interface BusinessActionRecipientResolver {
   resolveActionRecipient(
     workspaceId: Uint8Array,
@@ -90,6 +96,34 @@ export class WorkspaceBusinessPeerResolver implements BusinessSenderResolver, Bu
       deviceId: recipient.deviceId.slice(),
       keyId: recipient.keyId.slice(),
     }));
+  }
+
+  async listNotificationSources(
+    workspaceId: Uint8Array,
+    localDeviceId: Uint8Array,
+    nowUnixMs: number,
+  ): Promise<NotificationSourceRecipient[]> {
+    if (!Number.isSafeInteger(nowUnixMs) || nowUnixMs < 1) throw new Error('Current time is invalid');
+    const state = await this.memberships.load(workspaceId, localDeviceId);
+    if (state === undefined || !state.localDeviceActive ||
+        state.signedCertificate === undefined || state.signedRoster === undefined) return [];
+    const roster = decodeSignedWorkspaceRoster(state.signedRoster).roster!;
+    const local = roster.activeCertificates.find((candidate) =>
+      equal(candidate.certificate!.deviceId, localDeviceId) &&
+      equal(encodeSignedDeviceCertificate(candidate), state.signedCertificate!))?.certificate;
+    if (local === undefined || local.deviceType !== DeviceType.CHROME ||
+        !local.roles.includes(DeviceRole.RECEIVE_NOTIFICATIONS) || !current(local, nowUnixMs)) return [];
+    return roster.activeCertificates.flatMap((candidate) => {
+      const source = candidate.certificate!;
+      const authorization = authorizeBusinessSender(local, source, nowUnixMs);
+      return authorization?.mayReceiveNotifications === true
+        ? [{
+            deviceId: source.deviceId.slice(),
+            keyId: source.identityKeyId.slice(),
+            publicKey: source.identityPublicKey.slice(),
+          }]
+        : [];
+    });
   }
 
   async resolveNotificationSourceName(

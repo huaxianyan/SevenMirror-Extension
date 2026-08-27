@@ -27,6 +27,33 @@ describe('IndexedDbRelayDeliveryCursorStore', () => {
       .rejects.toThrow('requires snapshot reconciliation');
   });
 
+  it('accepts a history reset only after every persisted source snapshot completes', async () => {
+    const databaseName = `relay-recovery-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const workspaceId = new Uint8Array(16).fill(1);
+    const deviceId = new Uint8Array(16).fill(2);
+    const requestId = new Uint8Array(16).fill(3);
+    const firstSource = new Uint8Array(16).fill(4);
+    const secondSource = new Uint8Array(16).fill(5);
+    const store = new IndexedDbRelayDeliveryCursorStore(databaseName);
+
+    await store.commitDelivery(workspaceId, deviceId, 1n);
+    await store.requireSnapshot(workspaceId, deviceId, 9n);
+    await store.beginSnapshotRecovery(
+      workspaceId, deviceId, 9n, requestId, [secondSource, firstSource],
+    );
+    await store.recordSnapshotRecoverySource(workspaceId, deviceId, requestId, firstSource);
+    await expect(store.acceptSnapshotRecovery(workspaceId, deviceId, requestId))
+      .rejects.toThrow('incomplete');
+
+    const reconstructed = new IndexedDbRelayDeliveryCursorStore(databaseName);
+    await reconstructed.recordSnapshotRecoverySource(
+      workspaceId, deviceId, requestId, secondSource,
+    );
+    expect(await reconstructed.acceptSnapshotRecovery(workspaceId, deviceId, requestId))
+      .toEqual({ committedDeliveryId: 9n });
+    expect(await store.load(workspaceId, deviceId)).toEqual({ committedDeliveryId: 9n });
+  });
+
   it('isolates cursor state by exact workspace and local device tuple', async () => {
     const store = new IndexedDbRelayDeliveryCursorStore(
       `relay-cursor-isolation-${Date.now()}-${Math.random().toString(16).slice(2)}`,

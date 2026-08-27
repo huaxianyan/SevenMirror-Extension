@@ -98,20 +98,20 @@ export async function createActionInvokeEnvelopeFromPayload(
   context: ActionEnvelopeContext,
   canonicalPayload: Uint8Array,
 ): Promise<Uint8Array> {
-  return createEnvelopeFromCanonicalPayload(context, canonicalPayload, 'actionInvoke');
+  return createAuthenticatedEnvelopeFromCanonicalPayload(context, canonicalPayload, 'actionInvoke');
 }
 
 export async function createActionResultAckEnvelopeFromPayload(
   context: ActionEnvelopeContext,
   canonicalPayload: Uint8Array,
 ): Promise<Uint8Array> {
-  return createEnvelopeFromCanonicalPayload(context, canonicalPayload, 'actionResultAck');
+  return createAuthenticatedEnvelopeFromCanonicalPayload(context, canonicalPayload, 'actionResultAck');
 }
 
-async function createEnvelopeFromCanonicalPayload(
+export async function createAuthenticatedEnvelopeFromCanonicalPayload(
   context: ActionEnvelopeContext,
   canonicalPayload: Uint8Array,
-  expectedBody: 'actionInvoke' | 'actionResultAck',
+  expectedBody: 'actionInvoke' | 'actionResultAck' | 'notificationSnapshotRequest',
 ): Promise<Uint8Array> {
   const decoded = createPayloadFromCanonical(canonicalPayload, expectedBody);
   const senderPublicKey = await serializeIdentityPublicKey(context.senderIdentity);
@@ -141,7 +141,7 @@ async function createEnvelopeFromCanonicalPayload(
 
 function createPayloadFromCanonical(
   value: Uint8Array,
-  expectedBody: 'actionInvoke' | 'actionResultAck',
+  expectedBody: 'actionInvoke' | 'actionResultAck' | 'notificationSnapshotRequest',
 ): Uint8Array {
   const decoded = decodeEncryptedPayloadV1(value);
   if (decoded.body.case !== expectedBody) {

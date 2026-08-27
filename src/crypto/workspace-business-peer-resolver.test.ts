@@ -105,6 +105,15 @@ it('resolves only the exact active sender identity from the durable roster', asy
     new Uint8Array(32).fill(6),
     now,
   )).resolves.toBeUndefined();
+  await expect(resolver.listNotificationSources(
+    state.workspaceId,
+    state.deviceId,
+    now,
+  )).resolves.toEqual([{
+    deviceId: sender.certificate!.deviceId,
+    keyId: sender.certificate!.identityKeyId,
+    publicKey: sender.certificate!.identityPublicKey,
+  }]);
   await expect(resolver.resolveNotificationSourceName(
     state.workspaceId,
     state.deviceId,

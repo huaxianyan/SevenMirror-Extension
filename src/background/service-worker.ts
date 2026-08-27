@@ -34,6 +34,7 @@ import {
 } from '../transport/membership-runtime-recovery';
 import { TransportRuntime } from '../transport/transport-runtime';
 import { IndexedDbRelayDeliveryCursorStore } from '../transport/indexeddb-relay-delivery-cursor-store';
+import { SnapshotRecoveryCoordinator } from '../transport/snapshot-recovery';
 import { WorkspaceBusinessPeerResolver } from '../crypto/workspace-business-peer-resolver';
 import { isAppOwnedSyntheticInvoke } from './synthetic-ack-hold';
 import { ActionResultStatus } from '../protocol/generated/notification/v1/payload_pb';
@@ -49,6 +50,7 @@ const TRANSPORT_RECONNECT_ALARM = 'transport-reconnect-v1';
 const MEMBERSHIP_REFRESH_ALARM = 'membership-refresh-v1';
 const ACTION_INVOKE_RETRY_ALARM = 'action-invoke-retry-v1';
 const ACTION_RESULT_ACK_RETRY_ALARM = 'action-result-ack-retry-v1';
+const SNAPSHOT_RECOVERY_RETRY_ALARM = 'snapshot-recovery-retry-v1';
 const SYNTHETIC_ACK_HOLD_MAX_MS = 10 * 60_000;
 const TRANSPORT_AUTH_WATCHDOG_MS = 60_000;
 let syntheticAckHold: { idempotencyKeyHex: string; expiresAtUnixMs: number } | undefined;
@@ -81,6 +83,15 @@ const actionResultDispatcher = new ActionResultDispatcher(
   notificationStateStore,
 );
 let transportRuntime: TransportRuntime;
+const snapshotRecoveryCoordinator = new SnapshotRecoveryCoordinator(
+  credentialStore,
+  identityStore,
+  businessPeerResolver,
+  outboundSequenceStore,
+  relayDeliveryCursorStore,
+  (frame) => transportRuntime.sendDurableEnvelope(frame),
+  (requestId) => transportRuntime.acceptSnapshotRecovery(requestId),
+);
 const actionInvokeOutbox = new ActionInvokeOutbox(
   credentialStore,
   identityStore,
@@ -108,6 +119,16 @@ transportRuntime = new TransportRuntime(
     );
     if (result.kind === 'notification') {
       await notificationPresenter.present(result.receipt);
+      if (result.receipt.kind === 'snapshot' &&
+          result.receipt.recoveryRequestId !== undefined) {
+        await snapshotRecoveryCoordinator.observeManifest(
+          result.receipt.sourceDeviceId,
+          result.receipt.recoveryRequestId,
+        );
+        if (!await snapshotRecoveryCoordinator.isActive()) {
+          await chrome.alarms.clear(SNAPSHOT_RECOVERY_RETRY_ALARM);
+        }
+      }
     }
     await drainActionResultAcks();
   },
@@ -131,10 +152,28 @@ transportRuntime = new TransportRuntime(
       });
       void drainActionInvokes();
       void drainActionResultAcks();
+      void snapshotRecoveryCoordinator.retry().then(async () => {
+        if (await snapshotRecoveryCoordinator.isActive()) {
+          await chrome.alarms.create(SNAPSHOT_RECOVERY_RETRY_ALARM, {
+            delayInMinutes: 1,
+            periodInMinutes: 1,
+          });
+        }
+      });
     },
     beforeConnect: recoverMembershipBeforeConnect,
     beforeAuthenticate: refreshMembershipBeforeAuthenticate,
     deliveryCursorStore: relayDeliveryCursorStore,
+    onHistoryGap: (highWater) => {
+      void snapshotRecoveryCoordinator.begin(highWater).then(async () => {
+        if (await snapshotRecoveryCoordinator.isActive()) {
+          await chrome.alarms.create(SNAPSHOT_RECOVERY_RETRY_ALARM, {
+            delayInMinutes: 1,
+            periodInMinutes: 1,
+          });
+        }
+      }).catch(() => transportRuntime.failClosed());
+    },
   },
 );
 
@@ -157,6 +196,8 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     void drainActionInvokes();
   } else if (alarm.name === ACTION_RESULT_ACK_RETRY_ALARM) {
     void drainActionResultAcks();
+  } else if (alarm.name === SNAPSHOT_RECOVERY_RETRY_ALARM) {
+    void snapshotRecoveryCoordinator.retry().catch(() => transportRuntime.failClosed());
   }
 });
 

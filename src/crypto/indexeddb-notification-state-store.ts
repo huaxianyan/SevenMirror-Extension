@@ -1,6 +1,7 @@
 import { sha256 as sha256Sync } from '@noble/hashes/sha256';
 import {
   createNotificationRemovedPayload,
+  createNotificationSnapshotManifestPayload,
   encodeEncryptedPayloadV1,
   ENCRYPTED_PAYLOAD_LIMITS,
 } from '../protocol/encrypted-payload';
@@ -109,12 +110,21 @@ export class IndexedDbNotificationStateStore {
   async reconcileSnapshot(
     sourceDeviceId: Uint8Array,
     manifest: NotificationSnapshotManifest,
-    canonicalPayload: Uint8Array,
+    _canonicalPayload: Uint8Array,
   ): Promise<NotificationSnapshotReconciliation> {
     validateDeviceId(sourceDeviceId);
     const sourceKey = toHex(sourceDeviceId);
     const highWaterRevision = manifest.highWaterRevision;
-    const manifestSha256 = await sha256(canonicalPayload);
+    // Recovery correlation is transport-session state, not snapshot business semantics.
+    const canonicalManifest = encodeEncryptedPayloadV1(createNotificationSnapshotManifestPayload({
+      highWaterRevision,
+      activeNotifications: manifest.activeNotifications.map((entry) => ({
+        notificationId: entry.notificationId,
+        notificationRevision: entry.notificationRevision,
+      })),
+    }));
+    const manifestSha256 = await sha256(canonicalManifest);
+    canonicalManifest.fill(0);
 
     // WebCrypto hashing cannot safely keep an IndexedDB transaction active. Compute exact
     // snapshot-derived removal bindings first, then re-read and compare every source record
