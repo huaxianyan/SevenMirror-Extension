@@ -27,7 +27,7 @@ export class SnapshotRecoveryCoordinator {
     private readonly peers: WorkspaceBusinessPeerResolver,
     private readonly sequences: IndexedDbOutboundSequenceStore,
     private readonly cursors: IndexedDbRelayDeliveryCursorStore,
-    private readonly sendDurable: (frame: Uint8Array) => boolean,
+    private readonly sendOnline: (frame: Uint8Array) => boolean,
     private readonly acceptReset: (requestId: Uint8Array) => Promise<boolean>,
     private readonly now: () => number = Date.now,
     private readonly random: (target: Uint8Array) => void = (target) => crypto.getRandomValues(target),
@@ -155,7 +155,7 @@ export class SnapshotRecoveryCoordinator {
           'notificationSnapshotRequest',
         );
         try {
-          this.sendDurable(frame);
+          this.sendOnline(frame);
         } finally {
           frame.fill(0);
           source.publicKey.fill(0);

@@ -15,7 +15,6 @@ import type {
 import { FAIL_CLOSED_WEBSOCKET_CODE } from './websocket-close-policy';
 import {
   decodeRelayServerMessage,
-  encodeDurableSubmission,
   encodeRelayAcknowledgement,
   encodeRelayResume,
 } from './relay-delivery';
@@ -192,11 +191,6 @@ export class TransportRuntime {
     } catch {
       return false;
     }
-  }
-
-  /** Requests durable relay delivery for a business message that is safe to delay. */
-  sendDurableEnvelope(frame: Uint8Array): boolean {
-    return this.sendEnvelope(encodeDurableSubmission(frame));
   }
 
   /** Atomically accepts a fully reconciled history reset and resumes after its high-water. */

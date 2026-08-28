@@ -191,12 +191,19 @@ request contains:
 - `reset_high_water_delivery_id`: `0..2^63-1`, equal to the persisted `SNR1`
   high-water for this recovery session.
 
-The request contains no notification identifiers or content. It is safe for
-durable relay submission, but its response is a complete snapshot sequence sent
-online-only so it can be processed while the recipient cursor remains behind the
-unavailable history. Android MUST authenticate the requesting Chrome certificate
-and its notification-receiver role before responding. It sends current upserts
-first and a manifest carrying the exact `recovery_request_id` last.
+The request contains no notification identifiers or content. Chrome MUST send it
+online-only as a bare `SNE1` frame. The durable recovery session and periodic
+fresh-envelope retry provide process and connectivity recovery; retaining the
+request in recipient relay history would let an expired request create a second,
+unrecoverable history gap on Android. The response is likewise a complete
+snapshot sequence sent online-only so it can be processed while the Chrome
+recipient cursor remains behind unavailable history. Android MUST authenticate
+the requesting Chrome certificate and its notification-receiver role before
+responding. It sends current upserts first and a manifest carrying the exact
+`recovery_request_id` last.
+
+An offline Android source receives a later fresh retry after reconnect; the
+relay does not retain or redeliver an earlier request.
 
 Chrome accepts a source as recovered only after durable reconciliation of that
 source's matching manifest. A stale, unknown, or differently bound request ID

@@ -13,6 +13,8 @@ The relay never decrypts an Encrypted Envelope. A sender explicitly chooses one 
 
 This distinction is required because delayed delivery is unsafe for some encrypted operations, especially one-shot text replies. The relay cannot infer that policy from ciphertext. Clients MUST send one-shot replies as bare online-only `SNE1` frames.
 
+Notification snapshot recovery requests and their response sequences are also online-only. Chrome persists the recovery session and retries each unavailable Android source with fresh envelopes. Storing those requests in Android recipient history would allow expired requests to create a history gap that has no authoritative reverse snapshot.
+
 The durable wrapper reveals only that delayed transport is permitted. It does not reveal the business payload type, notification metadata, action, reply text, or result.
 
 ## Fixed binary messages

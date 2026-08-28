@@ -15,7 +15,7 @@ const sourceDeviceId = new Uint8Array(16).fill(3);
 const sourceKeyId = new Uint8Array(32).fill(6);
 
 describe('SnapshotRecoveryCoordinator', () => {
-  it('persists expected sources, sends a fresh encrypted request, and accepts after the matching manifest', async () => {
+  it('persists expected sources, sends an online-only encrypted request, and accepts after the matching manifest', async () => {
     const chromeIdentity = await generateNonExtractableIdentity();
     const androidIdentity = await generateNonExtractableIdentity();
     const androidPublicKey = await serializeIdentityPublicKey(androidIdentity);

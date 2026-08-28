@@ -89,7 +89,7 @@ const snapshotRecoveryCoordinator = new SnapshotRecoveryCoordinator(
   businessPeerResolver,
   outboundSequenceStore,
   relayDeliveryCursorStore,
-  (frame) => transportRuntime.sendDurableEnvelope(frame),
+  (frame) => transportRuntime.sendEnvelope(frame),
   (requestId) => transportRuntime.acceptSnapshotRecovery(requestId),
 );
 const actionInvokeOutbox = new ActionInvokeOutbox(
