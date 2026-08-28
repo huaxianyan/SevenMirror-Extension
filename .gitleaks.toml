@@ -1,0 +1,8 @@
+title = "SevenMirror Chrome Extension secret scanning"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Published deterministic protocol vectors contain test-only keys and credentials."
+paths = ['''^protocol/test-vectors/''']

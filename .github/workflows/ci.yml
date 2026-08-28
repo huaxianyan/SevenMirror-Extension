@@ -13,6 +13,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan Git history for secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: 8.30.1
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -24,6 +31,8 @@ jobs:
           grep -Fq '97c3430f71c85c6b2cffc6fe8184a1f447b2f0fb' LICENSE-TRANSITION.md
           node -e "if (require('./package.json').license !== 'GPL-3.0-only') process.exit(1)"
       - run: npm ci
+      - name: Audit locked npm dependencies
+        run: npm audit --audit-level=high --registry=https://registry.npmjs.org
       - name: Verify vendored protocol
         run: node protocol/verify-schema.mjs
       - run: npm run typecheck
