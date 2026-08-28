@@ -12,6 +12,7 @@ import { SnapshotRecoveryCoordinator } from './snapshot-recovery';
 const workspaceId = new Uint8Array(16).fill(1);
 const localDeviceId = new Uint8Array(16).fill(2);
 const sourceDeviceId = new Uint8Array(16).fill(3);
+const sourceKeyId = new Uint8Array(32).fill(6);
 
 describe('SnapshotRecoveryCoordinator', () => {
   it('persists expected sources, sends a fresh encrypted request, and accepts after the matching manifest', async () => {
@@ -35,7 +36,7 @@ describe('SnapshotRecoveryCoordinator', () => {
     const peers = {
       listNotificationSources: async () => [{
         deviceId: sourceDeviceId,
-        keyId: new Uint8Array(32).fill(6),
+        keyId: sourceKeyId,
         publicKey: androidPublicKey.slice(),
       }],
     } as unknown as WorkspaceBusinessPeerResolver;
@@ -56,12 +57,17 @@ describe('SnapshotRecoveryCoordinator', () => {
 
     await coordinator.begin(9n);
     const state = await cursor.load(workspaceId, localDeviceId);
-    expect(state.recovery?.expectedSourceIds).toEqual([sourceDeviceId]);
+    expect(state.recovery?.expectedSources).toEqual([{
+      deviceId: sourceDeviceId,
+      keyId: sourceKeyId,
+    }]);
     expect(sent).toHaveLength(1);
     expect(decodeEncryptedEnvelopeV1(sent[0]).routingHeader.recipientDeviceId)
       .toEqual(sourceDeviceId);
 
-    await coordinator.observeManifest(sourceDeviceId, state.recovery!.requestId);
+    await coordinator.observeManifest(
+      sourceDeviceId, sourceKeyId, state.recovery!.requestId,
+    );
     expect(await cursor.load(workspaceId, localDeviceId)).toEqual({ committedDeliveryId: 9n });
     expect(await coordinator.isActive()).toBe(false);
   });
@@ -73,10 +79,11 @@ describe('SnapshotRecoveryCoordinator', () => {
     const requestId = new Uint8Array(16).fill(8);
     await cursor.requireSnapshot(workspaceId, localDeviceId, 9n);
     await cursor.beginSnapshotRecovery(
-      workspaceId, localDeviceId, 9n, requestId, [sourceDeviceId],
+      workspaceId, localDeviceId, 9n, requestId,
+      [{ deviceId: sourceDeviceId, keyId: sourceKeyId }],
     );
     await cursor.recordSnapshotRecoverySource(
-      workspaceId, localDeviceId, requestId, sourceDeviceId,
+      workspaceId, localDeviceId, requestId, sourceDeviceId, sourceKeyId,
     );
     const credential = {
       serverOrigin: 'http://127.0.0.1:8080', workspaceId, deviceId: localDeviceId,
@@ -97,5 +104,33 @@ describe('SnapshotRecoveryCoordinator', () => {
 
     await reconstructed.retry();
     expect(await cursor.load(workspaceId, localDeviceId)).toEqual({ committedDeliveryId: 9n });
+  });
+
+  it('fails closed when the authority roster no longer contains the pinned source identity', async () => {
+    const cursor = new IndexedDbRelayDeliveryCursorStore(
+      `snapshot-recovery-revoked-${Date.now()}-${Math.random()}`,
+    );
+    const requestId = new Uint8Array(16).fill(8);
+    await cursor.requireSnapshot(workspaceId, localDeviceId, 9n);
+    await cursor.beginSnapshotRecovery(
+      workspaceId, localDeviceId, 9n, requestId,
+      [{ deviceId: sourceDeviceId, keyId: sourceKeyId }],
+    );
+    const credential = {
+      serverOrigin: 'http://127.0.0.1:8080', workspaceId, deviceId: localDeviceId,
+      authToken: new Uint8Array(32).fill(4), identityKeyId: new Uint8Array(32).fill(5),
+    };
+    const coordinator = new SnapshotRecoveryCoordinator(
+      { load: async () => ({ ...credential, authToken: credential.authToken.slice() }) },
+      { loadExisting: async () => generateNonExtractableIdentity() },
+      { listNotificationSources: async () => [] } as unknown as WorkspaceBusinessPeerResolver,
+      { allocate: async () => 1n } as never,
+      cursor,
+      () => false,
+      async () => false,
+    );
+
+    await expect(coordinator.retry()).rejects.toThrow('no longer authorized');
+    expect((await cursor.load(workspaceId, localDeviceId)).recovery).toBeDefined();
   });
 });

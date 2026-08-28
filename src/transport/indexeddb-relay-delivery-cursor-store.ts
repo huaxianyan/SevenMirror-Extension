@@ -7,13 +7,18 @@ interface StoredRelayDeliveryCursor {
   committedDeliveryId: string;
   snapshotRequiredHighWater?: string;
   recoveryRequestId?: string;
-  expectedSourceIds?: string[];
+  expectedSources?: Array<{ deviceId: string; keyId: string }>;
   completedSourceIds?: string[];
+}
+
+export interface RelayDeliveryRecoverySource {
+  deviceId: Uint8Array;
+  keyId: Uint8Array;
 }
 
 export interface RelayDeliveryRecoverySession {
   requestId: Uint8Array;
-  expectedSourceIds: Uint8Array[];
+  expectedSources: RelayDeliveryRecoverySource[];
   completedSourceIds: Uint8Array[];
 }
 
@@ -88,18 +93,18 @@ export class IndexedDbRelayDeliveryCursorStore {
     deviceId: Uint8Array,
     highWater: bigint,
     requestId: Uint8Array,
-    expectedSourceIds: Uint8Array[],
+    expectedSources: RelayDeliveryRecoverySource[],
   ): Promise<RelayDeliveryCursorState> {
     validateCursor(highWater, true);
     validateId(requestId, 'recoveryRequestId');
-    const expected = canonicalSourceIds(expectedSourceIds);
+    const expected = canonicalSources(expectedSources);
     return this.mutate(workspaceId, deviceId, (current) => {
       if (current.snapshotRequiredHighWater !== highWater) {
         throw new Error('Snapshot recovery high-water does not match relay reset');
       }
       if (current.recovery !== undefined) {
         if (!equal(current.recovery.requestId, requestId) ||
-            !sameIds(current.recovery.expectedSourceIds, expected)) {
+            !sameSources(current.recovery.expectedSources, expected)) {
           throw new Error('Snapshot recovery session is already bound');
         }
         return current;
@@ -108,7 +113,7 @@ export class IndexedDbRelayDeliveryCursorStore {
         ...current,
         recovery: {
           requestId: requestId.slice(),
-          expectedSourceIds: expected,
+          expectedSources: expected,
           completedSourceIds: [],
         },
       };
@@ -120,17 +125,20 @@ export class IndexedDbRelayDeliveryCursorStore {
     deviceId: Uint8Array,
     requestId: Uint8Array,
     sourceDeviceId: Uint8Array,
+    sourceKeyId: Uint8Array,
   ): Promise<RelayDeliveryCursorState> {
     validateId(requestId, 'recoveryRequestId');
     validateId(sourceDeviceId, 'sourceDeviceId');
+    validateKeyId(sourceKeyId);
     return this.mutate(workspaceId, deviceId, (current) => {
       const recovery = current.recovery;
       if (recovery === undefined || !equal(recovery.requestId, requestId)) {
         throw new Error('Snapshot recovery request id is not active');
       }
       const source = toHex(sourceDeviceId);
-      if (!recovery.expectedSourceIds.some((candidate) => toHex(candidate) === source)) {
-        throw new Error('Snapshot source is not part of the recovery session');
+      if (!recovery.expectedSources.some((candidate) =>
+        toHex(candidate.deviceId) === source && equal(candidate.keyId, sourceKeyId))) {
+        throw new Error('Snapshot source identity is not part of the recovery session');
       }
       const completed = canonicalSourceIds([...recovery.completedSourceIds, sourceDeviceId]);
       return { ...current, recovery: { ...recovery, completedSourceIds: completed } };
@@ -147,7 +155,7 @@ export class IndexedDbRelayDeliveryCursorStore {
       const recovery = current.recovery;
       const highWater = current.snapshotRequiredHighWater;
       if (recovery === undefined || highWater === undefined || !equal(recovery.requestId, requestId) ||
-          !sameIds(recovery.expectedSourceIds, recovery.completedSourceIds)) {
+          !sameIds(recovery.expectedSources.map((source) => source.deviceId), recovery.completedSourceIds)) {
         throw new Error('Snapshot recovery is incomplete');
       }
       return { committedDeliveryId: highWater };
@@ -219,7 +227,7 @@ function cursorTuple(workspaceId: Uint8Array, deviceId: Uint8Array): string {
 
 function decodeStored(stored: StoredRelayDeliveryCursor, expectedTuple: string): RelayDeliveryCursorState {
   if (stored.tuple !== expectedTuple) throw new Error('Stored relay cursor tuple is corrupt');
-  const recoveryFields = [stored.recoveryRequestId, stored.expectedSourceIds, stored.completedSourceIds];
+  const recoveryFields = [stored.recoveryRequestId, stored.expectedSources, stored.completedSourceIds];
   if (recoveryFields.some((value) => value !== undefined) &&
       recoveryFields.some((value) => value === undefined)) {
     throw new Error('Stored relay snapshot recovery is corrupt');
@@ -231,9 +239,13 @@ function decodeStored(stored: StoredRelayDeliveryCursor, expectedTuple: string):
       : { snapshotRequiredHighWater: parseCursor(stored.snapshotRequiredHighWater, true) }),
     ...(stored.recoveryRequestId === undefined ? {} : {
       recovery: {
-        requestId: fromHex(stored.recoveryRequestId, 'recovery request id'),
-        expectedSourceIds: stored.expectedSourceIds!.map((value) => fromHex(value, 'source device id')),
-        completedSourceIds: stored.completedSourceIds!.map((value) => fromHex(value, 'source device id')),
+        requestId: fromHex(stored.recoveryRequestId, 'recovery request id', 16),
+        expectedSources: stored.expectedSources!.map((value) => ({
+          deviceId: fromHex(value.deviceId, 'source device id', 16),
+          keyId: fromHex(value.keyId, 'source key id', 32),
+        })),
+        completedSourceIds: stored.completedSourceIds!.map((value) =>
+          fromHex(value, 'source device id', 16)),
       },
     }),
   };
@@ -254,11 +266,11 @@ function validateState(state: RelayDeliveryCursorState): void {
       throw new Error('Stored relay snapshot recovery is corrupt');
     }
     validateId(state.recovery.requestId, 'recoveryRequestId');
-    const expected = canonicalSourceIds(state.recovery.expectedSourceIds);
+    const expected = canonicalSources(state.recovery.expectedSources);
     const completed = canonicalSourceIds(state.recovery.completedSourceIds);
-    if (!sameIds(expected, state.recovery.expectedSourceIds) ||
+    if (!sameSources(expected, state.recovery.expectedSources) ||
         !sameIds(completed, state.recovery.completedSourceIds) ||
-        completed.some((value) => !expected.some((candidate) => equal(value, candidate)))) {
+        completed.some((value) => !expected.some((candidate) => equal(value, candidate.deviceId)))) {
       throw new Error('Stored relay snapshot recovery is corrupt');
     }
   }
@@ -273,10 +285,29 @@ function encodeStored(state: RelayDeliveryCursorState, tuple: string): StoredRel
       : { snapshotRequiredHighWater: state.snapshotRequiredHighWater.toString() }),
     ...(state.recovery === undefined ? {} : {
       recoveryRequestId: toHex(state.recovery.requestId),
-      expectedSourceIds: state.recovery.expectedSourceIds.map(toHex),
+      expectedSources: state.recovery.expectedSources.map((source) => ({
+        deviceId: toHex(source.deviceId),
+        keyId: toHex(source.keyId),
+      })),
       completedSourceIds: state.recovery.completedSourceIds.map(toHex),
     }),
   };
+}
+
+function canonicalSources(values: RelayDeliveryRecoverySource[]): RelayDeliveryRecoverySource[] {
+  const unique = new Map<string, RelayDeliveryRecoverySource>();
+  for (const value of values) {
+    validateId(value.deviceId, 'sourceDeviceId');
+    validateKeyId(value.keyId);
+    const deviceId = toHex(value.deviceId);
+    const existing = unique.get(deviceId);
+    if (existing !== undefined && !equal(existing.keyId, value.keyId)) {
+      throw new Error('Snapshot recovery source has conflicting identities');
+    }
+    unique.set(deviceId, { deviceId: value.deviceId.slice(), keyId: value.keyId.slice() });
+  }
+  return [...unique.entries()].sort(([left], [right]) => left.localeCompare(right))
+    .map(([, value]) => value);
 }
 
 function canonicalSourceIds(values: Uint8Array[]): Uint8Array[] {
@@ -289,6 +320,14 @@ function canonicalSourceIds(values: Uint8Array[]): Uint8Array[] {
     .map(([, value]) => value);
 }
 
+function sameSources(
+  left: RelayDeliveryRecoverySource[],
+  right: RelayDeliveryRecoverySource[],
+): boolean {
+  return left.length === right.length && left.every((value, index) =>
+    equal(value.deviceId, right[index]!.deviceId) && equal(value.keyId, right[index]!.keyId));
+}
+
 function sameIds(left: Uint8Array[], right: Uint8Array[]): boolean {
   return left.length === right.length && left.every((value, index) => equal(value, right[index]!));
 }
@@ -297,9 +336,12 @@ function equal(left: Uint8Array, right: Uint8Array): boolean {
   return left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
 }
 
-function fromHex(value: string, name: string): Uint8Array {
-  if (!/^[0-9a-f]{32}$/.test(value)) throw new Error(`Stored ${name} is corrupt`);
-  return Uint8Array.from({ length: 16 }, (_, index) => Number.parseInt(value.slice(index * 2, index * 2 + 2), 16));
+function fromHex(value: string, name: string, byteLength: number): Uint8Array {
+  if (!(new RegExp(`^[0-9a-f]{${byteLength * 2}}$`)).test(value)) {
+    throw new Error(`Stored ${name} is corrupt`);
+  }
+  return Uint8Array.from({ length: byteLength }, (_, index) =>
+    Number.parseInt(value.slice(index * 2, index * 2 + 2), 16));
 }
 
 function parseCursor(value: string, allowZero: boolean): bigint {
@@ -314,6 +356,13 @@ function parseCursor(value: string, allowZero: boolean): bigint {
 function validateCursor(cursor: bigint, allowZero: boolean): void {
   if (cursor < 0n || cursor > MAX_CURSOR || (!allowZero && cursor === 0n)) {
     throw new Error('Relay delivery cursor is out of range');
+  }
+}
+
+function validateKeyId(value: Uint8Array): void {
+  if (!(value instanceof Uint8Array) || value.byteLength !== 32 ||
+      value.every((byte) => byte === 0)) {
+    throw new Error('sourceKeyId must be a non-zero 32-byte identifier');
   }
 }
 

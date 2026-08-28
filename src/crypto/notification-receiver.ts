@@ -17,6 +17,7 @@ export type NotificationReceipt =
   | {
     kind: 'snapshot';
     sourceDeviceId: Uint8Array;
+    sourceKeyId: Uint8Array;
     recoveryRequestId?: Uint8Array;
     reconciliation: NotificationSnapshotReconciliation;
   };
@@ -59,6 +60,7 @@ export async function receiveNotificationOnce(
       receipt = {
         kind: 'snapshot',
         sourceDeviceId: opened.header.senderDeviceId.slice(),
+        sourceKeyId: opened.header.senderKeyId.slice(),
         ...(payload.body.value.recoveryRequestId === undefined
           ? {}
           : { recoveryRequestId: payload.body.value.recoveryRequestId.slice() }),

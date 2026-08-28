@@ -50,11 +50,11 @@ export class SnapshotRecoveryCoordinator {
           credential.deviceId,
           highWater,
           this.nextIdentifier(),
-          sources.map((source) => source.deviceId),
+          sources.map((source) => ({ deviceId: source.deviceId, keyId: source.keyId })),
         );
       }
       if (state.recovery!.completedSourceIds.length ===
-          state.recovery!.expectedSourceIds.length) {
+          state.recovery!.expectedSources.length) {
         await this.acceptReset(state.recovery!.requestId);
         return;
       }
@@ -66,7 +66,7 @@ export class SnapshotRecoveryCoordinator {
     await this.withCredential(async (credential) => {
       const state = await this.cursors.load(credential.workspaceId, credential.deviceId);
       if (state.recovery !== undefined) {
-        if (state.recovery.completedSourceIds.length === state.recovery.expectedSourceIds.length) {
+        if (state.recovery.completedSourceIds.length === state.recovery.expectedSources.length) {
           await this.acceptReset(state.recovery.requestId);
         } else {
           await this.sendIncompleteRequests(credential, state.recovery);
@@ -83,7 +83,11 @@ export class SnapshotRecoveryCoordinator {
     return active;
   }
 
-  async observeManifest(sourceDeviceId: Uint8Array, requestId: Uint8Array): Promise<void> {
+  async observeManifest(
+    sourceDeviceId: Uint8Array,
+    sourceKeyId: Uint8Array,
+    requestId: Uint8Array,
+  ): Promise<void> {
     await this.withCredential(async (credential) => {
       const state = await this.cursors.load(credential.workspaceId, credential.deviceId);
       if (state.recovery === undefined || !equal(state.recovery.requestId, requestId)) return;
@@ -92,9 +96,10 @@ export class SnapshotRecoveryCoordinator {
         credential.deviceId,
         requestId,
         sourceDeviceId,
+        sourceKeyId,
       );
       if (updated.recovery !== undefined &&
-          updated.recovery.completedSourceIds.length === updated.recovery.expectedSourceIds.length) {
+          updated.recovery.completedSourceIds.length === updated.recovery.expectedSources.length) {
         await this.acceptReset(requestId);
       }
     });
@@ -104,7 +109,7 @@ export class SnapshotRecoveryCoordinator {
     credential: StoredTransportCredential,
     recovery: {
       requestId: Uint8Array;
-      expectedSourceIds: Uint8Array[];
+      expectedSources: Array<{ deviceId: Uint8Array; keyId: Uint8Array }>;
       completedSourceIds: Uint8Array[];
     },
   ): Promise<void> {
@@ -116,7 +121,7 @@ export class SnapshotRecoveryCoordinator {
       this.now(),
     );
     const completed = new Set(recovery.completedSourceIds.map(toHex));
-    const expected = new Set(recovery.expectedSourceIds.map(toHex));
+    const currentSources = new Map(sources.map((source) => [toHex(source.deviceId), source]));
     const canonicalPayload = encodeEncryptedPayloadV1(createNotificationSnapshotRequestPayload({
       recoveryRequestId: recovery.requestId,
       resetHighWaterDeliveryId: (await this.cursors.load(
@@ -125,9 +130,13 @@ export class SnapshotRecoveryCoordinator {
       )).snapshotRequiredHighWater!,
     }));
     try {
-      for (const source of sources) {
-        const sourceId = toHex(source.deviceId);
-        if (!expected.has(sourceId) || completed.has(sourceId)) continue;
+      for (const expected of recovery.expectedSources) {
+        const sourceId = toHex(expected.deviceId);
+        if (completed.has(sourceId)) continue;
+        const source = currentSources.get(sourceId);
+        if (source === undefined || !equal(source.keyId, expected.keyId)) {
+          throw new Error('Snapshot recovery source identity is no longer authorized');
+        }
         const createdAtUnixMs = this.now();
         const context: ActionEnvelopeContext = {
           workspaceId: credential.workspaceId,

@@ -34,20 +34,30 @@ describe('IndexedDbRelayDeliveryCursorStore', () => {
     const requestId = new Uint8Array(16).fill(3);
     const firstSource = new Uint8Array(16).fill(4);
     const secondSource = new Uint8Array(16).fill(5);
+    const firstSourceKey = new Uint8Array(32).fill(6);
+    const secondSourceKey = new Uint8Array(32).fill(7);
     const store = new IndexedDbRelayDeliveryCursorStore(databaseName);
 
     await store.commitDelivery(workspaceId, deviceId, 1n);
     await store.requireSnapshot(workspaceId, deviceId, 9n);
     await store.beginSnapshotRecovery(
-      workspaceId, deviceId, 9n, requestId, [secondSource, firstSource],
+      workspaceId, deviceId, 9n, requestId, [
+        { deviceId: secondSource, keyId: secondSourceKey },
+        { deviceId: firstSource, keyId: firstSourceKey },
+      ],
     );
-    await store.recordSnapshotRecoverySource(workspaceId, deviceId, requestId, firstSource);
+    await expect(store.recordSnapshotRecoverySource(
+      workspaceId, deviceId, requestId, firstSource, secondSourceKey,
+    )).rejects.toThrow('identity');
+    await store.recordSnapshotRecoverySource(
+      workspaceId, deviceId, requestId, firstSource, firstSourceKey,
+    );
     await expect(store.acceptSnapshotRecovery(workspaceId, deviceId, requestId))
       .rejects.toThrow('incomplete');
 
     const reconstructed = new IndexedDbRelayDeliveryCursorStore(databaseName);
     await reconstructed.recordSnapshotRecoverySource(
-      workspaceId, deviceId, requestId, secondSource,
+      workspaceId, deviceId, requestId, secondSource, secondSourceKey,
     );
     expect(await reconstructed.acceptSnapshotRecovery(workspaceId, deviceId, requestId))
       .toEqual({ committedDeliveryId: 9n });

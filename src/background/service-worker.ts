@@ -123,6 +123,7 @@ transportRuntime = new TransportRuntime(
           result.receipt.recoveryRequestId !== undefined) {
         await snapshotRecoveryCoordinator.observeManifest(
           result.receipt.sourceDeviceId,
+          result.receipt.sourceKeyId,
           result.receipt.recoveryRequestId,
         );
         if (!await snapshotRecoveryCoordinator.isActive()) {
