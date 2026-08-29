@@ -118,9 +118,9 @@ payloads, raw protocol exceptions, or unrelated notification/reply content.
 - Revocation and transport fail-closed behavior stop network use but do not
   currently prove deletion of all local notification/action/membership state.
 - Uninstalling the extension or deleting the entire browser profile is the only
-  current broad user-controlled deletion boundary. Browser sync, backup, profile
-  export, enterprise roaming and filesystem recovery behavior still require a
-  real-browser release-baseline assessment.
+  current broad user-controlled deletion boundary. The isolated profile-export
+  canary below proves current local file placement, but browser sync, backup,
+  enterprise roaming and filesystem recovery behavior remain unverified.
 
 The missing in-product clear/retention policy is an open release issue, not an
 implicit promise that Chrome removes the data automatically.
@@ -141,7 +141,57 @@ implicit promise that Chrome removes the data automatically.
 5. explicit store clearing removes the tested credential and identity records.
 
 This deterministic test does **not** inspect Chromium's on-disk LevelDB/IndexedDB
-encoding, browser console buffers, native notification history, crash dumps,
-memory, caches, profile export, sync/backup, or behavior after a real Worker and
-browser restart. Those checks remain required with a fresh isolated profile; a
-clean unit test must not be reported as a clean browser-profile scan.
+encoding or behavior after a real browser restart. It remains the fast CI-facing
+store-boundary test and must not be substituted for the separate browser scan.
+
+## Isolated real-browser profile canary
+
+`scripts/chrome_profile_canary.py` launches the production `dist/` in headless
+Cent Browser with a fresh temporary `--user-data-dir`. It attaches directly to
+the production MV3 Worker through CDP and uses real browser WebCrypto,
+IndexedDB, `chrome.storage` and `chrome.notifications` APIs. The script:
+
+1. creates random current/pending 32-byte transport tokens and a non-extractable
+   P-256 identity inside the Worker;
+2. stores exact production-shape credential, identity, notification and
+   one-shot pending-action records, with independent title/body/reply canaries;
+3. verifies the native notification API accepts the presentation fields;
+4. closes and reopens the complete browser, then verifies token digests,
+   identity, private-key non-extractability, notification state and reply bytes;
+5. captures Worker console, uncaught-exception and browser-log events while
+   attached and searches their text for raw/hex/Base64 credential and business
+   canaries;
+6. closes the browser before recursively scanning the complete temporary
+   profile plus browser stdout/stderr, then deletes that profile by default.
+
+Run it only after building the exact extension under review:
+
+```text
+python scripts/chrome_profile_canary.py --report <non-sensitive-report.json>
+```
+
+The 2026-08-29 run against extension `0.1.15` scanned `17,744,071` closed-profile
+bytes after a full browser restart. Each raw current/pending token was found in
+one file, exclusively under the extension IndexedDB LevelDB directory. Standard
+Base64 and unpadded Base64URL token matches were zero. Title, body and reply each
+appeared in one file, also exclusively in that expected IndexedDB directory.
+`chrome.storage`, the interaction URL, captured diagnostics and browser logs had
+zero forbidden matches. Both runs had zero console calls and zero uncaught
+Worker exceptions; one browser log event per run contained no canary. The
+restored HPKE private key remained non-extractable, PKCS#8 export failed, and
+`chrome.notifications.getAll()` contained the recreated notification.
+
+The JSON report contains counts and limitations only; generated token values,
+digests and business canaries are not written to it. The temporary profile is
+sensitive evidence until deletion. `--keep-profile` exists only for explicitly
+access-controlled investigation and prints its location as a warning.
+
+### Remaining browser coverage
+
+This tool seeds production-shaped records through real browser storage APIs; it
+does not replace separate registration, authority, Auth HPKE and notification
+delivery end-to-end evidence. Cent Browser's headless mode blocks extension HTML
+pages with `ERR_BLOCKED_BY_CLIENT`, so interaction-page DOM rendering and reply
+form lifecycle still require an isolated non-headless release check. Process
+memory, crash dumps, OS notification history, sync/backup, IME history,
+screenshots, screen recording and filesystem recovery also remain open.
