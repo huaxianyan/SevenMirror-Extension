@@ -211,7 +211,16 @@ authority recipient resolution, canonical pending-action persistence, Auth HPKE
 or Android execution. Those remain covered by existing store／codec／runtime and
 cross-device tests rather than being faked inside this DOM check. The Python
 WebSocket dependency is fixed in `scripts/security-requirements.txt` with an
-exact wheel SHA-256 and CI installs it with `--require-hashes`.
+exact wheel SHA-256 and should be installed in an isolated environment with
+`--require-hashes`.
+
+This check currently runs against the read-only local Cent Browser installation.
+Stock Google Chrome 137 and newer no longer honor `--load-extension` in official
+branded builds, including the current GitHub runner browser, while Chrome for
+Testing requires a separately pinned browser artifact and provenance decision.
+The existing CI therefore continues to build and test the page but does not
+misrepresent a browser in which the unpacked extension never loaded as DOM
+evidence. Pinning a CI browser artifact remains open.
 
 ### Remaining browser coverage
 
