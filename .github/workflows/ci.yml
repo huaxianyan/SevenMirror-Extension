@@ -44,3 +44,13 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - name: Install pinned browser-canary dependency
+        run: |
+          python3 -m venv "$RUNNER_TEMP/browser-canary-venv"
+          "$RUNNER_TEMP/browser-canary-venv/bin/pip" install \
+            --require-hashes -r scripts/security-requirements.txt
+      - name: Verify interaction DOM and reply lifecycle in an isolated browser
+        run: |
+          "$RUNNER_TEMP/browser-canary-venv/bin/python" scripts/interaction_dom_canary.py \
+            --browser "$(command -v google-chrome)" \
+            --report "$RUNNER_TEMP/interaction-dom-report.json"

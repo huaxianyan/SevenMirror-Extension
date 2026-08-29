@@ -186,12 +186,37 @@ digests and business canaries are not written to it. The temporary profile is
 sensitive evidence until deletion. `--keep-profile` exists only for explicitly
 access-controlled investigation and prints its location as a warning.
 
+## Isolated interaction-page DOM canary
+
+`scripts/interaction_dom_canary.py` launches the production `dist/` in an
+isolated non-headless Chromium profile. On Windows the browser window is placed
+off-screen; Linux CI uses Xvfb. CDP injects a page-local runtime-message boundary
+before navigation so the built interaction module receives one target summary
+without adding a production diagnostic endpoint or changing the Worker. The
+canary verifies:
+
+1. the URL contains only the opaque Chrome notification ID;
+2. the DOM renders the exact target title, body, source and source application,
+   with no unrelated-notification or pre-submit reply text;
+3. reply submission is bound to the exact Chrome notification ID, revision and
+   action ID;
+4. the textarea is cleared immediately after submission, and reply text does not
+   remain visible or enter the URL, console, exception log or browser output;
+5. the temporary profile is deleted by default and the JSON report contains
+   counts and limitations, not canary values.
+
+The message boundary is intentionally intercepted before the production Worker.
+This proves the production page bundle and page-to-Worker request shape, not
+authority recipient resolution, canonical pending-action persistence, Auth HPKE
+or Android execution. Those remain covered by existing store／codec／runtime and
+cross-device tests rather than being faked inside this DOM check. The Python
+WebSocket dependency is fixed in `scripts/security-requirements.txt` with an
+exact wheel SHA-256 and CI installs it with `--require-hashes`.
+
 ### Remaining browser coverage
 
-This tool seeds production-shaped records through real browser storage APIs; it
-does not replace separate registration, authority, Auth HPKE and notification
-delivery end-to-end evidence. Cent Browser's headless mode blocks extension HTML
-pages with `ERR_BLOCKED_BY_CLIENT`, so interaction-page DOM rendering and reply
-form lifecycle still require an isolated non-headless release check. Process
+The profile scan and interaction DOM canary do not replace separate registration,
+authority, Auth HPKE and notification-delivery end-to-end evidence. Canonical
+pending-action persistence remains outside the intercepted DOM check. Process
 memory, crash dumps, OS notification history, sync/backup, IME history,
 screenshots, screen recording and filesystem recovery also remain open.

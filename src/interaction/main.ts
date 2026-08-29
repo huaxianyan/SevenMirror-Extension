@@ -103,10 +103,12 @@ function renderAction(action: NotificationInteractionSummary['actions'][number])
         input.focus();
         return;
       }
+      const replyText = input.value;
+      input.value = '';
       void invoke({
         operation: 'reply',
         actionId: action.actionId,
-        replyText: input.value,
+        replyText,
       });
     });
     container.append(label, hint, submit);
