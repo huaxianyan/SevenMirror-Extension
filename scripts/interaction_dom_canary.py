@@ -47,21 +47,41 @@ def browser_command(browser: Path, arguments: list[str]) -> list[str]:
     return [str(browser), *arguments]
 
 
-def wait_for_targets(port: int, timeout_seconds: int) -> tuple[dict[str, Any], dict[str, Any]]:
+def wait_for_page(port: int, timeout_seconds: int) -> dict[str, Any]:
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         try:
             targets = fetch_json(f"http://127.0.0.1:{port}/json")
-            worker = next((target for target in targets
-                if target.get("type") == "service_worker"
-                and target.get("url", "").endswith("/background/service-worker.js")), None)
             page = next((target for target in targets if target.get("type") == "page"), None)
-            if worker is not None and page is not None:
-                return worker, page
+            if page is not None:
+                return page
         except (OSError, ValueError):
             pass
         time.sleep(0.1)
-    raise RuntimeError("Extension Worker and browser page did not appear before timeout")
+    raise RuntimeError("Browser page did not appear before timeout")
+
+
+def discover_extension_id(
+    page: CdpConnection,
+    extension_dir: Path,
+    timeout_seconds: int,
+) -> str:
+    page.command("Page.navigate", {"url": "chrome://extensions-internals"})
+    encoded = evaluate_until(page, """
+(() => {
+  const text = document.body?.innerText?.trim();
+  return text?.startsWith('[') ? text : false;
+})()
+""", timeout_seconds)
+    extensions = json.loads(encoded)
+    expected_path = os.path.normcase(str(extension_dir.resolve()))
+    matches = [entry for entry in extensions
+        if entry.get("location") == "COMMAND_LINE"
+        and entry.get("manifest_version") == 3
+        and os.path.normcase(str(Path(entry.get("path", "")).resolve())) == expected_path]
+    if len(matches) != 1 or not isinstance(matches[0].get("id"), str):
+        raise RuntimeError("Built command-line extension was not uniquely discoverable")
+    return matches[0]["id"]
 
 
 def evaluate_until(connection: CdpConnection, expression: str, timeout_seconds: int) -> Any:
@@ -162,8 +182,11 @@ def main() -> None:
             )
             page: CdpConnection | None = None
             try:
-                worker_target, page_target = wait_for_targets(port, args.timeout_seconds)
-                extension_id = worker_target["url"].split("/", 3)[2]
+                page_target = wait_for_page(port, args.timeout_seconds)
+                page = CdpConnection(page_target["webSocketDebuggerUrl"])
+                page.command("Runtime.enable")
+                page.command("Page.enable")
+                extension_id = discover_extension_id(page, extension_dir, args.timeout_seconds)
                 interaction_url = (
                     f"chrome-extension://{extension_id}/interaction/index.html"
                     f"?notification={chrome_notification_id.replace(':', '%3A')}"
@@ -171,9 +194,6 @@ def main() -> None:
                 if any(value in interaction_url for value in (title, body, reply, distractor)):
                     raise RuntimeError("Business canary entered the interaction URL")
 
-                page = CdpConnection(page_target["webSocketDebuggerUrl"])
-                page.command("Runtime.enable")
-                page.command("Page.enable")
                 try:
                     page.command("Log.enable")
                 except RuntimeError:
