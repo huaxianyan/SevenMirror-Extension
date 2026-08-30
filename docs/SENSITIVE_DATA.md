@@ -190,29 +190,35 @@ access-controlled investigation and prints its location as a warning.
 
 `scripts/interaction_dom_canary.py` launches the production `dist/` in an
 isolated non-headless Chromium profile. On Windows the browser window is placed
-off-screen; Linux CI uses Xvfb. CDP injects a page-local runtime-message boundary
-before navigation so the built interaction module receives one target summary
-without adding a production diagnostic endpoint or changing the Worker. The
-canary verifies:
+off-screen; Linux environments without a display use Xvfb. It seeds isolated
+extension-origin stores with a non-extractable test identity, transport binding,
+notification state, and a deterministic authority-signed Chrome／Android roster.
+The page then talks to the unmodified production Worker; no runtime-message mock
+or production diagnostic endpoint is added. The canary verifies:
 
 1. the URL contains only the opaque Chrome notification ID;
-2. the DOM renders the exact target title, body, source and source application,
-   with no unrelated-notification or pre-submit reply text;
-3. reply submission is bound to the exact Chrome notification ID, revision and
-   action ID;
-4. the textarea is cleared immediately after submission, and reply text does not
-   remain visible or enter the URL, console, exception log or browser output;
-5. the temporary profile is deleted by default and the JSON report contains
+2. the Worker accepts the signed roster and renders only the exact target title,
+   body, certified source and source application;
+3. reply submission is bound to the exact notification ID, revision and action;
+4. the authority-certified Android recipient and identity key are resolved;
+5. the exact canonical schema-v2 `ActionInvoke` is durably registered with the
+   matching SHA-256, recipient, idempotency key and `once` delivery mode before
+   transport acceptance;
+6. the textarea is cleared immediately, and reply text does not remain visible
+   or enter the URL, console, exception log or browser output;
+7. the temporary profile is deleted by default and the JSON report contains
    counts and limitations, not canary values.
 
-The message boundary is intentionally intercepted before the production Worker.
-This proves the production page bundle and page-to-Worker request shape, not
-authority recipient resolution, canonical pending-action persistence, Auth HPKE
-or Android execution. Those remain covered by existing store／codec／runtime and
-cross-device tests rather than being faked inside this DOM check. The Python
-WebSocket dependency is fixed in `scripts/security-requirements.txt` with an
-exact wheel SHA-256 and should be installed in an isolated environment with
-`--require-hashes`.
+`scripts/interaction-worker-fixture.json` contains public deterministic test
+material only. It is reproducible with
+`node node_modules/vite-node/vite-node.mjs scripts/generate_interaction_worker_fixture.ts`;
+the production membership verifier rejects an invalid certificate, signature,
+roster digest or role binding. The relay endpoint is deliberately unavailable,
+so this check does not claim relay delivery, authenticated Android execution or
+result reconciliation. Existing codec, Auth HPKE, transport and cross-device
+tests cover those separate boundaries. The Python WebSocket dependency is fixed
+in `scripts/security-requirements.txt` with an exact wheel SHA-256 and should be
+installed in an isolated environment with `--require-hashes`.
 
 This check currently runs against the read-only local Cent Browser installation.
 Stock Google Chrome 137 and newer no longer honor `--load-extension` in official
@@ -224,8 +230,8 @@ evidence. Pinning a CI browser artifact remains open.
 
 ### Remaining browser coverage
 
-The profile scan and interaction DOM canary do not replace separate registration,
-authority, Auth HPKE and notification-delivery end-to-end evidence. Canonical
-pending-action persistence remains outside the intercepted DOM check. Process
-memory, crash dumps, OS notification history, sync/backup, IME history,
-screenshots, screen recording and filesystem recovery also remain open.
+The profile scan and interaction Worker canary do not replace separate
+registration, live relay delivery, authenticated Android execution or result
+reconciliation evidence. Process memory, crash dumps, OS notification history,
+sync/backup, IME history, screenshots, screen recording and filesystem recovery
+also remain open.

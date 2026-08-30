@@ -41,6 +41,11 @@ jobs:
         run: npm audit --audit-level=high --registry=https://registry.npmjs.org
       - name: Verify vendored protocol
         run: node protocol/verify-schema.mjs
+      - name: Verify deterministic interaction Worker fixture
+        run: |
+          node node_modules/vite-node/vite-node.mjs \
+            scripts/generate_interaction_worker_fixture.ts > "$RUNNER_TEMP/interaction-worker-fixture.json"
+          cmp scripts/interaction-worker-fixture.json "$RUNNER_TEMP/interaction-worker-fixture.json"
       - run: npm run typecheck
       - run: npm test
       - run: npm run build

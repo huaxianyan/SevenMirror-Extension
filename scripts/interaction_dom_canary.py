@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -22,6 +23,16 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--browser", type=Path)
     parser.add_argument("--extension-dir", type=Path, default=repository / "dist")
+    parser.add_argument(
+        "--membership-vector",
+        type=Path,
+        default=repository / "protocol" / "test-vectors" / "workspace-membership-v1.json",
+    )
+    parser.add_argument(
+        "--worker-fixture",
+        type=Path,
+        default=repository / "scripts" / "interaction-worker-fixture.json",
+    )
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--keep-profile", action="store_true")
     parser.add_argument("--timeout-seconds", type=int, default=30)
@@ -94,28 +105,113 @@ def evaluate_until(connection: CdpConnection, expression: str, timeout_seconds: 
     raise RuntimeError("Interaction page condition did not become true")
 
 
-def injection_script(fixture: dict[str, Any]) -> str:
-    encoded = json.dumps(fixture, separators=(",", ":"))
+def seeding_script(data: dict[str, Any]) -> str:
+    encoded = json.dumps(data, separators=(",", ":"))
     return f"""
-(() => {{
-  const fixture = {encoded};
-  globalThis.__interactionMessages = [];
-  const sendMessage = async (message) => {{
-    globalThis.__interactionMessages.push(structuredClone(message));
-    if (message?.type === 'get-notification-interaction') {{
-      return {{ notification: fixture.notification }};
-    }}
-    if (message?.type === 'invoke-notification-interaction') {{
-      return {{ outcome: 'unavailable' }};
-    }}
-    if (message?.type === 'get-notification-interaction-operation') {{
-      return {{ state: 'unavailable' }};
-    }}
-    throw new Error('Unexpected interaction-page message');
-  }};
-  Object.defineProperty(chrome.runtime, 'sendMessage', {{ value: sendMessage }});
-}})();
+(async () => {{
+  const data = {encoded};
+  const h = (value) => Uint8Array.from(value.match(/../g).map((byte) => parseInt(byte, 16)));
+  const b64 = (value) => btoa(String.fromCharCode(...value))
+    .replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+  const publicKey = h(data.localPublicKeyHex);
+  const privateKey = await crypto.subtle.importKey('jwk', {{
+    kty: 'EC', crv: 'P-256', x: b64(publicKey.slice(1, 33)),
+    y: b64(publicKey.slice(33)), d: b64(h(data.localPrivateScalarHex)), ext: true,
+  }}, {{ name: 'ECDH', namedCurve: 'P-256' }}, false, ['deriveBits']);
+  const importedPublicKey = await crypto.subtle.importKey(
+    'raw', publicKey, {{ name: 'ECDH', namedCurve: 'P-256' }}, true, []);
+
+  const write = (name, version, stores, storeName, value, key) => new Promise((resolve, reject) => {{
+    const open = indexedDB.open(name, version);
+    open.onupgradeneeded = () => stores.forEach(([entry, options]) => {{
+      if (!open.result.objectStoreNames.contains(entry)) open.result.createObjectStore(entry, options);
+    }});
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {{
+      const database = open.result;
+      const transaction = database.transaction(storeName, 'readwrite');
+      transaction.oncomplete = () => {{ database.close(); resolve(true); }};
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+      const store = transaction.objectStore(storeName);
+      key === undefined ? store.put(value) : store.put(value, key);
+    }};
+  }});
+
+  await write('syncnotifications-crypto-v1', 1, [['identities', undefined]], 'identities',
+    {{ privateKey, publicKey: importedPublicKey }}, 'primary-hpke-auth-v1');
+  await write('syncnotifications-transport-v1', 1, [['credentials', {{ keyPath: 'id' }}]], 'credentials', {{
+    id: 'primary-transport-v1', serverOrigin: 'http://127.0.0.1:9',
+    workspaceId: h(data.workspaceIdHex), deviceId: h(data.localDeviceIdHex),
+    authToken: h(data.authTokenHex), identityKeyId: h(data.localKeyIdHex),
+  }});
+  await write('syncnotifications-workspace-membership-v1', 1,
+    [['workspace-membership', {{ keyPath: 'tuple' }}]], 'workspace-membership', {{
+      tuple: `${{data.workspaceIdHex}}:${{data.localDeviceIdHex}}`,
+      workspaceId: h(data.workspaceIdHex), deviceId: h(data.localDeviceIdHex),
+      authorityPublicKey: h(data.authorityPublicKeyHex), authorityEpoch: '1',
+      authorityTransitionDigest: new Uint8Array(32), signedCertificate: h(data.localCertificateHex),
+      rosterEpoch: '1', rosterDigest: h(data.rosterDigestHex), signedRoster: h(data.signedRosterHex),
+      localDeviceActive: true,
+    }});
+  await write('syncnotifications-notification-state-v1', 2,
+    [['notification-state', {{ keyPath: 'tuple' }}], ['notification-snapshot', {{ keyPath: 'sourceKey' }}]],
+    'notification-state', {{
+      tuple: `${{data.androidDeviceIdHex}}:${{data.notificationId}}`,
+      sourceDeviceId: h(data.androidDeviceIdHex), notificationId: data.notificationId,
+      chromeNotificationId: data.chromeNotificationId, revision: data.revision, phase: 'visible',
+      payloadSha256: h(data.notificationDigestHex), sourceApplicationId: 'canary.application',
+      sourceApplicationName: data.sourceApplicationName, title: data.title, body: data.body,
+      actions: [{{ actionId: h(data.actionIdHex), title: 'Reply',
+        requiresTextInput: true, allowsFreeFormInput: true }}],
+    }});
+  return true;
+}})()
 """
+
+
+def parse_protobuf(encoded: bytes) -> list[tuple[int, int, Any]]:
+    fields: list[tuple[int, int, Any]] = []
+    offset = 0
+    while offset < len(encoded):
+        key, offset = parse_varint(encoded, offset)
+        field_number, wire_type = key >> 3, key & 7
+        if field_number < 1 or wire_type not in (0, 2):
+            raise RuntimeError("Canonical action payload contains an unsupported protobuf field")
+        if wire_type == 0:
+            value, offset = parse_varint(encoded, offset)
+        else:
+            size, offset = parse_varint(encoded, offset)
+            end = offset + size
+            if end > len(encoded):
+                raise RuntimeError("Canonical action payload is truncated")
+            value, offset = encoded[offset:end], end
+        fields.append((field_number, wire_type, value))
+    return fields
+
+
+def parse_varint(encoded: bytes, offset: int) -> tuple[int, int]:
+    value = 0
+    for shift in range(0, 70, 7):
+        if offset >= len(encoded):
+            raise RuntimeError("Canonical action payload has a truncated varint")
+        byte = encoded[offset]
+        offset += 1
+        value |= (byte & 0x7f) << shift
+        if byte < 0x80:
+            return value, offset
+    raise RuntimeError("Canonical action payload has an oversized varint")
+
+
+def require_fields(
+    fields: list[tuple[int, int, Any]],
+    expected: list[tuple[int, int]],
+    label: str,
+) -> list[Any]:
+    shape = [(field, wire) for field, wire, _ in fields]
+    if shape != expected:
+        raise RuntimeError(f"{label} does not have the exact canonical field shape")
+    return [value for _, _, value in fields]
 
 
 def main() -> None:
@@ -132,21 +228,30 @@ def main() -> None:
     distractor = f"INTERACTION_DISTRACTOR_{suffix}"
     chrome_notification_id = f"sn1:interaction-canary:{suffix}"
     action_id = secrets.token_hex(16)
-    fixture = {
-        "notification": {
-            "chromeNotificationId": chrome_notification_id,
-            "revision": "7",
-            "sourceName": "Canary Android",
-            "sourceApplicationName": "Canary application",
-            "title": title,
-            "body": body,
-            "actions": [{
-                "actionId": action_id,
-                "title": "Reply",
-                "requiresTextInput": True,
-                "allowsFreeFormInput": True,
-            }],
-        },
+    membership_vector = json.loads(args.membership_vector.resolve().read_text(encoding="utf-8"))
+    worker_fixture = json.loads(args.worker_fixture.resolve().read_text(encoding="utf-8"))
+    notification_id = f"interaction-worker-canary-{suffix}"
+    seed = {
+        "workspaceIdHex": membership_vector["workspaceIdHex"],
+        "localDeviceIdHex": membership_vector["deviceIdHex"],
+        "localKeyIdHex": membership_vector["identityKeyIdHex"],
+        "localPublicKeyHex": membership_vector["identityPublicKeyHex"],
+        "localPrivateScalarHex": membership_vector["identityPrivateScalarHex"],
+        "localCertificateHex": worker_fixture["localSignedCertificateHex"],
+        "authorityPublicKeyHex": membership_vector["authorityPublicKeyHex"],
+        "androidDeviceIdHex": worker_fixture["androidDeviceIdHex"],
+        "androidKeyIdHex": worker_fixture["androidIdentityKeyIdHex"],
+        "rosterDigestHex": worker_fixture["rosterDigestHex"],
+        "signedRosterHex": worker_fixture["signedRosterHex"],
+        "authTokenHex": secrets.token_hex(32),
+        "notificationId": notification_id,
+        "chromeNotificationId": chrome_notification_id,
+        "revision": "7",
+        "notificationDigestHex": secrets.token_hex(32),
+        "sourceApplicationName": "Canary application",
+        "title": title,
+        "body": body,
+        "actionIdHex": action_id,
     }
 
     report_path = args.report.resolve()
@@ -198,9 +303,12 @@ def main() -> None:
                     page.command("Log.enable")
                 except RuntimeError:
                     pass
-                page.command("Page.addScriptToEvaluateOnNewDocument", {
-                    "source": injection_script(fixture),
+                page.command("Page.navigate", {
+                    "url": f"chrome-extension://{extension_id}/interaction/index.html",
                 })
+                evaluate_until(page, "document.readyState === 'complete'", args.timeout_seconds)
+                if page.evaluate(seeding_script(seed)) is not True:
+                    raise RuntimeError("Failed to seed isolated production stores")
                 page.command("Page.navigate", {"url": interaction_url})
                 rendered = evaluate_until(page, """
 (() => {
@@ -231,26 +339,65 @@ def main() -> None:
   const form = document.querySelector('form.input-action');
   input.value = {json.dumps(reply)};
   form.requestSubmit();
-  const deadline = Date.now() + 5000;
-  while (globalThis.__interactionMessages.length < 2 && Date.now() < deadline) {{
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }}
-  return {{
-    inputValue: input.value,
-    messages: globalThis.__interactionMessages,
-    href: location.href,
-    bodyText: document.body.innerText,
-  }};
+  return {{ inputValue: input.value, href: location.href, bodyText: document.body.innerText }};
 }})()
 """)
-                messages = submitted["messages"]
-                invoke = next((message for message in messages
-                    if message.get("type") == "invoke-notification-interaction"), None)
-                if invoke is None or invoke.get("operation") != "reply" or \
-                        invoke.get("replyText") != reply or invoke.get("actionId") != action_id or \
-                        invoke.get("revision") != "7" or \
-                        invoke.get("chromeNotificationId") != chrome_notification_id:
-                    raise RuntimeError("Reply submission was not bound to the rendered action and revision")
+                record = evaluate_until(page, """
+(async () => {
+  const databases = await indexedDB.databases();
+  if (!databases.some((database) => database.name === 'syncnotifications-pending-actions-default')) {
+    return false;
+  }
+  const record = await new Promise((resolve, reject) => {
+    const open = indexedDB.open('syncnotifications-pending-actions-default', 1);
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const database = open.result;
+      const transaction = database.transaction('pending-action', 'readonly');
+      const request = transaction.objectStore('pending-action').getAll();
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => { database.close(); resolve(request.result[0]); };
+    };
+  });
+  if (!record) return false;
+  return {
+    idempotencyKey: record.idempotencyKey,
+    senderDeviceId: record.senderDeviceId,
+    operationDigest: record.operationDigest,
+    state: record.state,
+    canonicalInvokePayloadHex: Array.from(record.canonicalInvokePayload ?? [],
+      (byte) => byte.toString(16).padStart(2, '0')).join(''),
+    recipientKeyIdHex: Array.from(record.recipientKeyId ?? [],
+      (byte) => byte.toString(16).padStart(2, '0')).join(''),
+    invokeAttemptCount: record.invokeAttemptCount,
+    invokeDeliveryMode: record.invokeDeliveryMode,
+  };
+})()
+""", args.timeout_seconds)
+                canonical = bytes.fromhex(record["canonicalInvokePayloadHex"])
+                outer = require_fields(parse_protobuf(canonical), [(1, 0), (10, 2)], "EncryptedPayload")
+                action = require_fields(
+                    parse_protobuf(outer[1]),
+                    [(1, 2), (2, 0), (3, 2), (4, 2), (5, 2)],
+                    "ActionInvoke",
+                )
+                if outer[0] != 2 or action[0].decode("utf-8") != notification_id or \
+                        action[1] != 7 or action[2].hex() != action_id or \
+                        action[3].hex() != record["idempotencyKey"] or \
+                        action[4].decode("utf-8") != reply:
+                    raise RuntimeError("Canonical reply payload is not bound to the rendered action and revision")
+                if record["senderDeviceId"] != worker_fixture["androidDeviceIdHex"] or \
+                        record["recipientKeyIdHex"] != worker_fixture["androidIdentityKeyIdHex"] or \
+                        record["operationDigest"] != hashlib.sha256(canonical).hexdigest() or \
+                        record["state"] != "pending" or record["invokeAttemptCount"] != 0 or \
+                        record["invokeDeliveryMode"] != "once":
+                    raise RuntimeError("Canonical one-shot pending-action metadata is incorrect")
+                evaluate_until(page, """
+(() => {
+  const input = document.querySelector('textarea');
+  return input && input.disabled === false;
+})()
+""", args.timeout_seconds)
                 if submitted["inputValue"] != "":
                     raise RuntimeError("Reply input remained in the DOM after submission")
                 if any(value in submitted["href"] for value in (title, body, reply, distractor)):
@@ -269,10 +416,13 @@ def main() -> None:
                     "unrelated_notification_matches": 0,
                     "reply_input_cleared_after_submit": True,
                     "reply_request_bound_to_action_and_revision": True,
+                    "production_worker_boundary_crossed": True,
+                    "authority_certified_recipient_resolved": True,
+                    "canonical_one_shot_pending_action_persisted": True,
                     "business_canary_url_matches": 0,
                     "business_canary_diagnostic_matches": 0,
                     "limitations": [
-                        "The runtime message boundary is intercepted before the Worker; authenticated recipient resolution, canonical pending-action persistence, encryption, and Android execution remain covered by separate tests.",
+                        "The relay is deliberately offline; the canary proves production Worker authorization and canonical one-shot persistence before transport acceptance, not relay delivery or Android execution.",
                         "Process memory, IME, OS notification history, crash dumps, screenshots, screen recording, sync, backup, and filesystem recovery remain open.",
                     ],
                 }
