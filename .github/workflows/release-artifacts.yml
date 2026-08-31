@@ -1,0 +1,72 @@
+name: Release artifacts
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+  artifact-metadata: write
+
+jobs:
+  build-and-attest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Verify immutable GitHub Action pins
+        run: |
+          if grep -RPn '^\s*(?:-\s*)?uses:\s+(?!\./)[^@\s]+@(?![0-9a-f]{40}(?:\s|$))' .github/workflows; then
+            echo 'Every external GitHub Action must use an immutable 40-character commit.' >&2
+            exit 1
+          fi
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Verify release tag binding
+        if: github.ref_type == 'tag'
+        run: |
+          extension_version="$(node -p "require('./public/manifest.json').version")"
+          package_version="$(node -p "require('./package.json').version")"
+          test "$GITHUB_REF_NAME" = "v${extension_version}"
+          test "$package_version" = "$extension_version"
+      - name: Install exact locked dependencies
+        run: npm ci
+      - name: Verify source tree and release inputs
+        run: |
+          test -z "$(git status --porcelain=v1)"
+          npm audit --audit-level=high --registry=https://registry.npmjs.org
+          npm run protocol:verify
+          node node_modules/vite-node/vite-node.mjs \
+            scripts/generate_interaction_worker_fixture.ts > "$RUNNER_TEMP/interaction-worker-fixture.json"
+          cmp scripts/interaction-worker-fixture.json "$RUNNER_TEMP/interaction-worker-fixture.json"
+      - name: Test and build extension
+        run: |
+          npm run typecheck
+          npm test
+          npm run build
+      - name: Build and verify deterministic submission package
+        run: |
+          python3 scripts/test_build_release_package.py
+          python3 scripts/build_release_package.py \
+            --dist dist \
+            --output "$RUNNER_TEMP/sevenmirror-extension-release" \
+            --revision "$GITHUB_SHA" \
+            --package-version "$(node -p "require('./package.json').version")"
+      - name: Generate signed GitHub provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: '${{ runner.temp }}/sevenmirror-extension-release/*'
+      - name: Upload verified release artifact set
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: sevenmirror-extension-${{ github.sha }}
+          path: '${{ runner.temp }}/sevenmirror-extension-release/'
+          if-no-files-found: error
+          retention-days: 30

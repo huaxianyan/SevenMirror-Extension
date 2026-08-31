@@ -49,3 +49,11 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - name: Build and verify deterministic submission package
+        run: |
+          python3 scripts/test_build_release_package.py
+          python3 scripts/build_release_package.py \
+            --dist dist \
+            --output "$RUNNER_TEMP/sevenmirror-extension-release" \
+            --revision "$GITHUB_SHA" \
+            --package-version "$(node -p "require('./package.json').version")"

@@ -22,6 +22,8 @@ npm run build
 
 Load `dist/` as an unpacked extension from `chrome://extensions` after building. The Options page displays the current manifest version; user-visible extension iterations increment it so a reload can be verified.
 
+Release-candidate ZIP provenance, offline verification, the Chrome Web Store signing boundary and monotonic-version rollback rules are documented in [`docs/release-provenance.md`](docs/release-provenance.md). The pinned release Actions and their permissions are reviewed in [`docs/release-actions.md`](docs/release-actions.md).
+
 ## Current functionality
 
 - MV3 service worker, Popup, and a code-gated registration Options page
