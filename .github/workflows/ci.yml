@@ -37,8 +37,12 @@ jobs:
           grep -Fq '97c3430f71c85c6b2cffc6fe8184a1f447b2f0fb' LICENSE-TRANSITION.md
           node -e "if (require('./package.json').license !== 'GPL-3.0-only') process.exit(1)"
       - run: npm ci
-      - name: Audit locked npm dependencies
-        run: npm audit --audit-level=high --registry=https://registry.npmjs.org
+      - name: Audit locked npm dependencies with query-time evidence
+        run: |
+          python3 scripts/test_npm_audit_gate.py
+          python3 scripts/npm_audit_gate.py \
+            --output "$RUNNER_TEMP/chrome-vulnerability-evidence.json" \
+            --revision "$GITHUB_SHA"
       - name: Verify vendored protocol
         run: node protocol/verify-schema.mjs
       - name: Verify deterministic interaction Worker fixture

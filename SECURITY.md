@@ -12,6 +12,9 @@ Android, Chrome, and protocol commits in the same private report.
 The canonical policy, including response targets, coordinated disclosure,
 research boundaries, supported-version rules, and security-update trust, is the
 [SevenMirror security policy](https://github.com/huaxianyan/SevenMirror-Server/blob/main/SECURITY.md).
+Locked npm query-time evidence is described in
+[`docs/vulnerability-evidence.md`](docs/vulnerability-evidence.md); exceptions
+remain governed by the single Server registry.
 Do not include private keys, live credentials, real notification content, or
 private device identifiers in a report; revoke exposed credentials and provide
 a sanitized synthetic reproduction.

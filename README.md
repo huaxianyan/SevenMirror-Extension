@@ -50,6 +50,10 @@ The current `0.1.0-dev` schema is unreleased and provisional.
 
 ## Security status
 
+Locked npm audit query-time evidence and its distinction from an unavailable
+provider database timestamp are documented in
+[`docs/vulnerability-evidence.md`](docs/vulnerability-evidence.md).
+
 The transport core accepts only HTTPS origins outside loopback, never puts credentials in URLs or `chrome.storage.sync`, rejects silent credential replacement, and refuses to send the first authentication frame if the WebSocket endpoint changes. The bearer credential must remain available as bytes for the browser WebSocket API, so extension-origin IndexedDB and a minimal in-memory lifetime are the practical Chrome boundary; the HPKE private identity remains non-extractable.
 
 Version `0.1.14` adds a durable recipient cursor for Relay Delivery v1. After exact `SNO1`, the Worker resumes from its highest committed delivery ID; it advances and cumulatively ACKs only after authenticated business reconciliation and presentation complete. Exact relay redelivery may reuse an already consumed replay tuple only when the existing durable business binding reconciles successfully. A history gap is persisted as snapshot-required and is never skipped automatically. The Android durable sender and snapshot-required recovery handshake remain incomplete.

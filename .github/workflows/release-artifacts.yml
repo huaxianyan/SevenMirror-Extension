@@ -41,7 +41,11 @@ jobs:
       - name: Verify source tree and release inputs
         run: |
           test -z "$(git status --porcelain=v1)"
-          npm audit --audit-level=high --registry=https://registry.npmjs.org
+          mkdir "$RUNNER_TEMP/sevenmirror-security-evidence"
+          python3 scripts/test_npm_audit_gate.py
+          python3 scripts/npm_audit_gate.py \
+            --output "$RUNNER_TEMP/sevenmirror-security-evidence/chrome-npm-audit-evidence.json" \
+            --revision "$GITHUB_SHA"
           npm run protocol:verify
           node node_modules/vite-node/vite-node.mjs \
             scripts/generate_interaction_worker_fixture.ts > "$RUNNER_TEMP/interaction-worker-fixture.json"
@@ -59,14 +63,25 @@ jobs:
             --output "$RUNNER_TEMP/sevenmirror-extension-release" \
             --revision "$GITHUB_SHA" \
             --package-version "$(node -p "require('./package.json').version")"
-      - name: Generate signed GitHub provenance
+      - name: Generate signed package provenance
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: '${{ runner.temp }}/sevenmirror-extension-release/*'
+      - name: Generate signed vulnerability-evidence provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: '${{ runner.temp }}/sevenmirror-security-evidence/*'
       - name: Upload verified release artifact set
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: sevenmirror-extension-${{ github.sha }}
           path: '${{ runner.temp }}/sevenmirror-extension-release/'
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload bounded vulnerability evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: sevenmirror-vulnerability-evidence-${{ github.sha }}
+          path: '${{ runner.temp }}/sevenmirror-security-evidence/'
           if-no-files-found: error
           retention-days: 30
