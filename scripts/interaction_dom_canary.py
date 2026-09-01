@@ -162,8 +162,12 @@ def seeding_script(data: dict[str, Any]) -> str:
       chromeNotificationId: data.chromeNotificationId, revision: data.revision, phase: 'visible',
       payloadSha256: h(data.notificationDigestHex), sourceApplicationId: 'canary.application',
       sourceApplicationName: data.sourceApplicationName, title: data.title, body: data.body,
-      actions: [{{ actionId: h(data.actionIdHex), title: 'Reply',
-        requiresTextInput: true, allowsFreeFormInput: true }}],
+      actions: [
+        {{ actionId: h(data.actionIdHex), title: 'Reply',
+          requiresTextInput: true, allowsFreeFormInput: true }},
+        {{ actionId: h(data.secondaryActionIdHex), title: 'Archive',
+          requiresTextInput: false, allowsFreeFormInput: false }},
+      ],
     }});
   return true;
 }})()
@@ -254,6 +258,8 @@ def main() -> None:
         "title": title,
         "body": body,
         "actionIdHex": action_id,
+        "secondaryActionIdHex": secrets.token_hex(16),
+        "shortcutRuleId": secrets.token_hex(16),
     }
 
     report_path = args.report.resolve()
@@ -347,6 +353,85 @@ def main() -> None:
 """, args.timeout_seconds)
                 if badge_disabled is not True:
                     raise RuntimeError("Options did not persist the badge preference")
+
+                page.evaluate(f"""
+chrome.storage.local.set({{
+  notificationShortcutPreferencesV1: {{
+    pinDismiss: true,
+    rules: [{{
+      id: {json.dumps(seed['shortcutRuleId'])},
+      match: {{ kind: 'reply' }},
+    }}],
+  }},
+}})
+""")
+                page.command("Page.navigate", {
+                    "url": f"chrome-extension://{extension_id}/shortcuts/index.html",
+                })
+                shortcut_structure = evaluate_until(page, """
+(() => {
+  const rule = document.querySelector('.rule');
+  const title = rule?.querySelector('.rule-title')?.textContent;
+  if (!title || document.documentElement.dataset.shortcutsReady !== 'true') return false;
+  const labels = Array.from(rule.querySelectorAll('.rule-actions button'),
+    (button) => button.getAttribute('aria-label'));
+  return {
+    title,
+    labels,
+    addEnabled: document.getElementById('add-rule')?.disabled === false,
+    draggableCount: document.querySelectorAll('[draggable="true"]').length,
+  };
+})()
+""", args.timeout_seconds)
+                if not shortcut_structure.get("title") or not shortcut_structure["addEnabled"] or \
+                        any(not label for label in shortcut_structure["labels"]) or \
+                        shortcut_structure["draggableCount"] != 0:
+                    raise RuntimeError(
+                        f"Shortcut rules were not keyboard accessible: {shortcut_structure!r}; "
+                        f"diagnostics={page.diagnostic_texts!r}")
+                page.evaluate("""
+(() => {
+  const kind = document.querySelector('.match-kind');
+  kind.value = 'title-exact';
+  kind.dispatchEvent(new Event('change', { bubbles: true }));
+  document.getElementById('shortcut-form').requestSubmit();
+})()
+""")
+                invalid_rule_blocked = evaluate_until(page, """
+(async () => {
+  const stored = (await chrome.storage.local.get('notificationShortcutPreferencesV1'))
+    .notificationShortcutPreferencesV1;
+  return document.querySelector('.match-value')?.getAttribute('aria-invalid') === 'true' &&
+    stored?.rules?.[0]?.match?.kind === 'reply';
+})()
+""", args.timeout_seconds)
+                if invalid_rule_blocked is not True:
+                    raise RuntimeError("Shortcut rule validation did not keep focus on the incomplete rule")
+                page.evaluate("""
+(() => {
+  const value = document.querySelector('.match-value');
+  value.value = 'Archive';
+  value.dispatchEvent(new Event('input', { bubbles: true }));
+  document.getElementById('shortcut-form').requestSubmit();
+  return true;
+})()
+""")
+                shortcut_saved = evaluate_until(page, f"""
+(async () => {{
+  const storage = await chrome.storage.local.get(null);
+  const preferences = storage.notificationShortcutPreferencesV1;
+  const binding = storage[{json.dumps('notificationButtonBindingV1:' + chrome_notification_id)}];
+  return preferences?.rules?.length === 1 &&
+    preferences.rules[0].match?.kind === 'title-exact' &&
+    preferences.rules[0].match?.value === 'Archive' &&
+    binding?.notificationRevision === '7' &&
+    binding.buttons?.[0]?.kind === 'action' &&
+    binding.buttons[0].actionIdHex === {json.dumps(seed['secondaryActionIdHex'])} &&
+    document.getElementById('save')?.disabled === false;
+}})()
+""", args.timeout_seconds)
+                if shortcut_saved is not True:
+                    raise RuntimeError("Shortcut rule did not rebuild the exact current notification binding")
 
                 page.command("Page.navigate", {
                     "url": f"chrome-extension://{extension_id}/popup/index.html",
@@ -675,7 +760,8 @@ def main() -> None:
       storage.notificationPresentationPreferencesV1?.showBody === false &&
       storage.notificationPresentationPreferencesV1?.showImages === false &&
       storage.notificationPresentationPreferencesV1?.silentNotifications === true &&
-      storage.notificationPresentationPreferencesV1?.mutedSourceDeviceIds?.length === 0,
+      storage.notificationPresentationPreferencesV1?.mutedSourceDeviceIds?.length === 0 &&
+      storage.notificationShortcutPreferencesV1?.rules?.[0]?.match?.value === 'Archive',
     resetIntentPresent: storage['reenrollment-reset'] !== undefined,
     bindingCount: Object.keys(storage).filter((key) =>
       key.startsWith('notificationButtonBindingV1:')).length,
@@ -704,6 +790,8 @@ def main() -> None:
                     "badge_preference_persisted": True,
                     "android_source_filter_reconciled": True,
                     "notification_display_preferences_persisted": True,
+                    "shortcut_rules_keyboard_accessible": True,
+                    "shortcut_binding_reconciled": True,
                     "local_notification_clear_confirmed": True,
                     "certified_removal_re_enrollment_reset": True,
                     "re_enrollment_preferences_preserved": True,

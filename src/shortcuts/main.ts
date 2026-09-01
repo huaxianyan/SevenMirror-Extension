@@ -9,36 +9,31 @@ interface ApplicationOption {
   name: string;
 }
 
-const pinDismiss = document.querySelector<HTMLInputElement>('#pin-dismiss');
-const rulesList = document.querySelector<HTMLOListElement>('#rules');
-const emptyRules = document.querySelector<HTMLElement>('#empty-rules');
-const addRule = document.querySelector<HTMLButtonElement>('#add-rule');
-const save = document.querySelector<HTMLButtonElement>('#save');
-const status = document.querySelector<HTMLElement>('#status');
-const template = document.querySelector<HTMLTemplateElement>('#rule-template');
+const form = requireDocumentElement<HTMLFormElement>('shortcut-form');
+const pinDismiss = requireDocumentElement<HTMLInputElement>('pin-dismiss');
+const rulesList = requireDocumentElement<HTMLOListElement>('rules');
+const emptyRules = requireDocumentElement<HTMLElement>('empty-rules');
+const addRule = requireDocumentElement<HTMLButtonElement>('add-rule');
+const save = requireDocumentElement<HTMLButtonElement>('save');
+const status = requireDocumentElement<HTMLElement>('status');
+const template = requireDocumentElement<HTMLTemplateElement>('rule-template');
 let rules: NotificationShortcutRule[] = [];
 let applications: ApplicationOption[] = [];
-let draggedRuleId: string | undefined;
+let loaded = false;
 
 localizeDocument();
 void load();
 
-addRule?.addEventListener('click', () => {
-  rules.push({ id: randomId(), match: { kind: 'reply' } });
-  renderRules();
+pinDismiss.addEventListener('change', markDirty);
+addRule.addEventListener('click', () => {
+  const id = randomId();
+  rules.push({ id, match: { kind: 'reply' } });
+  renderRules(id);
+  markDirty();
 });
-
-save?.addEventListener('click', () => {
-  if (!pinDismiss || !save) return;
-  save.disabled = true;
-  setStatus(message('shortcutSaving'));
-  void chrome.runtime.sendMessage({
-    type: 'save-notification-shortcut-settings',
-    preferences: { pinDismiss: pinDismiss.checked, rules },
-  }).then((response: { saved?: boolean } | undefined) => {
-    setStatus(response?.saved ? message('shortcutSaved') : message('shortcutSaveFailed'));
-  }).catch(() => setStatus(message('shortcutSaveFailed')))
-    .finally(() => { save.disabled = false; });
+form.addEventListener('submit', (event) => {
+  event.preventDefault();
+  void saveChanges();
 });
 
 async function load(): Promise<void> {
@@ -48,18 +43,38 @@ async function load(): Promise<void> {
     preferences: NotificationShortcutPreferences;
     applications: ApplicationOption[];
   } | undefined;
-  if (response === undefined || !pinDismiss) {
+  if (response === undefined) {
     setStatus(message('shortcutLoadFailed'));
+    setFormDisabled(true);
     return;
   }
   pinDismiss.checked = response.preferences.pinDismiss;
   rules = response.preferences.rules;
   applications = response.applications;
-  renderRules();
+  loaded = true;
+  setFormDisabled(false);
+  document.documentElement.dataset.shortcutsReady = 'true';
 }
 
-function renderRules(): void {
-  if (!rulesList || !template || !emptyRules) return;
+async function saveChanges(): Promise<void> {
+  if (!validateRules()) return;
+  setFormDisabled(true);
+  setStatus(message('shortcutSaving'));
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: 'save-notification-shortcut-settings',
+      preferences: { pinDismiss: pinDismiss.checked, rules },
+    }) as { saved?: boolean } | undefined;
+    if (!response?.saved) throw new Error('Shortcut save failed');
+    setStatus(message('shortcutSaved'));
+  } catch {
+    setStatus(message('shortcutSaveFailed'));
+  } finally {
+    setFormDisabled(false);
+  }
+}
+
+function renderRules(focusRuleId?: string): void {
   rulesList.replaceChildren();
   emptyRules.hidden = rules.length !== 0;
   for (const [index, rule] of rules.entries()) {
@@ -67,20 +82,28 @@ function renderRules(): void {
     localizeDocument(fragment);
     const item = requireElement<HTMLLIElement>(fragment, '.rule');
     item.dataset.ruleId = rule.id;
+    const title = requireElement<HTMLHeadingElement>(fragment, '.rule-title');
     const kind = requireElement<HTMLSelectElement>(fragment, '.match-kind');
     const titleField = requireElement<HTMLElement>(fragment, '.title-field');
     const value = requireElement<HTMLInputElement>(fragment, '.match-value');
+    const fieldError = requireElement<HTMLElement>(fragment, '.field-error');
     const application = requireElement<HTMLSelectElement>(fragment, '.application');
     const moveUp = requireElement<HTMLButtonElement>(fragment, '.move-up');
     const moveDown = requireElement<HTMLButtonElement>(fragment, '.move-down');
     const remove = requireElement<HTMLButtonElement>(fragment, '.remove');
+    const position = (index + 1).toString();
 
+    title.textContent = message('shortcutRuleTitle', position);
     kind.value = rule.match.kind;
     value.value = rule.match.kind === 'reply' ? '' : rule.match.value;
     titleField.hidden = rule.match.kind === 'reply';
+    fieldError.hidden = true;
     renderApplicationOptions(application, rule);
     moveUp.disabled = index === 0;
     moveDown.disabled = index === rules.length - 1;
+    moveUp.setAttribute('aria-label', message('shortcutMoveUpRule', position));
+    moveDown.setAttribute('aria-label', message('shortcutMoveDownRule', position));
+    remove.setAttribute('aria-label', message('shortcutRemoveRuleNumber', position));
 
     kind.addEventListener('change', () => {
       const current = requireRule(rule.id);
@@ -88,10 +111,14 @@ function renderRules(): void {
         ? { kind: 'reply' }
         : { kind: kind.value as 'title-exact' | 'title-contains', value: value.value };
       titleField.hidden = kind.value === 'reply';
+      clearFieldError(value, fieldError);
+      markDirty();
     });
     value.addEventListener('input', () => {
       const current = requireRule(rule.id);
       if (current.match.kind !== 'reply') current.match.value = value.value;
+      clearFieldError(value, fieldError);
+      markDirty();
     });
     application.addEventListener('change', () => {
       const current = requireRule(rule.id);
@@ -103,25 +130,36 @@ function renderRules(): void {
         current.sourceApplicationId = selected.id;
         current.sourceApplicationName = selected.name;
       }
+      markDirty();
     });
-    moveUp.addEventListener('click', () => moveRule(index, index - 1));
-    moveDown.addEventListener('click', () => moveRule(index, index + 1));
+    moveUp.addEventListener('click', () => moveRule(index, index - 1, rule.id));
+    moveDown.addEventListener('click', () => moveRule(index, index + 1, rule.id));
     remove.addEventListener('click', () => {
       rules = rules.filter((candidate) => candidate.id !== rule.id);
       renderRules();
-    });
-    item.addEventListener('dragstart', () => { draggedRuleId = rule.id; });
-    item.addEventListener('dragend', () => { draggedRuleId = undefined; });
-    item.addEventListener('dragover', (event) => event.preventDefault());
-    item.addEventListener('drop', (event) => {
-      event.preventDefault();
-      if (draggedRuleId === undefined || draggedRuleId === rule.id) return;
-      const from = rules.findIndex((candidate) => candidate.id === draggedRuleId);
-      const to = rules.findIndex((candidate) => candidate.id === rule.id);
-      if (from >= 0 && to >= 0) moveRule(from, to);
+      markDirty();
     });
     rulesList.append(fragment);
   }
+  if (focusRuleId !== undefined) {
+    rulesList.querySelector<HTMLElement>(`[data-rule-id="${focusRuleId}"] .match-kind`)?.focus();
+  }
+}
+
+function validateRules(): boolean {
+  for (const item of Array.from(rulesList.querySelectorAll<HTMLLIElement>('.rule'))) {
+    const kind = requireElement<HTMLSelectElement>(item, '.match-kind');
+    const value = requireElement<HTMLInputElement>(item, '.match-value');
+    const error = requireElement<HTMLElement>(item, '.field-error');
+    if (kind.value !== 'reply' && value.value.trim().length === 0) {
+      value.setAttribute('aria-invalid', 'true');
+      error.hidden = false;
+      value.focus();
+      setStatus(message('shortcutRuleInvalid'));
+      return false;
+    }
+  }
+  return true;
 }
 
 function renderApplicationOptions(
@@ -149,17 +187,41 @@ function renderApplicationOptions(
   select.value = rule.sourceApplicationId ?? '';
 }
 
-function moveRule(from: number, to: number): void {
+function moveRule(from: number, to: number, id: string): void {
   if (from < 0 || from >= rules.length || to < 0 || to >= rules.length || from === to) return;
   const [moved] = rules.splice(from, 1);
   rules.splice(to, 0, moved);
-  renderRules();
+  renderRules(id);
+  markDirty();
 }
 
 function requireRule(id: string): NotificationShortcutRule {
   const found = rules.find((rule) => rule.id === id);
   if (found === undefined) throw new Error('Shortcut rule no longer exists');
   return found;
+}
+
+function clearFieldError(input: HTMLInputElement, error: HTMLElement): void {
+  input.removeAttribute('aria-invalid');
+  error.hidden = true;
+}
+
+function markDirty(): void {
+  if (loaded) setStatus(message('shortcutUnsavedChanges'));
+}
+
+function setFormDisabled(disabled: boolean): void {
+  for (const control of Array.from(form.elements)) {
+    if (control instanceof HTMLButtonElement || control instanceof HTMLInputElement ||
+        control instanceof HTMLSelectElement) control.disabled = disabled;
+  }
+  if (!disabled) renderRules();
+}
+
+function requireDocumentElement<T extends HTMLElement>(id: string): T {
+  const found = document.getElementById(id);
+  if (found === null) throw new Error(`Missing shortcut element: ${id}`);
+  return found as T;
 }
 
 function requireElement<T extends Element>(root: ParentNode, selector: string): T {
@@ -174,5 +236,5 @@ function randomId(): string {
 }
 
 function setStatus(value: string): void {
-  if (status) status.textContent = value;
+  status.textContent = value;
 }

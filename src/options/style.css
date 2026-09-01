@@ -86,7 +86,7 @@ dialog::backdrop { background: rgb(0 0 0 / 45%); }
 @media (max-width: 760px) {
   .top-bar { padding-inline: 16px; }
   .layout { grid-template-columns: 1fr; width: min(100% - 32px, 760px); padding-top: 18px; }
-  nav { position: static; grid-template-columns: repeat(5, max-content); overflow-x: auto; padding-bottom: 4px; }
+  nav { position: static; grid-template-columns: repeat(6, max-content); overflow-x: auto; padding-bottom: 4px; }
   section { scroll-margin-top: 72px; }
 }
 

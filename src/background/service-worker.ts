@@ -1048,7 +1048,10 @@ async function getNotificationShortcutSettings(): Promise<{
 async function saveNotificationShortcutSettings(value: unknown): Promise<void> {
   await notificationShortcutPreferencesStore.save(value);
   const states = await notificationStateStore.listVisible();
-  await Promise.allSettled(states.map((state) => notificationPresenter.presentState(state)));
+  await Promise.allSettled(states.map(async (state) => notificationPresenter.presentState(
+    state,
+    await resolvePresentationSourceName(state),
+  )));
 }
 
 async function invokeNotificationButton(notificationId: string, buttonIndex: number): Promise<void> {
