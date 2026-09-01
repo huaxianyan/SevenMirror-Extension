@@ -309,17 +309,62 @@ def main() -> None:
                 evaluate_until(page, "document.readyState === 'complete'", args.timeout_seconds)
                 if page.evaluate(seeding_script(seed)) is not True:
                     raise RuntimeError("Failed to seed isolated production stores")
+
+                page.command("Page.navigate", {
+                    "url": f"chrome-extension://{extension_id}/popup/index.html",
+                })
+                popup = evaluate_until(page, """
+(() => {
+  const item = document.querySelector('.notification-item');
+  if (!item) return false;
+  const summary = item.querySelector('summary');
+  if (!item.open) summary.click();
+  if (!item.querySelector('.notification-detail-reply textarea')) return false;
+  return {
+    title: item.querySelector('.notification-heading strong')?.textContent,
+    source: item.querySelector('.notification-meta')?.textContent,
+    isNew: item.querySelector('.new-indicator')?.textContent,
+    hasReply: Boolean(item.querySelector('.notification-detail-reply textarea')),
+    optionsLinkOnly: document.querySelectorAll('#open-options').length === 1,
+  };
+})()
+""", args.timeout_seconds)
+                if popup["title"] != title or "Canary Android" not in popup["source"] or \
+                        not popup["isNew"] or not popup["hasReply"] or not popup["optionsLinkOnly"]:
+                    raise RuntimeError(
+                        f"Popup did not render the current notification and shared actions: {popup!r}")
+                popup_viewed = evaluate_until(page, """
+(async () => {
+  const database = await new Promise((resolve, reject) => {
+    const open = indexedDB.open('syncnotifications-notification-state-v1', 2);
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => resolve(open.result);
+  });
+  const state = await new Promise((resolve, reject) => {
+    const transaction = database.transaction('notification-state', 'readonly');
+    const request = transaction.objectStore('notification-state').getAll();
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result[0]);
+  });
+  database.close();
+  const badge = await chrome.action.getBadgeText({});
+  return state?.viewedRevision === '7' && badge === '';
+})()
+""", args.timeout_seconds)
+                if popup_viewed is not True:
+                    raise RuntimeError("Popup did not durably mark the exact visible revision as viewed")
+
                 page.command("Page.navigate", {"url": interaction_url})
                 rendered = evaluate_until(page, """
 (() => {
   const input = document.querySelector('textarea');
-  const notification = document.getElementById('notification');
+  const notification = document.getElementById('notification-detail');
   if (!input || !notification || notification.hidden) return false;
   return {
-    title: document.getElementById('notification-title')?.textContent,
-    body: document.getElementById('notification-body')?.textContent,
-    source: document.getElementById('source')?.textContent,
-    sourceApplication: document.getElementById('source-application')?.textContent,
+    title: notification.querySelector('.notification-detail-title')?.textContent,
+    body: notification.querySelector('.notification-detail-body')?.textContent,
+    source: notification.querySelector('.notification-detail-source')?.textContent,
+    sourceApplication: notification.querySelector('.notification-detail-application')?.textContent,
     text: document.body.innerText,
     href: location.href,
   };
@@ -336,7 +381,7 @@ def main() -> None:
                 submitted = page.evaluate(f"""
 (async () => {{
   const input = document.querySelector('textarea');
-  const form = document.querySelector('form.input-action');
+  const form = document.querySelector('form.notification-detail-reply');
   input.value = {json.dumps(reply)};
   form.requestSubmit();
   return {{ inputValue: input.value, href: location.href, bodyText: document.body.innerText }};

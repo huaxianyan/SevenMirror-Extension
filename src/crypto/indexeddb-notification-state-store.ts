@@ -47,6 +47,14 @@ export interface MirroredNotificationState {
   actions?: MirroredNotificationAction[];
   appIcon?: MirroredNotificationMedia;
   avatar?: MirroredNotificationMedia;
+  receivedAtUnixMs?: number;
+  viewedRevision?: string;
+}
+
+export interface MirroredNotificationPresentation {
+  state: MirroredNotificationState;
+  isNew: boolean;
+  updatedAtUnixMs: number;
 }
 
 export interface NotificationStateReconciliation {
@@ -67,7 +75,10 @@ interface StoredNotificationSnapshot {
 }
 
 export class IndexedDbNotificationStateStore {
-  constructor(private readonly databaseName = 'syncnotifications-notification-state-v1') {}
+  constructor(
+    private readonly databaseName = 'syncnotifications-notification-state-v1',
+    private readonly now: () => number = Date.now,
+  ) {}
 
   async reconcileUpsert(
     sourceDeviceId: Uint8Array,
@@ -251,6 +262,48 @@ export class IndexedDbNotificationStateStore {
     });
   }
 
+  async listVisibleForPresentation(): Promise<MirroredNotificationPresentation[]> {
+    const states = await this.listVisible();
+    return states.map((state) => ({
+      state,
+      isNew: state.viewedRevision !== state.revision,
+      updatedAtUnixMs: state.receivedAtUnixMs ?? 0,
+    })).sort((left, right) => {
+      const timeOrder = right.updatedAtUnixMs - left.updatedAtUnixMs;
+      if (timeOrder !== 0) return timeOrder;
+      const leftRevision = BigInt(left.state.revision);
+      const rightRevision = BigInt(right.state.revision);
+      return leftRevision === rightRevision ? 0 : rightRevision > leftRevision ? 1 : -1;
+    });
+  }
+
+  async markViewed(entries: Array<{ tuple: string; revision: string }>): Promise<void> {
+    if (entries.length === 0) return;
+    const database = await this.openDatabase();
+    try {
+      const transaction = database.transaction(STORE_NAME, 'readwrite');
+      const completed = transactionCompleted(transaction);
+      const store = transaction.objectStore(STORE_NAME);
+      for (const entry of entries) {
+        const state = await requestResult<MirroredNotificationState | undefined>(store.get(entry.tuple));
+        if (state === undefined) continue;
+        validateStored(state);
+        if (state.phase === 'visible' && state.revision === entry.revision &&
+            state.viewedRevision !== state.revision) {
+          await requestResult(store.put({ ...state, viewedRevision: state.revision }));
+        }
+      }
+      await completed;
+    } finally {
+      database.close();
+    }
+  }
+
+  async unseenCount(): Promise<number> {
+    const states = await this.listVisible();
+    return states.filter((state) => state.viewedRevision !== state.revision).length;
+  }
+
   async listVisible(): Promise<MirroredNotificationState[]> {
     const database = await this.openDatabase();
     try {
@@ -302,6 +355,7 @@ export class IndexedDbNotificationStateStore {
       chromeNotificationId: await chromeNotificationId(sourceDeviceId, incoming.notificationId),
       revision: incoming.revision.toString(),
       payloadSha256: incoming.payloadSha256.slice(),
+      receivedAtUnixMs: this.now(),
     };
     const database = await this.openDatabase();
     try {
@@ -319,6 +373,7 @@ export class IndexedDbNotificationStateStore {
             await completed;
             return { disposition: 'stale', state: copyState(existing) };
           }
+          proposed.viewedRevision = existing.viewedRevision;
           if (comparison === 0) {
             if (existing.phase !== proposed.phase ||
                 !bytesEqual(existing.payloadSha256, proposed.payloadSha256)) {
@@ -399,6 +454,15 @@ function validateStored(state: MirroredNotificationState): void {
   if (state.actions !== undefined) validateStoredActions(state.actions);
   if (state.appIcon !== undefined) validateStoredMedia(state.appIcon);
   if (state.avatar !== undefined) validateStoredMedia(state.avatar);
+  if (state.receivedAtUnixMs !== undefined &&
+      (!Number.isSafeInteger(state.receivedAtUnixMs) || state.receivedAtUnixMs <= 0)) {
+    throw new Error('Stored notification received time is corrupt');
+  }
+  if (state.viewedRevision !== undefined &&
+      (!/^[1-9][0-9]*$/.test(state.viewedRevision) ||
+       BigInt(state.viewedRevision) > BigInt(state.revision))) {
+    throw new Error('Stored notification viewed revision is corrupt');
+  }
 }
 
 function validateStoredSnapshot(snapshot: StoredNotificationSnapshot): void {

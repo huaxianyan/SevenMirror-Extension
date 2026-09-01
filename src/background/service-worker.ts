@@ -119,6 +119,7 @@ transportRuntime = new TransportRuntime(
     );
     if (result.kind === 'notification') {
       await notificationPresenter.present(result.receipt);
+      await updateToolbarBadge();
       if (result.receipt.kind === 'snapshot' &&
           result.receipt.recoveryRequestId !== undefined) {
         await snapshotRecoveryCoordinator.observeManifest(
@@ -179,6 +180,7 @@ transportRuntime = new TransportRuntime(
 );
 
 void recordWorkerStart();
+void updateToolbarBadge().catch(() => undefined);
 void connectTransportWithWatchdog().catch(() => undefined);
 
 chrome.runtime.onInstalled.addListener(async () => {
@@ -313,6 +315,20 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
       void queueActionInvoke(message).then(
         (result) => sendResponse(result),
         () => sendResponse({ queued: false, accepted: false }),
+      );
+      return true;
+
+    case 'get-popup-notifications':
+      void getPopupNotifications().then(
+        (result) => sendResponse(result),
+        () => sendResponse({ state: DEFAULT_CONNECTION_STATE, notifications: [] }),
+      );
+      return true;
+
+    case 'mark-popup-notifications-viewed':
+      void markPopupNotificationsViewed(message).then(
+        () => sendResponse({ marked: true }),
+        () => sendResponse({ marked: false }),
       );
       return true;
 
@@ -585,6 +601,75 @@ async function drainActionInvokes(): Promise<void> {
     // Corrupt local delivery state or encryption failure is not a network outage.
     await transportRuntime.failClosed();
   }
+}
+
+async function getPopupNotifications(): Promise<{
+  state: string;
+  notifications: Array<ReturnType<typeof interactionSummary> & {
+    isNew: boolean;
+    updatedAtUnixMs: number;
+  }>;
+}> {
+  const [stored, presentations, credential] = await Promise.all([
+    chrome.storage.local.get(CONNECTION_STATE_KEY),
+    notificationStateStore.listVisibleForPresentation(),
+    credentialStore.load(),
+  ]);
+  if (credential === undefined) {
+    return {
+      state: stored[CONNECTION_STATE_KEY] ?? DEFAULT_CONNECTION_STATE,
+      notifications: [],
+    };
+  }
+  try {
+    const notifications = [];
+    for (const presentation of presentations) {
+      const sourceName = await businessPeerResolver.resolveNotificationSourceName(
+        credential.workspaceId,
+        credential.deviceId,
+        presentation.state.sourceDeviceId,
+        Date.now(),
+      );
+      if (sourceName === undefined) continue;
+      notifications.push({
+        ...interactionSummary(presentation.state, sourceName),
+        isNew: presentation.isNew,
+        updatedAtUnixMs: presentation.updatedAtUnixMs,
+      });
+    }
+    return {
+      state: stored[CONNECTION_STATE_KEY] ?? DEFAULT_CONNECTION_STATE,
+      notifications,
+    };
+  } finally {
+    credential.authToken.fill(0);
+  }
+}
+
+async function markPopupNotificationsViewed(message: Record<string, unknown>): Promise<void> {
+  if (!Array.isArray(message.notifications) || message.notifications.length > 1_000) return;
+  const entries: Array<{ tuple: string; revision: string }> = [];
+  for (const value of message.notifications) {
+    if (typeof value !== 'object' || value === null ||
+        !('chromeNotificationId' in value) || !('revision' in value) ||
+        typeof value.chromeNotificationId !== 'string' ||
+        typeof value.revision !== 'string') continue;
+    const state = await notificationStateStore.findVisibleByChromeNotificationId(
+      value.chromeNotificationId,
+    );
+    if (state !== undefined && state.revision === value.revision) {
+      entries.push({ tuple: state.tuple, revision: state.revision });
+    }
+  }
+  await notificationStateStore.markViewed(entries);
+  await updateToolbarBadge();
+}
+
+async function updateToolbarBadge(): Promise<void> {
+  const popup = await getPopupNotifications();
+  const unseen = popup.notifications.filter((notification) => notification.isNew).length;
+  await chrome.action.setBadgeBackgroundColor({ color: '#385ca8' });
+  await chrome.action.setBadgeText({ text: unseen === 0 ? '' : unseen > 999 ? '999+' : String(unseen) });
 }
 
 async function openNotificationInteraction(notificationId: string): Promise<void> {

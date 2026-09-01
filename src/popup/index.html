@@ -3,31 +3,29 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title data-i18n="appName">Notification Mirroring</title>
+    <title data-i18n="appName">SevenMirror</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
     <main>
-      <h1 data-i18n="appName">Notification Mirroring</h1>
-      <p id="status" role="status" data-i18n="popupLoading">Loading…</p>
-      <p class="hint" data-i18n="popupBoundary">After trusted-device approval, only notifications created by this app can be synchronized. Notifications from other apps remain on Android.</p>
-      <button id="open-options" type="button" data-i18n="openSettings">Open settings</button>
-      <hr />
-      <section aria-labelledby="lifecycle-title">
-        <h2 id="lifecycle-title" data-i18n="lifecycleTestTitle">Phase 0 lifecycle test</h2>
-        <div class="actions">
-          <button id="create-test" type="button" data-i18n="createTestNotification">Create test notification</button>
-          <button id="clear-test" type="button" data-i18n="clearProgrammatically">Clear programmatically</button>
+      <header class="popup-header">
+        <div>
+          <h1 data-i18n="appName">SevenMirror</h1>
+          <p id="connection-status" class="connection-status" role="status" data-i18n="popupLoading">Loading…</p>
         </div>
-        <p id="worker-starts" data-i18n="workerStartsLoading">Worker starts: loading…</p>
-        <pre id="close-audit" data-i18n="noCloseEvent">No close event recorded.</pre>
-      </section>
-      <hr />
-      <section aria-labelledby="e2ee-title">
-        <h2 id="e2ee-title" data-i18n="e2eeTestTitle">Phase 0 E2EE persistence test</h2>
-        <button id="run-e2ee-test" type="button" data-i18n="runE2eeTest">Run E2EE persistence test</button>
-        <p class="hint" data-i18n="e2eeTestHint">Run again after restarting Chrome. The fingerprint must stay identical; replay is accepted once, then rejected as duplicate.</p>
-        <pre id="e2ee-result" data-i18n="e2eeNotRun">Not run in this browser yet.</pre>
+        <button id="open-options" class="icon-button" type="button" data-i18n-aria-label="openSettings" aria-label="Open settings">⚙</button>
+      </header>
+
+      <section aria-labelledby="notifications-title">
+        <div class="section-heading">
+          <h2 id="notifications-title" data-i18n="popupCurrentNotifications">Current notifications</h2>
+          <span id="notification-count" class="count"></span>
+        </div>
+        <div id="notification-list" class="notification-list"></div>
+        <div id="empty" class="empty" role="status" hidden>
+          <h2 id="empty-title"></h2>
+          <p id="empty-body"></p>
+        </div>
       </section>
     </main>
     <script type="module" src="./main.ts"></script>
