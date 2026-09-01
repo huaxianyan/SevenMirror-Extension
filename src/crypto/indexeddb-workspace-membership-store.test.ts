@@ -15,6 +15,8 @@ const authority = fromHex(vector.authorityPublicKeyHex);
 const certificate = fromHex(vector.certificateEncodedHex);
 const initialRoster = fromHex(vector.initialRosterEncodedHex);
 const revokedRoster = fromHex(vector.revokedRosterEncodedHex);
+const renamedCertificate = fromHex(vector.renamedCertificateEncodedHex);
+const renameRoster = fromHex(vector.renameRosterEncodedHex);
 
 describe('IndexedDbWorkspaceMembershipStore', () => {
   it('persists an immutable authority pin and contiguous roster rollback floor', async () => {
@@ -73,6 +75,37 @@ describe('IndexedDbWorkspaceMembershipStore', () => {
         certificate,
         initialRoster,
       )).rejects.toThrow('stale or non-contiguous');
+    } finally {
+      await store.clear();
+    }
+  });
+
+  it('accepts an exact certified display-name replacement across reconstruction', async () => {
+    const databaseName = `membership-${crypto.randomUUID()}`;
+    const store = new IndexedDbWorkspaceMembershipStore(databaseName);
+    try {
+      await store.pinAuthority(workspaceId, deviceId, authority);
+      await store.reconcileApproved(workspaceId, deviceId, certificate, initialRoster);
+      await expect(store.reconcileApproved(
+        workspaceId, deviceId, renamedCertificate, revokedRoster,
+      )).rejects.toThrow('not active');
+      await expect(store.reconcileApproved(
+        workspaceId, deviceId, renamedCertificate, renameRoster,
+      )).resolves.toBe('applied');
+
+      const recovered = new IndexedDbWorkspaceMembershipStore(databaseName);
+      await expect(recovered.load(workspaceId, deviceId)).resolves.toMatchObject({
+        rosterEpoch: 2n,
+        localDeviceActive: true,
+        signedCertificate: renamedCertificate,
+      });
+      await expect(recovered.listAuthorizedDevices(
+        workspaceId, deviceId, 1_800_000_060_000n,
+      )).resolves.toMatchObject([{
+        displayName: 'Chrome-Renamed',
+        isCurrentDevice: true,
+        accessCurrent: true,
+      }]);
     } finally {
       await store.clear();
     }

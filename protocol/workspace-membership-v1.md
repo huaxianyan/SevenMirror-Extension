@@ -120,7 +120,24 @@ authority_signature = Ed25519.Sign(authority_private_key,
 
 `SignedDeviceCertificate` carries `C`, the exact ID, and the 64-byte signature.
 Certificate IDs are derived rather than random, preventing two identifiers for
-the same canonical authorization statement.
+the same canonical authorization statement. The display name is the single
+workspace-wide device name; clients do not create a second local alias model.
+
+## Device certificate transition
+
+An approved device display-name change replaces its active certificate in the
+next roster. `DeviceCertificateTransition` binds the workspace and device, exact
+previous and replacement certificate IDs, activation roster epoch, preceding
+roster digest, transition reason, and issue time. Version 1 permits only
+`DISPLAY_NAME`.
+
+The replacement certificate MUST preserve the device type, roles, identity
+public key and key ID, expiry, workspace, and device ID. Only `display_name`,
+`issued_at_unix_ms`, and `membership_epoch` may change; the replacement
+membership epoch and issue time equal the transition activation values. The
+old and replacement certificates are never simultaneously active. The signed
+activation roster authenticates the transition, so no local or relay-controlled
+name can override it.
 
 ## Signed workspace roster
 
@@ -133,6 +150,10 @@ revocation record:
   roster body;
 - at most 256 active certificates, strictly sorted by unsigned device-ID bytes;
 - at most one active certificate per device;
+- at most 256 certificate transitions, strictly sorted by unsigned device-ID
+  bytes and absent from epoch 1;
+- each transition identifies the exact active replacement certificate, matches
+  the roster workspace, epoch and previous digest, and uses a supported reason;
 - at most 4096 revocations, strictly sorted by certificate-ID bytes;
 - a certificate ID cannot be both active and revoked;
 - every active certificate matches the roster workspace and has
@@ -151,8 +172,9 @@ authority_signature = Ed25519.Sign(authority_private_key,
                                    roster-signature-domain || R)
 ```
 
-The signature covers the complete active set, revocations, epoch, and previous
-digest. The relay cannot edit roles or remove a member without invalidating it.
+The signature covers the complete active set, certificate transitions,
+revocations, epoch, and previous digest. The relay cannot edit names or roles,
+replace a certificate, or remove a member without invalidating it.
 The accepted trust boundary still permits the authority itself to authorize a
 malicious future recipient.
 
@@ -194,6 +216,10 @@ digest, and canonical signed bytes. It accepts:
 
 - the same epoch only when digest and canonical signed bytes are exact matches;
 - the next epoch only when `previous_roster_digest` equals the stored digest;
+- a local certificate replacement only when the same next roster carries an
+  exact transition from the stored certificate, and semantic comparison proves
+  that only the display name and transition-bound issue/membership fields
+  changed;
 - no lower epoch and no gap without fetching and validating each missing roster.
 
 A newly approved client may bootstrap from a currently signed roster without
@@ -223,7 +249,8 @@ business traffic indefinitely from an unrefreshed roster.
 
 `test-vectors/workspace-membership-v1.json` contains public test-only authority
 seed, device identity scalar, deterministic Base-HPKE challenge ciphertext,
-challenge/proof, signed Chrome certificate, initial roster, and next-epoch
-revoked roster. It fixes HPKE info/encapsulation/ciphertext, all canonical bytes,
-digests, certificate ID, signatures, and previous-roster linkage. None of its
+challenge/proof, signed Chrome certificate, initial roster, next-epoch
+display-name certificate transition, and independent next-epoch revoked roster.
+It fixes HPKE info/encapsulation/ciphertext, all canonical bytes, digests,
+certificate IDs, signatures, and previous-roster linkage. None of its
 keys or secrets may be used outside tests.

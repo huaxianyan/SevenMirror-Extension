@@ -4,6 +4,7 @@ import { ed25519 } from '@noble/curves/ed25519';
 import {
   AuthorityKeyTransitionSchema,
   DeviceCertificateSchema,
+  DeviceCertificateTransitionReason,
   DeviceRole,
   DeviceType,
   IdentityPossessionChallengeSchema,
@@ -14,6 +15,7 @@ import {
   WorkspaceRosterSchema,
   type AuthorityKeyTransition,
   type DeviceCertificate,
+  type DeviceCertificateTransition,
   type IdentityPossessionChallenge,
   type PendingIdentityProof,
   type SignedAuthorityKeyTransition,
@@ -22,7 +24,7 @@ import {
   type WorkspaceRoster,
 } from './generated/membership/v1/membership_pb';
 
-const LIMITS = Object.freeze({ version: 1, id: 16, digest: 32, p256: 65, signature: 64, maxName: 100, maxMessage: 1 << 20, maxActive: 256, maxRevocations: 4096, maxInteger: 0x7fff_ffff_ffff_ffffn, maxChallengeMs: 600_000n });
+const LIMITS = Object.freeze({ version: 1, id: 16, digest: 32, p256: 65, signature: 64, maxName: 100, maxMessage: 1 << 20, maxActive: 256, maxTransitions: 256, maxRevocations: 4096, maxInteger: 0x7fff_ffff_ffff_ffffn, maxChallengeMs: 600_000n });
 const domains = Object.freeze({
   hpkeInfo: 'SyncNotifications-membership-possession-hpke-info-v1\0',
   challengeDigest: 'SyncNotifications-membership-possession-challenge-digest-v1\0',
@@ -271,6 +273,69 @@ function validateCertificate(value: DeviceCertificate): void {
   if (value.issuedAtUnixMs < 1n || value.issuedAtUnixMs > LIMITS.maxInteger || value.expiresAtUnixMs > LIMITS.maxInteger || (value.expiresAtUnixMs !== 0n && value.expiresAtUnixMs <= value.issuedAtUnixMs) || value.membershipEpoch < 1n || value.membershipEpoch > LIMITS.maxInteger) throw new Error('Certificate time or epoch is invalid');
 }
 
+export function verifyDisplayNameCertificateTransition(
+  previous: SignedDeviceCertificate,
+  current: SignedDeviceCertificate,
+  transition: DeviceCertificateTransition,
+): void {
+  const oldCertificate = previous.certificate;
+  const newCertificate = current.certificate;
+  if (!oldCertificate || !newCertificate ||
+      !equal(transition.workspaceId, oldCertificate.workspaceId) ||
+      !equal(transition.deviceId, oldCertificate.deviceId) ||
+      !equal(oldCertificate.workspaceId, newCertificate.workspaceId) ||
+      !equal(oldCertificate.deviceId, newCertificate.deviceId) ||
+      !equal(transition.previousCertificateId, previous.certificateId) ||
+      !equal(transition.newCertificateId, current.certificateId) ||
+      transition.reason !== DeviceCertificateTransitionReason.DISPLAY_NAME ||
+      oldCertificate.displayName === newCertificate.displayName ||
+      newCertificate.membershipEpoch !== transition.activationRosterEpoch ||
+      newCertificate.issuedAtUnixMs !== transition.issuedAtUnixMs ||
+      oldCertificate.protocolVersion !== newCertificate.protocolVersion ||
+      oldCertificate.deviceType !== newCertificate.deviceType ||
+      oldCertificate.expiresAtUnixMs !== newCertificate.expiresAtUnixMs ||
+      !equal(oldCertificate.identityPublicKey, newCertificate.identityPublicKey) ||
+      !equal(oldCertificate.identityKeyId, newCertificate.identityKeyId) ||
+      oldCertificate.roles.length !== newCertificate.roles.length ||
+      oldCertificate.roles.some((role, index) => role !== newCertificate.roles[index])) {
+    throw new Error('Device display-name transition binding is invalid');
+  }
+}
+
+export function verifyRosterCertificateTransitions(
+  previous: SignedWorkspaceRoster,
+  current: SignedWorkspaceRoster,
+): void {
+  const previousBody = previous.roster;
+  const currentBody = current.roster;
+  if (!previousBody || !currentBody || currentBody.rosterEpoch !== previousBody.rosterEpoch + 1n ||
+      !equal(currentBody.previousRosterDigest, previous.rosterDigest)) {
+    throw new Error('Certificate transition requires contiguous workspace rosters');
+  }
+  const oldByDevice = new Map(previousBody.activeCertificates.map((certificate) =>
+    [hex(certificate.certificate!.deviceId), certificate]));
+  const currentByDevice = new Map(currentBody.activeCertificates.map((certificate) =>
+    [hex(certificate.certificate!.deviceId), certificate]));
+  const transitions = new Map(currentBody.certificateTransitions.map((transition) =>
+    [hex(transition.deviceId), transition]));
+  for (const [device, oldCertificate] of oldByDevice) {
+    const currentCertificate = currentByDevice.get(device);
+    if (currentCertificate && !equal(oldCertificate.certificateId, currentCertificate.certificateId)) {
+      const transition = transitions.get(device);
+      if (!transition) throw new Error('Device certificate replacement requires an exact transition');
+      verifyDisplayNameCertificateTransition(oldCertificate, currentCertificate, transition);
+    }
+  }
+  for (const [device, transition] of transitions) {
+    const oldCertificate = oldByDevice.get(device);
+    const currentCertificate = currentByDevice.get(device);
+    if (!oldCertificate || !currentCertificate) {
+      throw new Error('Certificate transition does not replace an active device certificate');
+    }
+    verifyDisplayNameCertificateTransition(oldCertificate, currentCertificate, transition);
+  }
+}
+
 function validateSignedRosterStructure(value: SignedWorkspaceRoster): void {
   rejectUnknown(value);
   if (!value.roster) throw new Error('Workspace roster is required');
@@ -283,7 +348,10 @@ function validateRoster(value: WorkspaceRoster): void {
   rejectUnknown(value);
   if (value.protocolVersion !== LIMITS.version || value.workspaceId.byteLength !== LIMITS.id || allZero(value.workspaceId) || value.rosterEpoch < 1n || value.rosterEpoch > LIMITS.maxInteger) throw new Error('Roster version, workspace, or epoch is invalid');
   if (value.previousRosterDigest.byteLength !== LIMITS.digest || (value.rosterEpoch === 1n ? !allZero(value.previousRosterDigest) : allZero(value.previousRosterDigest))) throw new Error('Previous roster digest is invalid');
-  if (value.activeCertificates.length > LIMITS.maxActive || value.revocations.length > LIMITS.maxRevocations) throw new Error('Roster entry limit exceeded');
+  if (value.activeCertificates.length > LIMITS.maxActive || value.certificateTransitions.length > LIMITS.maxTransitions ||
+      value.revocations.length > LIMITS.maxRevocations || (value.rosterEpoch === 1n && value.certificateTransitions.length !== 0)) {
+    throw new Error('Roster entry limit or certificate transition epoch is invalid');
+  }
   let previousDevice: Uint8Array | undefined;
   const activeIds = new Set<string>();
   for (const signed of value.activeCertificates) {
@@ -292,6 +360,27 @@ function validateRoster(value: WorkspaceRoster): void {
     if (!equal(certificate.workspaceId, value.workspaceId) || certificate.membershipEpoch > value.rosterEpoch || (previousDevice && compare(previousDevice, certificate.deviceId) >= 0)) throw new Error('Active certificate roster binding or order is invalid');
     previousDevice = certificate.deviceId;
     activeIds.add(hex(signed.certificateId));
+  }
+  let previousTransitionDevice: Uint8Array | undefined;
+  for (const transition of value.certificateTransitions) {
+    rejectUnknown(transition);
+    requireNonZero(transition.workspaceId, LIMITS.id, 'Certificate transition workspace ID');
+    requireNonZero(transition.deviceId, LIMITS.id, 'Certificate transition device ID');
+    requireNonZero(transition.previousCertificateId, LIMITS.digest, 'Previous certificate ID');
+    requireNonZero(transition.newCertificateId, LIMITS.digest, 'Replacement certificate ID');
+    const active = value.activeCertificates.find((certificate) =>
+      equal(certificate.certificate!.deviceId, transition.deviceId));
+    if (transition.protocolVersion !== LIMITS.version || !equal(transition.workspaceId, value.workspaceId) ||
+        equal(transition.previousCertificateId, transition.newCertificateId) ||
+        transition.activationRosterEpoch !== value.rosterEpoch ||
+        !equal(transition.previousRosterDigest, value.previousRosterDigest) ||
+        transition.reason !== DeviceCertificateTransitionReason.DISPLAY_NAME ||
+        transition.issuedAtUnixMs < 1n || transition.issuedAtUnixMs > LIMITS.maxInteger ||
+        (previousTransitionDevice && compare(previousTransitionDevice, transition.deviceId) >= 0) ||
+        !active || !equal(active.certificateId, transition.newCertificateId)) {
+      throw new Error('Roster certificate transition is invalid');
+    }
+    previousTransitionDevice = transition.deviceId;
   }
   let previousId: Uint8Array | undefined;
   for (const revoked of value.revocations) {

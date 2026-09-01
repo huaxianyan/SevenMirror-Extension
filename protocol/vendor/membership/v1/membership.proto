@@ -54,6 +54,21 @@ message RevokedCertificate {
   uint64 revoked_at_unix_ms = 3;
 }
 
+// DeviceCertificateTransition authorizes replacement of one active
+// certificate without changing the device identity or access roles. Version 1
+// only permits an authority-controlled display-name change.
+message DeviceCertificateTransition {
+  uint32 protocol_version = 1;
+  bytes workspace_id = 2;
+  bytes device_id = 3;
+  bytes previous_certificate_id = 4;
+  bytes new_certificate_id = 5;
+  uint64 activation_roster_epoch = 6;
+  bytes previous_roster_digest = 7;
+  DeviceCertificateTransitionReason reason = 8;
+  uint64 issued_at_unix_ms = 9;
+}
+
 message WorkspaceRoster {
   uint32 protocol_version = 1;
   bytes workspace_id = 2;
@@ -61,6 +76,7 @@ message WorkspaceRoster {
   bytes previous_roster_digest = 4;
   repeated SignedDeviceCertificate active_certificates = 5;
   repeated RevokedCertificate revocations = 6;
+  repeated DeviceCertificateTransition certificate_transitions = 7;
 }
 
 message SignedWorkspaceRoster {
@@ -89,6 +105,11 @@ message SignedAuthorityKeyTransition {
   bytes transition_digest = 2;
   bytes previous_authority_signature = 3;
   bytes new_authority_signature = 4;
+}
+
+enum DeviceCertificateTransitionReason {
+  DEVICE_CERTIFICATE_TRANSITION_REASON_UNSPECIFIED = 0;
+  DEVICE_CERTIFICATE_TRANSITION_REASON_DISPLAY_NAME = 1;
 }
 
 enum DeviceType {

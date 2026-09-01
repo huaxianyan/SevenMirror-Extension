@@ -10,6 +10,8 @@ import {
   decodeSignedWorkspaceRoster,
   encodePendingIdentityProof,
   openIdentityPossessionChallenge,
+  verifyDisplayNameCertificateTransition,
+  verifyRosterCertificateTransitions,
   verifySignedAuthorityKeyTransition,
   verifySignedDeviceCertificate,
   verifySignedWorkspaceRoster,
@@ -44,6 +46,25 @@ describe('Workspace Membership v1', () => {
     await expect(verifySignedWorkspaceRoster(initial, authority)).resolves.toBeUndefined();
     await expect(verifySignedWorkspaceRoster(revoked, authority)).resolves.toBeUndefined();
     expect(revoked.roster?.previousRosterDigest).toEqual(initial.rosterDigest);
+
+    const renamedCertificate = decodeSignedDeviceCertificate(fromHex(vector.renamedCertificateEncodedHex));
+    const renameRoster = decodeSignedWorkspaceRoster(fromHex(vector.renameRosterEncodedHex));
+    await expect(verifySignedDeviceCertificate(renamedCertificate, authority)).resolves.toBeUndefined();
+    await expect(verifySignedWorkspaceRoster(renameRoster, authority)).resolves.toBeUndefined();
+    expect(renameRoster.rosterDigest).toEqual(fromHex(vector.renameRosterDigestHex));
+    expect(renameRoster.roster?.certificateTransitions).toHaveLength(1);
+    expect(() => verifyRosterCertificateTransitions(initial, renameRoster)).not.toThrow();
+    expect(() => verifyDisplayNameCertificateTransition(
+      certificate,
+      renamedCertificate,
+      renameRoster.roster!.certificateTransitions[0],
+    )).not.toThrow();
+    renamedCertificate.certificate!.identityPublicKey[1] ^= 1;
+    expect(() => verifyDisplayNameCertificateTransition(
+      certificate,
+      renamedCertificate,
+      renameRoster.roster!.certificateTransitions[0],
+    )).toThrow('binding is invalid');
 
     const transition = decodeSignedAuthorityKeyTransition(fromHex(vector.authorityTransitionEncodedHex));
     await expect(verifySignedAuthorityKeyTransition(transition)).resolves.toBeUndefined();

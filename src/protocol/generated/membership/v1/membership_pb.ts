@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file membership/v1/membership.proto.
  */
 export const file_membership_v1_membership: GenFile = /*@__PURE__*/
-  fileDesc("Ch5tZW1iZXJzaGlwL3YxL21lbWJlcnNoaXAucHJvdG8SJG5vdGlmaWNhdGlvbi5taXJyb3JpbmcubWVtYmVyc2hpcC52MSLKAQobSWRlbnRpdHlQb3NzZXNzaW9uQ2hhbGxlbmdlEhgKEHByb3RvY29sX3ZlcnNpb24YASABKA0SFAoMd29ya3NwYWNlX2lkGAIgASgMEhEKCWRldmljZV9pZBgDIAEoDBIXCg9pZGVudGl0eV9rZXlfaWQYBCABKAwSGAoQY2hhbGxlbmdlX3NlY3JldBgFIAEoDBIZChFpc3N1ZWRfYXRfdW5peF9tcxgGIAEoBBIaChJleHBpcmVzX2F0X3VuaXhfbXMYByABKAQipgEKFFBlbmRpbmdJZGVudGl0eVByb29mEhgKEHByb3RvY29sX3ZlcnNpb24YASABKA0SFAoMd29ya3NwYWNlX2lkGAIgASgMEhEKCWRldmljZV9pZBgDIAEoDBIXCg9pZGVudGl0eV9rZXlfaWQYBCABKAwSGAoQY2hhbGxlbmdlX2RpZ2VzdBgFIAEoDBIYChBjaGFsbGVuZ2Vfc2VjcmV0GAYgASgMIvsCChFEZXZpY2VDZXJ0aWZpY2F0ZRIYChBwcm90b2NvbF92ZXJzaW9uGAEgASgNEhQKDHdvcmtzcGFjZV9pZBgCIAEoDBIRCglkZXZpY2VfaWQYAyABKAwSRQoLZGV2aWNlX3R5cGUYBCABKA4yMC5ub3RpZmljYXRpb24ubWlycm9yaW5nLm1lbWJlcnNoaXAudjEuRGV2aWNlVHlwZRIUCgxkaXNwbGF5X25hbWUYBSABKAkSPwoFcm9sZXMYBiADKA4yMC5ub3RpZmljYXRpb24ubWlycm9yaW5nLm1lbWJlcnNoaXAudjEuRGV2aWNlUm9sZRIbChNpZGVudGl0eV9wdWJsaWNfa2V5GAcgASgMEhcKD2lkZW50aXR5X2tleV9pZBgIIAEoDBIZChFpc3N1ZWRfYXRfdW5peF9tcxgJIAEoBBIaChJleHBpcmVzX2F0X3VuaXhfbXMYCiABKAQSGAoQbWVtYmVyc2hpcF9lcG9jaBgLIAEoBCKcAQoXU2lnbmVkRGV2aWNlQ2VydGlmaWNhdGUSTAoLY2VydGlmaWNhdGUYASABKAsyNy5ub3RpZmljYXRpb24ubWlycm9yaW5nLm1lbWJlcnNoaXAudjEuRGV2aWNlQ2VydGlmaWNhdGUSFgoOY2VydGlmaWNhdGVfaWQYAiABKAwSGwoTYXV0aG9yaXR5X3NpZ25hdHVyZRgDIAEoDCJbChJSZXZva2VkQ2VydGlmaWNhdGUSFgoOY2VydGlmaWNhdGVfaWQYASABKAwSEQoJZGV2aWNlX2lkGAIgASgMEhoKEnJldm9rZWRfYXRfdW5peF9tcxgDIAEoBCKiAgoPV29ya3NwYWNlUm9zdGVyEhgKEHByb3RvY29sX3ZlcnNpb24YASABKA0SFAoMd29ya3NwYWNlX2lkGAIgASgMEhQKDHJvc3Rlcl9lcG9jaBgDIAEoBBIeChZwcmV2aW91c19yb3N0ZXJfZGlnZXN0GAQgASgMEloKE2FjdGl2ZV9jZXJ0aWZpY2F0ZXMYBSADKAsyPS5ub3RpZmljYXRpb24ubWlycm9yaW5nLm1lbWJlcnNoaXAudjEuU2lnbmVkRGV2aWNlQ2VydGlmaWNhdGUSTQoLcmV2b2NhdGlvbnMYBiADKAsyOC5ub3RpZmljYXRpb24ubWlycm9yaW5nLm1lbWJlcnNoaXAudjEuUmV2b2tlZENlcnRpZmljYXRlIpIBChVTaWduZWRXb3Jrc3BhY2VSb3N0ZXISRQoGcm9zdGVyGAEgASgLMjUubm90aWZpY2F0aW9uLm1pcnJvcmluZy5tZW1iZXJzaGlwLnYxLldvcmtzcGFjZVJvc3RlchIVCg1yb3N0ZXJfZGlnZXN0GAIgASgMEhsKE2F1dGhvcml0eV9zaWduYXR1cmUYAyABKAwiqwIKFkF1dGhvcml0eUtleVRyYW5zaXRpb24SGAoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDRIUCgx3b3Jrc3BhY2VfaWQYAiABKAwSGAoQdHJhbnNpdGlvbl9lcG9jaBgDIAEoBBIiChpwcmV2aW91c190cmFuc2l0aW9uX2RpZ2VzdBgEIAEoDBIlCh1wcmV2aW91c19hdXRob3JpdHlfcHVibGljX2tleRgFIAEoDBIgChhuZXdfYXV0aG9yaXR5X3B1YmxpY19rZXkYBiABKAwSHwoXYWN0aXZhdGlvbl9yb3N0ZXJfZXBvY2gYByABKAQSHgoWcHJldmlvdXNfcm9zdGVyX2RpZ2VzdBgIIAEoDBIZChFpc3N1ZWRfYXRfdW5peF9tcxgJIAEoBCLSAQocU2lnbmVkQXV0aG9yaXR5S2V5VHJhbnNpdGlvbhJQCgp0cmFuc2l0aW9uGAEgASgLMjwubm90aWZpY2F0aW9uLm1pcnJvcmluZy5tZW1iZXJzaGlwLnYxLkF1dGhvcml0eUtleVRyYW5zaXRpb24SGQoRdHJhbnNpdGlvbl9kaWdlc3QYAiABKAwSJAoccHJldmlvdXNfYXV0aG9yaXR5X3NpZ25hdHVyZRgDIAEoDBIfChduZXdfYXV0aG9yaXR5X3NpZ25hdHVyZRgEIAEoDCpaCgpEZXZpY2VUeXBlEhsKF0RFVklDRV9UWVBFX1VOU1BFQ0lGSUVEEAASFwoTREVWSUNFX1RZUEVfQU5EUk9JRBABEhYKEkRFVklDRV9UWVBFX0NIUk9NRRACKsEBCgpEZXZpY2VSb2xlEhsKF0RFVklDRV9ST0xFX1VOU1BFQ0lGSUVEEAASIgoeREVWSUNFX1JPTEVfU0VORF9OT1RJRklDQVRJT05TEAESJQohREVWSUNFX1JPTEVfUkVDRUlWRV9OT1RJRklDQVRJT05TEAISKwonREVWSUNFX1JPTEVfSU5WT0tFX05PVElGSUNBVElPTl9BQ1RJT05TEAMSHgoaREVWSUNFX1JPTEVfTUFOQUdFX0RFVklDRVMQBEKtAQo6ZGV2Lm5vdGlmaWNhdGlvbm1pcnJvcmluZy5wcm90b2NvbC5nZW5lcmF0ZWQubWVtYmVyc2hpcC52MUIPTWVtYmVyc2hpcFByb3RvUAFaXGdpdGh1Yi5jb20vaHVheGlhbnlhbi9TeW5jTm90aWZpY2F0aW9ucy1TZXJ2ZXIvcHJvdG9jb2wvZ2VuZXJhdGVkL21lbWJlcnNoaXAvdjE7bWVtYmVyc2hpcHYxYgZwcm90bzM");
+  fileDesc("Ch5tZW1iZXJzaGlwL3YxL21lbWJlcnNoaXAucHJvdG8SJG5vdGlmaWNhdGlvbi5taXJyb3JpbmcubWVtYmVyc2hpcC52MSLKAQobSWRlbnRpdHlQb3NzZXNzaW9uQ2hhbGxlbmdlEhgKEHByb3RvY29sX3ZlcnNpb24YASABKA0SFAoMd29ya3NwYWNlX2lkGAIgASgMEhEKCWRldmljZV9pZBgDIAEoDBIXCg9pZGVudGl0eV9rZXlfaWQYBCABKAwSGAoQY2hhbGxlbmdlX3NlY3JldBgFIAEoDBIZChFpc3N1ZWRfYXRfdW5peF9tcxgGIAEoBBIaChJleHBpcmVzX2F0X3VuaXhfbXMYByABKAQipgEKFFBlbmRpbmdJZGVudGl0eVByb29mEhgKEHByb3RvY29sX3ZlcnNpb24YASABKA0SFAoMd29ya3NwYWNlX2lkGAIgASgMEhEKCWRldmljZV9pZBgDIAEoDBIXCg9pZGVudGl0eV9rZXlfaWQYBCABKAwSGAoQY2hhbGxlbmdlX2RpZ2VzdBgFIAEoDBIYChBjaGFsbGVuZ2Vfc2VjcmV0GAYgASgMIvsCChFEZXZpY2VDZXJ0aWZpY2F0ZRIYChBwcm90b2NvbF92ZXJzaW9uGAEgASgNEhQKDHdvcmtzcGFjZV9pZBgCIAEoDBIRCglkZXZpY2VfaWQYAyABKAwSRQoLZGV2aWNlX3R5cGUYBCABKA4yMC5ub3RpZmljYXRpb24ubWlycm9yaW5nLm1lbWJlcnNoaXAudjEuRGV2aWNlVHlwZRIUCgxkaXNwbGF5X25hbWUYBSABKAkSPwoFcm9sZXMYBiADKA4yMC5ub3RpZmljYXRpb24ubWlycm9yaW5nLm1lbWJlcnNoaXAudjEuRGV2aWNlUm9sZRIbChNpZGVudGl0eV9wdWJsaWNfa2V5GAcgASgMEhcKD2lkZW50aXR5X2tleV9pZBgIIAEoDBIZChFpc3N1ZWRfYXRfdW5peF9tcxgJIAEoBBIaChJleHBpcmVzX2F0X3VuaXhfbXMYCiABKAQSGAoQbWVtYmVyc2hpcF9lcG9jaBgLIAEoBCKcAQoXU2lnbmVkRGV2aWNlQ2VydGlmaWNhdGUSTAoLY2VydGlmaWNhdGUYASABKAsyNy5ub3RpZmljYXRpb24ubWlycm9yaW5nLm1lbWJlcnNoaXAudjEuRGV2aWNlQ2VydGlmaWNhdGUSFgoOY2VydGlmaWNhdGVfaWQYAiABKAwSGwoTYXV0aG9yaXR5X3NpZ25hdHVyZRgDIAEoDCJbChJSZXZva2VkQ2VydGlmaWNhdGUSFgoOY2VydGlmaWNhdGVfaWQYASABKAwSEQoJZGV2aWNlX2lkGAIgASgMEhoKEnJldm9rZWRfYXRfdW5peF9tcxgDIAEoBCLSAgobRGV2aWNlQ2VydGlmaWNhdGVUcmFuc2l0aW9uEhgKEHByb3RvY29sX3ZlcnNpb24YASABKA0SFAoMd29ya3NwYWNlX2lkGAIgASgMEhEKCWRldmljZV9pZBgDIAEoDBIfChdwcmV2aW91c19jZXJ0aWZpY2F0ZV9pZBgEIAEoDBIaChJuZXdfY2VydGlmaWNhdGVfaWQYBSABKAwSHwoXYWN0aXZhdGlvbl9yb3N0ZXJfZXBvY2gYBiABKAQSHgoWcHJldmlvdXNfcm9zdGVyX2RpZ2VzdBgHIAEoDBJXCgZyZWFzb24YCCABKA4yRy5ub3RpZmljYXRpb24ubWlycm9yaW5nLm1lbWJlcnNoaXAudjEuRGV2aWNlQ2VydGlmaWNhdGVUcmFuc2l0aW9uUmVhc29uEhkKEWlzc3VlZF9hdF91bml4X21zGAkgASgEIoYDCg9Xb3Jrc3BhY2VSb3N0ZXISGAoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDRIUCgx3b3Jrc3BhY2VfaWQYAiABKAwSFAoMcm9zdGVyX2Vwb2NoGAMgASgEEh4KFnByZXZpb3VzX3Jvc3Rlcl9kaWdlc3QYBCABKAwSWgoTYWN0aXZlX2NlcnRpZmljYXRlcxgFIAMoCzI9Lm5vdGlmaWNhdGlvbi5taXJyb3JpbmcubWVtYmVyc2hpcC52MS5TaWduZWREZXZpY2VDZXJ0aWZpY2F0ZRJNCgtyZXZvY2F0aW9ucxgGIAMoCzI4Lm5vdGlmaWNhdGlvbi5taXJyb3JpbmcubWVtYmVyc2hpcC52MS5SZXZva2VkQ2VydGlmaWNhdGUSYgoXY2VydGlmaWNhdGVfdHJhbnNpdGlvbnMYByADKAsyQS5ub3RpZmljYXRpb24ubWlycm9yaW5nLm1lbWJlcnNoaXAudjEuRGV2aWNlQ2VydGlmaWNhdGVUcmFuc2l0aW9uIpIBChVTaWduZWRXb3Jrc3BhY2VSb3N0ZXISRQoGcm9zdGVyGAEgASgLMjUubm90aWZpY2F0aW9uLm1pcnJvcmluZy5tZW1iZXJzaGlwLnYxLldvcmtzcGFjZVJvc3RlchIVCg1yb3N0ZXJfZGlnZXN0GAIgASgMEhsKE2F1dGhvcml0eV9zaWduYXR1cmUYAyABKAwiqwIKFkF1dGhvcml0eUtleVRyYW5zaXRpb24SGAoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDRIUCgx3b3Jrc3BhY2VfaWQYAiABKAwSGAoQdHJhbnNpdGlvbl9lcG9jaBgDIAEoBBIiChpwcmV2aW91c190cmFuc2l0aW9uX2RpZ2VzdBgEIAEoDBIlCh1wcmV2aW91c19hdXRob3JpdHlfcHVibGljX2tleRgFIAEoDBIgChhuZXdfYXV0aG9yaXR5X3B1YmxpY19rZXkYBiABKAwSHwoXYWN0aXZhdGlvbl9yb3N0ZXJfZXBvY2gYByABKAQSHgoWcHJldmlvdXNfcm9zdGVyX2RpZ2VzdBgIIAEoDBIZChFpc3N1ZWRfYXRfdW5peF9tcxgJIAEoBCLSAQocU2lnbmVkQXV0aG9yaXR5S2V5VHJhbnNpdGlvbhJQCgp0cmFuc2l0aW9uGAEgASgLMjwubm90aWZpY2F0aW9uLm1pcnJvcmluZy5tZW1iZXJzaGlwLnYxLkF1dGhvcml0eUtleVRyYW5zaXRpb24SGQoRdHJhbnNpdGlvbl9kaWdlc3QYAiABKAwSJAoccHJldmlvdXNfYXV0aG9yaXR5X3NpZ25hdHVyZRgDIAEoDBIfChduZXdfYXV0aG9yaXR5X3NpZ25hdHVyZRgEIAEoDCqQAQohRGV2aWNlQ2VydGlmaWNhdGVUcmFuc2l0aW9uUmVhc29uEjQKMERFVklDRV9DRVJUSUZJQ0FURV9UUkFOU0lUSU9OX1JFQVNPTl9VTlNQRUNJRklFRBAAEjUKMURFVklDRV9DRVJUSUZJQ0FURV9UUkFOU0lUSU9OX1JFQVNPTl9ESVNQTEFZX05BTUUQASpaCgpEZXZpY2VUeXBlEhsKF0RFVklDRV9UWVBFX1VOU1BFQ0lGSUVEEAASFwoTREVWSUNFX1RZUEVfQU5EUk9JRBABEhYKEkRFVklDRV9UWVBFX0NIUk9NRRACKsEBCgpEZXZpY2VSb2xlEhsKF0RFVklDRV9ST0xFX1VOU1BFQ0lGSUVEEAASIgoeREVWSUNFX1JPTEVfU0VORF9OT1RJRklDQVRJT05TEAESJQohREVWSUNFX1JPTEVfUkVDRUlWRV9OT1RJRklDQVRJT05TEAISKwonREVWSUNFX1JPTEVfSU5WT0tFX05PVElGSUNBVElPTl9BQ1RJT05TEAMSHgoaREVWSUNFX1JPTEVfTUFOQUdFX0RFVklDRVMQBEKtAQo6ZGV2Lm5vdGlmaWNhdGlvbm1pcnJvcmluZy5wcm90b2NvbC5nZW5lcmF0ZWQubWVtYmVyc2hpcC52MUIPTWVtYmVyc2hpcFByb3RvUAFaXGdpdGh1Yi5jb20vaHVheGlhbnlhbi9TeW5jTm90aWZpY2F0aW9ucy1TZXJ2ZXIvcHJvdG9jb2wvZ2VuZXJhdGVkL21lbWJlcnNoaXAvdjE7bWVtYmVyc2hpcHYxYgZwcm90bzM");
 
 /**
  * IdentityPossessionChallenge is Base-HPKE encrypted to the proposed device
@@ -226,6 +226,67 @@ export const RevokedCertificateSchema: GenMessage<RevokedCertificate> = /*@__PUR
   messageDesc(file_membership_v1_membership, 4);
 
 /**
+ * DeviceCertificateTransition authorizes replacement of one active
+ * certificate without changing the device identity or access roles. Version 1
+ * only permits an authority-controlled display-name change.
+ *
+ * @generated from message notification.mirroring.membership.v1.DeviceCertificateTransition
+ */
+export type DeviceCertificateTransition = Message<"notification.mirroring.membership.v1.DeviceCertificateTransition"> & {
+  /**
+   * @generated from field: uint32 protocol_version = 1;
+   */
+  protocolVersion: number;
+
+  /**
+   * @generated from field: bytes workspace_id = 2;
+   */
+  workspaceId: Uint8Array;
+
+  /**
+   * @generated from field: bytes device_id = 3;
+   */
+  deviceId: Uint8Array;
+
+  /**
+   * @generated from field: bytes previous_certificate_id = 4;
+   */
+  previousCertificateId: Uint8Array;
+
+  /**
+   * @generated from field: bytes new_certificate_id = 5;
+   */
+  newCertificateId: Uint8Array;
+
+  /**
+   * @generated from field: uint64 activation_roster_epoch = 6;
+   */
+  activationRosterEpoch: bigint;
+
+  /**
+   * @generated from field: bytes previous_roster_digest = 7;
+   */
+  previousRosterDigest: Uint8Array;
+
+  /**
+   * @generated from field: notification.mirroring.membership.v1.DeviceCertificateTransitionReason reason = 8;
+   */
+  reason: DeviceCertificateTransitionReason;
+
+  /**
+   * @generated from field: uint64 issued_at_unix_ms = 9;
+   */
+  issuedAtUnixMs: bigint;
+};
+
+/**
+ * Describes the message notification.mirroring.membership.v1.DeviceCertificateTransition.
+ * Use `create(DeviceCertificateTransitionSchema)` to create a new message.
+ */
+export const DeviceCertificateTransitionSchema: GenMessage<DeviceCertificateTransition> = /*@__PURE__*/
+  messageDesc(file_membership_v1_membership, 5);
+
+/**
  * @generated from message notification.mirroring.membership.v1.WorkspaceRoster
  */
 export type WorkspaceRoster = Message<"notification.mirroring.membership.v1.WorkspaceRoster"> & {
@@ -258,6 +319,11 @@ export type WorkspaceRoster = Message<"notification.mirroring.membership.v1.Work
    * @generated from field: repeated notification.mirroring.membership.v1.RevokedCertificate revocations = 6;
    */
   revocations: RevokedCertificate[];
+
+  /**
+   * @generated from field: repeated notification.mirroring.membership.v1.DeviceCertificateTransition certificate_transitions = 7;
+   */
+  certificateTransitions: DeviceCertificateTransition[];
 };
 
 /**
@@ -265,7 +331,7 @@ export type WorkspaceRoster = Message<"notification.mirroring.membership.v1.Work
  * Use `create(WorkspaceRosterSchema)` to create a new message.
  */
 export const WorkspaceRosterSchema: GenMessage<WorkspaceRoster> = /*@__PURE__*/
-  messageDesc(file_membership_v1_membership, 5);
+  messageDesc(file_membership_v1_membership, 6);
 
 /**
  * @generated from message notification.mirroring.membership.v1.SignedWorkspaceRoster
@@ -292,7 +358,7 @@ export type SignedWorkspaceRoster = Message<"notification.mirroring.membership.v
  * Use `create(SignedWorkspaceRosterSchema)` to create a new message.
  */
 export const SignedWorkspaceRosterSchema: GenMessage<SignedWorkspaceRoster> = /*@__PURE__*/
-  messageDesc(file_membership_v1_membership, 6);
+  messageDesc(file_membership_v1_membership, 7);
 
 /**
  * AuthorityKeyTransition authorizes exactly one forward-only authority change.
@@ -353,7 +419,7 @@ export type AuthorityKeyTransition = Message<"notification.mirroring.membership.
  * Use `create(AuthorityKeyTransitionSchema)` to create a new message.
  */
 export const AuthorityKeyTransitionSchema: GenMessage<AuthorityKeyTransition> = /*@__PURE__*/
-  messageDesc(file_membership_v1_membership, 7);
+  messageDesc(file_membership_v1_membership, 8);
 
 /**
  * @generated from message notification.mirroring.membership.v1.SignedAuthorityKeyTransition
@@ -385,7 +451,28 @@ export type SignedAuthorityKeyTransition = Message<"notification.mirroring.membe
  * Use `create(SignedAuthorityKeyTransitionSchema)` to create a new message.
  */
 export const SignedAuthorityKeyTransitionSchema: GenMessage<SignedAuthorityKeyTransition> = /*@__PURE__*/
-  messageDesc(file_membership_v1_membership, 8);
+  messageDesc(file_membership_v1_membership, 9);
+
+/**
+ * @generated from enum notification.mirroring.membership.v1.DeviceCertificateTransitionReason
+ */
+export enum DeviceCertificateTransitionReason {
+  /**
+   * @generated from enum value: DEVICE_CERTIFICATE_TRANSITION_REASON_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: DEVICE_CERTIFICATE_TRANSITION_REASON_DISPLAY_NAME = 1;
+   */
+  DISPLAY_NAME = 1,
+}
+
+/**
+ * Describes the enum notification.mirroring.membership.v1.DeviceCertificateTransitionReason.
+ */
+export const DeviceCertificateTransitionReasonSchema: GenEnum<DeviceCertificateTransitionReason> = /*@__PURE__*/
+  enumDesc(file_membership_v1_membership, 0);
 
 /**
  * @generated from enum notification.mirroring.membership.v1.DeviceType
@@ -411,7 +498,7 @@ export enum DeviceType {
  * Describes the enum notification.mirroring.membership.v1.DeviceType.
  */
 export const DeviceTypeSchema: GenEnum<DeviceType> = /*@__PURE__*/
-  enumDesc(file_membership_v1_membership, 0);
+  enumDesc(file_membership_v1_membership, 1);
 
 /**
  * @generated from enum notification.mirroring.membership.v1.DeviceRole
@@ -447,5 +534,5 @@ export enum DeviceRole {
  * Describes the enum notification.mirroring.membership.v1.DeviceRole.
  */
 export const DeviceRoleSchema: GenEnum<DeviceRole> = /*@__PURE__*/
-  enumDesc(file_membership_v1_membership, 1);
+  enumDesc(file_membership_v1_membership, 2);
 

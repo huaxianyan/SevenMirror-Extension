@@ -3,6 +3,7 @@ import {
   decodeSignedDeviceCertificate,
   decodeSignedWorkspaceRoster,
   encodeSignedDeviceCertificate,
+  verifyRosterCertificateTransitions,
   verifySignedAuthorityKeyTransition,
   verifySignedDeviceCertificate,
   verifySignedWorkspaceRoster,
@@ -113,19 +114,20 @@ export class IndexedDbWorkspaceMembershipStore {
         !equal(certificate.certificate.deviceId, deviceId)) {
       throw new Error('Device certificate is not bound to this local device');
     }
-    if (observed.signedCertificate !== undefined &&
-        !equal(observed.signedCertificate, signedCertificate)) {
-      throw new Error('Device certificate replacement requires a higher-level membership transition');
-    }
     const roster = decodeSignedWorkspaceRoster(signedRoster);
     await verifySignedWorkspaceRoster(roster, observed.authorityPublicKey);
     if (!roster.roster || !equal(roster.roster.workspaceId, workspaceId)) {
       throw new Error('Workspace roster is not bound to the pinned workspace');
     }
     const epoch = roster.roster.rosterEpoch;
-    const localActive = roster.roster.activeCertificates.some((item) =>
-      equal(item.certificateId, certificate.certificateId) &&
-      equal(encodeSignedDeviceCertificate(item), signedCertificate));
+    const localRosterCertificate = roster.roster.activeCertificates.find((item) =>
+      item.certificate !== undefined && equal(item.certificate.deviceId, deviceId));
+    if (localRosterCertificate !== undefined &&
+        (!equal(localRosterCertificate.certificateId, certificate.certificateId) ||
+         !equal(encodeSignedDeviceCertificate(localRosterCertificate), signedCertificate))) {
+      throw new Error('Roster local certificate does not match the proposed replacement');
+    }
+    const localActive = localRosterCertificate !== undefined;
     let disposition: 'applied' | 'already-applied';
     if (observed.rosterEpoch === '0') {
       if (epoch < certificate.certificate.membershipEpoch || !localActive) {
@@ -140,8 +142,15 @@ export class IndexedDbWorkspaceMembershipStore {
       }
       disposition = 'already-applied';
     } else if (epoch === BigInt(observed.rosterEpoch) + 1n) {
-      if (!observed.rosterDigest || !equal(observed.rosterDigest, roster.roster.previousRosterDigest)) {
+      if (!observed.rosterDigest || !observed.signedRoster ||
+          !equal(observed.rosterDigest, roster.roster.previousRosterDigest)) {
         throw new Error('Roster previous digest does not match the durable rollback floor');
+      }
+      const previousRoster = decodeSignedWorkspaceRoster(observed.signedRoster);
+      verifyRosterCertificateTransitions(previousRoster, roster);
+      if (observed.signedCertificate !== undefined &&
+          !equal(observed.signedCertificate, signedCertificate) && !localActive) {
+        throw new Error('Local certificate replacement is not active in the new roster');
       }
       disposition = 'applied';
     } else {
