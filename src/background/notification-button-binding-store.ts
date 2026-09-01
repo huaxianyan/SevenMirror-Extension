@@ -18,7 +18,7 @@ interface StoredNotificationButtonBindingRecord {
 }
 
 export interface ButtonBindingStorage {
-  get(key: string): Promise<Record<string, unknown>>;
+  get(key: string | null): Promise<Record<string, unknown>>;
   set(items: Record<string, unknown>): Promise<void>;
   remove(key: string): Promise<void>;
 }
@@ -80,6 +80,12 @@ export class NotificationButtonBindingStore {
 
   async remove(chromeNotificationId: string): Promise<void> {
     await this.storage.remove(key(chromeNotificationId));
+  }
+
+  async clearAll(): Promise<void> {
+    const stored = await this.storage.get(null);
+    const keys = Object.keys(stored).filter((candidate) => candidate.startsWith(KEY_PREFIX));
+    await Promise.all(keys.map((candidate) => this.storage.remove(candidate)));
   }
 }
 

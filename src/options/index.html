@@ -31,6 +31,7 @@
               <div><dt data-i18n="optionsCurrentDevice">Current device</dt><dd id="current-device-name"></dd></div>
             </dl>
             <button id="reconnect-transport" class="secondary" type="button" hidden data-i18n="retryConnection">Reconnect</button>
+            <button id="re-enroll-device" class="danger-secondary" type="button" hidden data-i18n="optionsReEnrollDevice">Register this device again</button>
           </div>
 
           <form id="registration-form" class="card" autocomplete="off" hidden>
@@ -102,6 +103,17 @@
         </section>
       </main>
     </div>
+
+    <dialog id="re-enroll-confirmation">
+      <form method="dialog">
+        <h2 data-i18n="optionsReEnrollConfirmTitle">Register this Chrome device again?</h2>
+        <p data-i18n="optionsReEnrollConfirmBody">Its previous access has been removed. SevenMirror will clear the old workspace access from this Chrome profile, then return to setup.</p>
+        <div class="dialog-actions">
+          <button value="cancel" class="secondary" data-i18n="cancel">Cancel</button>
+          <button id="confirm-re-enroll" value="confirm" class="danger" data-i18n="optionsReEnrollConfirmAction">Clear old access</button>
+        </div>
+      </form>
+    </dialog>
 
     <dialog id="clear-confirmation">
       <form method="dialog">

@@ -24,6 +24,10 @@ import { NotificationButtonBindingStore } from './notification-button-binding-st
 import { NotificationShortcutPreferencesStore } from './notification-shortcuts';
 import { NotificationPresentationPreferencesStore } from './notification-presentation-preferences';
 import {
+  CertifiedReEnrollmentResetStore,
+  completeCertifiedReEnrollmentReset,
+} from './certified-re-enrollment-reset';
+import {
   IndexedDbTransportCredentialStore,
   type StoredTransportCredential,
 } from '../transport/indexeddb-transport-credential-store';
@@ -69,6 +73,7 @@ const relayDeliveryCursorStore = new IndexedDbRelayDeliveryCursorStore();
 const notificationButtonBindingStore = new NotificationButtonBindingStore();
 const notificationShortcutPreferencesStore = new NotificationShortcutPreferencesStore();
 const notificationPresentationPreferencesStore = new NotificationPresentationPreferencesStore();
+const certifiedReEnrollmentResetStore = new CertifiedReEnrollmentResetStore();
 const notificationPresenter = new NotificationPresenter({
   loadShortcutPreferences: () => notificationShortcutPreferencesStore.load(),
   saveButtonBindings: (notificationId, revision, buttons) =>
@@ -181,9 +186,9 @@ transportRuntime = new TransportRuntime(
   },
 );
 
-void recordWorkerStart();
-void updateToolbarBadge().catch(() => undefined);
-void connectTransportWithWatchdog().catch(() => undefined);
+void initializeWorker().catch(async () => {
+  await chrome.storage.local.set({ [CONNECTION_STATE_KEY]: 'offline' });
+});
 
 chrome.runtime.onInstalled.addListener(async () => {
   const stored = await chrome.storage.local.get(CONNECTION_STATE_KEY);
@@ -324,6 +329,13 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
       void getOptionsOverview().then(
         (overview) => sendResponse({ overview }),
         () => sendResponse({ overview: { state: 'needs-repair', devices: [], badgeEnabled: true } }),
+      );
+      return true;
+
+    case 're-enroll-after-certified-removal':
+      void reEnrollAfterCertifiedRemoval().then(
+        (reset) => sendResponse({ reset }),
+        () => sendResponse({ reset: false }),
       );
       return true;
 
@@ -626,9 +638,91 @@ async function drainActionInvokes(): Promise<void> {
   }
 }
 
+async function initializeWorker(): Promise<void> {
+  await completePendingCertifiedReEnrollmentReset();
+  await recordWorkerStart();
+  await updateToolbarBadge();
+  await connectTransportWithWatchdog();
+}
+
+async function reEnrollAfterCertifiedRemoval(): Promise<boolean> {
+  if (await certifiedReEnrollmentResetStore.isPending()) {
+    await completePendingCertifiedReEnrollmentReset();
+    return true;
+  }
+  const credential = await credentialStore.load();
+  if (credential === undefined) return false;
+  try {
+    const membership = await workspaceMembershipStore.load(
+      credential.workspaceId,
+      credential.deviceId,
+    );
+    if (membership === undefined || membership.localDeviceActive) return false;
+    await certifiedReEnrollmentResetStore.begin();
+    await completePendingCertifiedReEnrollmentReset();
+    return true;
+  } finally {
+    credential.authToken.fill(0);
+  }
+}
+
+async function completePendingCertifiedReEnrollmentReset(): Promise<boolean> {
+  return completeCertifiedReEnrollmentReset(certifiedReEnrollmentResetStore, {
+    stopTransport: async () => {
+      await transportRuntime.disconnect();
+      membershipRecovery = undefined;
+      syntheticAckHold = undefined;
+    },
+    clearSchedules: async () => {
+      await Promise.all([
+        TRANSPORT_RECONNECT_ALARM,
+        MEMBERSHIP_REFRESH_ALARM,
+        ACTION_INVOKE_RETRY_ALARM,
+        ACTION_RESULT_ACK_RETRY_ALARM,
+        SNAPSHOT_RECOVERY_RETRY_ALARM,
+      ].map((name) => chrome.alarms.clear(name)));
+    },
+    clearNativeNotifications: async () => {
+      const notifications = await new Promise<object>((resolve) => {
+        chrome.notifications.getAll(resolve);
+      });
+      for (const notificationId of Object.keys(notifications)) {
+        await markProgrammaticClose(notificationId, 'certified-re-enrollment-reset');
+        await new Promise<void>((resolve) => {
+          chrome.notifications.clear(notificationId, () => resolve());
+        });
+      }
+    },
+    clearHostPermissions: async () => {
+      const permissions = await chrome.permissions.getAll();
+      if ((permissions.origins?.length ?? 0) > 0) {
+        await chrome.permissions.remove({ origins: permissions.origins });
+      }
+    },
+    clearWorkspaceState: async () => {
+      await Promise.all([
+        pendingActionStore.clear(),
+        outboundSequenceStore.clear(),
+        inboundReplayLedger.clear(),
+        notificationStateStore.clear(),
+        relayDeliveryCursorStore.clear(),
+        pendingMembershipStore.clear(),
+        credentialStore.clear(),
+        identityStore.clear(),
+        workspaceMembershipStore.clear(),
+        notificationButtonBindingStore.clearAll(),
+      ]);
+    },
+    clearConnectionState: async () => {
+      await chrome.storage.local.set({ [CONNECTION_STATE_KEY]: DEFAULT_CONNECTION_STATE });
+      await chrome.action.setBadgeText({ text: '' });
+    },
+  });
+}
+
 async function getOptionsOverview(): Promise<{
   state: 'not-configured' | 'waiting-approval' | 'connecting' | 'online' | 'offline' |
-    'access-removed' | 'needs-repair';
+    'access-removed' | 'resetting' | 'needs-repair';
   serverOrigin?: string;
   localDeviceName?: string;
   devices: Array<{
@@ -639,6 +733,10 @@ async function getOptionsOverview(): Promise<{
   }>;
   badgeEnabled: boolean;
 }> {
+  if (await certifiedReEnrollmentResetStore.isPending()) {
+    const preferences = await notificationPresentationPreferencesStore.load();
+    return { state: 'resetting', devices: [], ...preferences };
+  }
   const [connection, credential, pending, preferences] = await Promise.all([
     chrome.storage.local.get(CONNECTION_STATE_KEY),
     credentialStore.load(),

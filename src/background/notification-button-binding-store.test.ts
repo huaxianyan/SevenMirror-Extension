@@ -5,7 +5,7 @@ describe('NotificationButtonBindingStore', () => {
   it('binds native indices to an exact notification revision', async () => {
     const values: Record<string, unknown> = {};
     const store = new NotificationButtonBindingStore({
-      get: async (key) => ({ [key]: values[key] }),
+      get: async (key) => key === null ? { ...values } : { [key]: values[key] },
       set: async (items) => { Object.assign(values, items); },
       remove: async (key) => { delete values[key]; },
     });
@@ -35,12 +35,18 @@ describe('NotificationButtonBindingStore', () => {
   it('removes obsolete bindings and rejects corrupt records', async () => {
     const values: Record<string, unknown> = {};
     const store = new NotificationButtonBindingStore({
-      get: async (key) => ({ [key]: values[key] }),
+      get: async (key) => key === null ? { ...values } : { [key]: values[key] },
       set: async (items) => { Object.assign(values, items); },
       remove: async (key) => { delete values[key]; },
     });
     await store.save('sn1:test', '1', [{ kind: 'more', title: 'More' }]);
     await store.remove('sn1:test');
     expect(await store.load('sn1:test', '1')).toBeUndefined();
+
+    values.productPreference = true;
+    await store.save('sn1:first', '2', [{ kind: 'dismiss', title: 'Clear' }]);
+    await store.save('sn1:second', '3', [{ kind: 'more', title: 'More' }]);
+    await store.clearAll();
+    expect(values).toEqual({ productPreference: true });
   });
 });

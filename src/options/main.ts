@@ -10,7 +10,7 @@ import { localizeDocument, message } from '../shared/i18n';
 
 interface OptionsOverview {
   state: 'not-configured' | 'waiting-approval' | 'connecting' | 'online' | 'offline' |
-    'access-removed' | 'needs-repair';
+    'access-removed' | 'resetting' | 'needs-repair';
   serverOrigin?: string;
   localDeviceName?: string;
   devices: Array<{
@@ -34,6 +34,9 @@ const nameInput = requireElement<HTMLInputElement>('device-name');
 const submit = requireElement<HTMLButtonElement>('register');
 const registrationStatus = requireElement<HTMLElement>('registration-status');
 const reconnect = requireElement<HTMLButtonElement>('reconnect-transport');
+const reEnrollDevice = requireElement<HTMLButtonElement>('re-enroll-device');
+const reEnrollConfirmation = requireElement<HTMLDialogElement>('re-enroll-confirmation');
+const confirmReEnroll = requireElement<HTMLButtonElement>('confirm-re-enroll');
 const connectionState = requireElement<HTMLHeadingElement>('connection-state');
 const connectionGuidance = requireElement<HTMLParagraphElement>('connection-guidance');
 const connectionDetails = requireElement<HTMLElement>('connection-details');
@@ -69,6 +72,25 @@ reconnect.addEventListener('click', () => {
     })
     .catch(() => { registrationStatus.textContent = message('reconnectFailed'); })
     .finally(() => { reconnect.disabled = false; });
+});
+
+reEnrollDevice.addEventListener('click', () => reEnrollConfirmation.showModal());
+confirmReEnroll.addEventListener('click', (event) => {
+  event.preventDefault();
+  confirmReEnroll.disabled = true;
+  connectionGuidance.textContent = message('optionsReEnrollResetting');
+  void chrome.runtime.sendMessage({ type: 're-enroll-after-certified-removal' })
+    .then(async (response: { reset?: boolean }) => {
+      if (!response.reset) {
+        connectionGuidance.textContent = message('optionsReEnrollFailed');
+        return;
+      }
+      reEnrollConfirmation.close();
+      registrationStatus.textContent = message('optionsReEnrollReady');
+      await render();
+    })
+    .catch(() => { connectionGuidance.textContent = message('optionsReEnrollFailed'); })
+    .finally(() => { confirmReEnroll.disabled = false; });
 });
 
 badgeEnabled.addEventListener('change', () => {
@@ -120,7 +142,8 @@ function renderConnection(overview: OptionsOverview): void {
   const configured = overview.state !== 'not-configured';
   registrationForm.hidden = configured;
   reconnect.hidden = overview.state === 'not-configured' || overview.state === 'access-removed' ||
-    overview.state === 'needs-repair';
+    overview.state === 'resetting' || overview.state === 'needs-repair';
+  reEnrollDevice.hidden = overview.state !== 'access-removed' && overview.state !== 'resetting';
   if (overview.serverOrigin !== undefined) {
     connectionDetails.hidden = false;
     savedServerOrigin.textContent = overview.serverOrigin;

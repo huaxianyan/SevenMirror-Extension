@@ -243,6 +243,8 @@ def main() -> None:
         "androidKeyIdHex": worker_fixture["androidIdentityKeyIdHex"],
         "rosterDigestHex": worker_fixture["rosterDigestHex"],
         "signedRosterHex": worker_fixture["signedRosterHex"],
+        "revokedRosterDigestHex": worker_fixture["revokedRosterDigestHex"],
+        "revokedSignedRosterHex": worker_fixture["revokedSignedRosterHex"],
         "authTokenHex": secrets.token_hex(32),
         "notificationId": notification_id,
         "chromeNotificationId": chrome_notification_id,
@@ -323,6 +325,7 @@ def main() -> None:
     bodyText: document.body.innerText,
     badgeEnabled: badge.checked,
     registrationHidden: document.getElementById('registration-form')?.hidden,
+    reEnrollHidden: document.getElementById('re-enroll-device')?.hidden,
   };
 })()
 """, args.timeout_seconds)
@@ -330,6 +333,7 @@ def main() -> None:
                     "synthetic", "credential rotation", "lifecycle", "worker persistence")
                 if "Canary Android" not in options["deviceText"] or \
                         not options["badgeEnabled"] or not options["registrationHidden"] or \
+                        not options["reEnrollHidden"] or \
                         any(value in options["bodyText"].lower() for value in forbidden_options_text):
                     raise RuntimeError(f"Options did not render the product device model: {options!r}")
                 if page.evaluate("document.getElementById('badge-enabled').click(); true") is not True:
@@ -518,6 +522,105 @@ def main() -> None:
 """, args.timeout_seconds)
                 if not cleared["cleared"]:
                     raise RuntimeError(f"Options did not clear local notification state: {cleared!r}")
+
+                revoked = page.evaluate("""
+(async () => {
+  const data = %s;
+  const h = (value) => Uint8Array.from(value.match(/../g).map((byte) => parseInt(byte, 16)));
+  const database = await new Promise((resolve, reject) => {
+    const open = indexedDB.open('syncnotifications-workspace-membership-v1', 1);
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => resolve(open.result);
+  });
+  const transaction = database.transaction('workspace-membership', 'readwrite');
+  const store = transaction.objectStore('workspace-membership');
+  const tuple = `${data.workspaceIdHex}:${data.localDeviceIdHex}`;
+  const record = await new Promise((resolve, reject) => {
+    const request = store.get(tuple);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+  });
+  record.rosterEpoch = '2';
+  record.rosterDigest = h(data.revokedRosterDigestHex);
+  record.signedRoster = h(data.revokedSignedRosterHex);
+  record.localDeviceActive = false;
+  store.put(record);
+  await new Promise((resolve, reject) => {
+    transaction.oncomplete = () => resolve(true);
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error);
+  });
+  database.close();
+  return true;
+})()
+""" % json.dumps(seed, separators=(",", ":")))
+                if revoked is not True:
+                    raise RuntimeError("Failed to install the authority-signed terminal roster")
+                page.command("Page.reload")
+                removed = evaluate_until(page, """
+(() => {
+  const action = document.getElementById('re-enroll-device');
+  return action && !action.hidden && {
+    registrationHidden: document.getElementById('registration-form')?.hidden,
+    devices: document.querySelectorAll('#device-list .device').length,
+  };
+})()
+""", args.timeout_seconds)
+                if not removed["registrationHidden"] or removed["devices"] != 0:
+                    raise RuntimeError(f"Certified removal was not presented safely: {removed!r}")
+                page.evaluate("document.getElementById('re-enroll-device').click()")
+                page.evaluate("document.getElementById('confirm-re-enroll').click()")
+                reset = evaluate_until(page, """
+(async () => {
+  const form = document.getElementById('registration-form');
+  if (!form || form.hidden) return false;
+  const databases = await indexedDB.databases();
+  const count = async (name, storeName) => {
+    if (!databases.some((database) => database.name === name)) return 0;
+    const database = await new Promise((resolve, reject) => {
+      const open = indexedDB.open(name);
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => resolve(open.result);
+    });
+    const value = await new Promise((resolve, reject) => {
+      const transaction = database.transaction(storeName, 'readonly');
+      const request = transaction.objectStore(storeName).count();
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result);
+    });
+    database.close();
+    return value;
+  };
+  const storage = await chrome.storage.local.get(null);
+  const notifications = await new Promise((resolve) => chrome.notifications.getAll(resolve));
+  const counts = await Promise.all([
+    count('syncnotifications-transport-v1', 'credentials'),
+    count('syncnotifications-crypto-v1', 'identities'),
+    count('syncnotifications-workspace-membership-v1', 'workspace-membership'),
+    count('syncnotifications-pending-membership-v1', 'pending-membership'),
+  ]);
+  return {
+    counts,
+    pendingDatabases: databases.filter((database) => [
+      'syncnotifications-pending-actions-default',
+      'syncnotifications-outbound-sequences-v1',
+      'syncnotifications-replay-action-results',
+      'syncnotifications-notification-state-v1',
+      'syncnotifications-relay-delivery-cursor-v1',
+    ].includes(database.name)).map((database) => database.name),
+    preferencePreserved:
+      storage.notificationPresentationPreferencesV1?.badgeEnabled === false,
+    resetIntentPresent: storage['reenrollment-reset'] !== undefined,
+    bindingCount: Object.keys(storage).filter((key) =>
+      key.startsWith('notificationButtonBindingV1:')).length,
+    nativeNotificationCount: Object.keys(notifications).length,
+  };
+})()
+""", args.timeout_seconds)
+                if any(reset["counts"]) or reset["pendingDatabases"] or \
+                        not reset["preferencePreserved"] or reset["resetIntentPresent"] or \
+                        reset["bindingCount"] != 0 or reset["nativeNotificationCount"] != 0:
+                    raise RuntimeError(f"Certified re-enrollment reset was incomplete: {reset!r}")
                 page.drain_events()
                 diagnostics = "\n".join(page.diagnostic_texts)
                 if any(value in diagnostics for value in (title, body, reply, distractor)):
@@ -534,6 +637,8 @@ def main() -> None:
                     "product_options_device_directory_rendered": True,
                     "badge_preference_persisted": True,
                     "local_notification_clear_confirmed": True,
+                    "certified_removal_re_enrollment_reset": True,
+                    "re_enrollment_preferences_preserved": True,
                     "authority_certified_recipient_resolved": True,
                     "canonical_one_shot_pending_action_persisted": True,
                     "business_canary_url_matches": 0,

@@ -7,6 +7,7 @@ import {
   DeviceCertificateSchema,
   DeviceRole,
   DeviceType,
+  RevokedCertificateSchema,
   SignedDeviceCertificateSchema,
   SignedWorkspaceRosterSchema,
   WorkspaceRosterSchema,
@@ -81,18 +82,34 @@ const roster = create(WorkspaceRosterSchema, {
   activeCertificates: [localCertificate, androidCertificate],
   revocations: [],
 });
-const rosterBody = toBinary(WorkspaceRosterSchema, roster);
-const signedRoster = create(SignedWorkspaceRosterSchema, {
-  roster,
-  rosterDigest: sha256(concat(
-    domain('SyncNotifications-membership-workspace-roster-digest-v1'),
-    rosterBody,
-  )),
-  authoritySignature: ed25519.sign(concat(
-    domain('SyncNotifications-membership-workspace-roster-signature-v1'),
-    rosterBody,
-  ), authoritySeed),
-});
+function signRoster(value: typeof roster) {
+  const body = toBinary(WorkspaceRosterSchema, value);
+  return create(SignedWorkspaceRosterSchema, {
+    roster: value,
+    rosterDigest: sha256(concat(
+      domain('SyncNotifications-membership-workspace-roster-digest-v1'),
+      body,
+    )),
+    authoritySignature: ed25519.sign(concat(
+      domain('SyncNotifications-membership-workspace-roster-signature-v1'),
+      body,
+    ), authoritySeed),
+  });
+}
+
+const signedRoster = signRoster(roster);
+const revokedRoster = signRoster(create(WorkspaceRosterSchema, {
+  protocolVersion: 1,
+  workspaceId,
+  rosterEpoch: 2n,
+  previousRosterDigest: signedRoster.rosterDigest,
+  activeCertificates: [androidCertificate],
+  revocations: [create(RevokedCertificateSchema, {
+    certificateId: localCertificate.certificateId,
+    deviceId: localCertificate.certificate!.deviceId,
+    revokedAtUnixMs: 1710000001000n,
+  })],
+}));
 
 console.log(JSON.stringify({
   description: 'Public deterministic fixture extending workspace-membership-v1 for the interaction Worker canary. No production secrets.',
@@ -102,4 +119,6 @@ console.log(JSON.stringify({
   androidIdentityKeyIdHex: toHex(androidKeyId),
   rosterDigestHex: toHex(signedRoster.rosterDigest),
   signedRosterHex: toHex(toBinary(SignedWorkspaceRosterSchema, signedRoster)),
+  revokedRosterDigestHex: toHex(revokedRoster.rosterDigest),
+  revokedSignedRosterHex: toHex(toBinary(SignedWorkspaceRosterSchema, revokedRoster)),
 }, null, 2));
