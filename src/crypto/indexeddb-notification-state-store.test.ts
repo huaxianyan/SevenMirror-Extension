@@ -43,6 +43,13 @@ describe('Popup notification presentation state', () => {
     await store.reconcileUpsert(sourceDeviceId, revisionOne.value, revisionOne.canonical);
     expect(await store.unseenCount()).toBe(0);
 
+    await store.hideVisibleForPresentation();
+    expect(await store.listVisibleForPresentation()).toEqual([]);
+    expect(await store.unseenCount()).toBe(0);
+    expect(await store.listVisible()).toHaveLength(1);
+    await store.reconcileUpsert(sourceDeviceId, revisionOne.value, revisionOne.canonical);
+    expect(await store.listVisibleForPresentation()).toEqual([]);
+
     now = 2_000;
     const revisionTwo = upsert(2n, 'Visible update');
     await store.reconcileUpsert(sourceDeviceId, revisionTwo.value, revisionTwo.canonical);

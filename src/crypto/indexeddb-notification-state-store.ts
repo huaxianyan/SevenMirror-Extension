@@ -49,6 +49,7 @@ export interface MirroredNotificationState {
   avatar?: MirroredNotificationMedia;
   receivedAtUnixMs?: number;
   viewedRevision?: string;
+  locallyHiddenRevision?: string;
 }
 
 export interface MirroredNotificationPresentation {
@@ -253,6 +254,25 @@ export class IndexedDbNotificationStateStore {
     }
   }
 
+  async hideVisibleForPresentation(): Promise<void> {
+    const database = await this.openDatabase();
+    try {
+      const transaction = database.transaction(STORE_NAME, 'readwrite');
+      const completed = transactionCompleted(transaction);
+      const store = transaction.objectStore(STORE_NAME);
+      const states = await requestResult<MirroredNotificationState[]>(store.getAll());
+      for (const state of states) {
+        validateStored(state);
+        if (state.phase === 'visible' && state.locallyHiddenRevision !== state.revision) {
+          await requestResult(store.put({ ...state, locallyHiddenRevision: state.revision }));
+        }
+      }
+      await completed;
+    } finally {
+      database.close();
+    }
+  }
+
   async clear(): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       const request = indexedDB.deleteDatabase(this.databaseName);
@@ -264,7 +284,7 @@ export class IndexedDbNotificationStateStore {
 
   async listVisibleForPresentation(): Promise<MirroredNotificationPresentation[]> {
     const states = await this.listVisible();
-    return states.map((state) => ({
+    return states.filter((state) => state.locallyHiddenRevision !== state.revision).map((state) => ({
       state,
       isNew: state.viewedRevision !== state.revision,
       updatedAtUnixMs: state.receivedAtUnixMs ?? 0,
@@ -301,7 +321,8 @@ export class IndexedDbNotificationStateStore {
 
   async unseenCount(): Promise<number> {
     const states = await this.listVisible();
-    return states.filter((state) => state.viewedRevision !== state.revision).length;
+    return states.filter((state) => state.locallyHiddenRevision !== state.revision &&
+      state.viewedRevision !== state.revision).length;
   }
 
   async listVisible(): Promise<MirroredNotificationState[]> {
@@ -433,6 +454,11 @@ function validateStored(state: MirroredNotificationState): void {
   }
   if (state.phase !== 'visible' && state.phase !== 'removed') {
     throw new Error('Stored notification phase is corrupt');
+  }
+  if (state.locallyHiddenRevision !== undefined &&
+      (!/^[1-9][0-9]*$/.test(state.locallyHiddenRevision) ||
+       BigInt(state.locallyHiddenRevision) > 0x7fff_ffff_ffff_ffffn)) {
+    throw new Error('Stored local hidden revision is corrupt');
   }
   if (!(state.payloadSha256 instanceof Uint8Array) || state.payloadSha256.byteLength !== 32) {
     throw new Error('Stored notification digest is corrupt');

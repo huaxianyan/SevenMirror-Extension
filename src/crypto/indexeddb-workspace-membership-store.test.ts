@@ -1,6 +1,10 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
 import vector from '../../protocol/test-vectors/workspace-membership-v1.json';
+import {
+  decodeSignedDeviceCertificate,
+  decodeSignedWorkspaceRoster,
+} from '../protocol/workspace-membership';
 import { IndexedDbWorkspaceMembershipStore } from './indexeddb-workspace-membership-store';
 
 const fromHex = (value: string): Uint8Array =>
@@ -35,6 +39,18 @@ describe('IndexedDbWorkspaceMembershipStore', () => {
       expect(initial).toMatchObject({ rosterEpoch: 1n, localDeviceActive: true });
       expect(initial?.authorityPublicKey).toEqual(authority);
       expect(initial?.signedCertificate).toEqual(certificate);
+      const localCertificate = decodeSignedDeviceCertificate(certificate).certificate!;
+      const rosterCertificate = decodeSignedWorkspaceRoster(initialRoster)
+        .roster!.activeCertificates[0].certificate!;
+      await expect(recoveredStore.listAuthorizedDevices(
+        workspaceId,
+        deviceId,
+        rosterCertificate.issuedAtUnixMs,
+      )).resolves.toMatchObject([{
+        displayName: localCertificate.displayName,
+        isCurrentDevice: true,
+        accessCurrent: true,
+      }]);
 
       await expect(recoveredStore.reconcileApproved(
         workspaceId,
@@ -46,6 +62,11 @@ describe('IndexedDbWorkspaceMembershipStore', () => {
         rosterEpoch: 2n,
         localDeviceActive: false,
       });
+      await expect(recoveredStore.listAuthorizedDevices(
+        workspaceId,
+        deviceId,
+        localCertificate.issuedAtUnixMs,
+      )).resolves.toEqual([]);
       await expect(recoveredStore.reconcileApproved(
         workspaceId,
         deviceId,

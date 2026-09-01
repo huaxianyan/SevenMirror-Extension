@@ -7,6 +7,7 @@ import {
   verifySignedDeviceCertificate,
   verifySignedWorkspaceRoster,
 } from '../protocol/workspace-membership';
+import { DeviceType } from '../protocol/generated/membership/v1/membership_pb';
 
 const STORE_NAME = 'workspace-membership';
 const DATABASE_VERSION = 1;
@@ -23,6 +24,13 @@ interface StoredMembershipState {
   rosterDigest?: Uint8Array;
   signedRoster?: Uint8Array;
   localDeviceActive: boolean;
+}
+
+export interface WorkspaceDeviceSummary {
+  displayName: string;
+  deviceType: 'android' | 'chrome';
+  isCurrentDevice: boolean;
+  accessCurrent: boolean;
 }
 
 export interface WorkspaceMembershipState {
@@ -233,6 +241,36 @@ export class IndexedDbWorkspaceMembershipStore {
       }
       await requestResult(store.put(proposed)); await completed; return 'applied';
     } finally { database.close(); }
+  }
+
+  async listAuthorizedDevices(
+    workspaceId: Uint8Array,
+    localDeviceId: Uint8Array,
+    nowUnixMs: bigint,
+  ): Promise<WorkspaceDeviceSummary[]> {
+    if (nowUnixMs <= 0n) throw new Error('Current time is invalid');
+    const state = await this.load(workspaceId, localDeviceId);
+    if (state === undefined || !state.localDeviceActive || state.signedRoster === undefined) return [];
+    const roster = decodeSignedWorkspaceRoster(state.signedRoster).roster;
+    if (roster === undefined) throw new Error('Workspace roster is missing');
+    return roster.activeCertificates.map((signed) => {
+      const certificate = signed.certificate;
+      if (certificate === undefined ||
+          (certificate.deviceType !== DeviceType.ANDROID &&
+           certificate.deviceType !== DeviceType.CHROME)) {
+        throw new Error('Workspace roster contains an unsupported device type');
+      }
+      return {
+        displayName: certificate.displayName,
+        deviceType: certificate.deviceType === DeviceType.ANDROID ? 'android' : 'chrome',
+        isCurrentDevice: equal(certificate.deviceId, localDeviceId),
+        accessCurrent: certificate.issuedAtUnixMs <= nowUnixMs &&
+          (certificate.expiresAtUnixMs === 0n || nowUnixMs < certificate.expiresAtUnixMs),
+      } satisfies WorkspaceDeviceSummary;
+    }).sort((left, right) =>
+      Number(right.isCurrentDevice) - Number(left.isCurrentDevice) ||
+      left.deviceType.localeCompare(right.deviceType) ||
+      left.displayName.localeCompare(right.displayName));
   }
 
   async load(workspaceId: Uint8Array, deviceId: Uint8Array): Promise<WorkspaceMembershipState | undefined> {

@@ -22,6 +22,7 @@ import {
 import { NotificationPresenter } from './notification-presenter';
 import { NotificationButtonBindingStore } from './notification-button-binding-store';
 import { NotificationShortcutPreferencesStore } from './notification-shortcuts';
+import { NotificationPresentationPreferencesStore } from './notification-presentation-preferences';
 import {
   IndexedDbTransportCredentialStore,
   type StoredTransportCredential,
@@ -67,6 +68,7 @@ const notificationStateStore = new IndexedDbNotificationStateStore();
 const relayDeliveryCursorStore = new IndexedDbRelayDeliveryCursorStore();
 const notificationButtonBindingStore = new NotificationButtonBindingStore();
 const notificationShortcutPreferencesStore = new NotificationShortcutPreferencesStore();
+const notificationPresentationPreferencesStore = new NotificationPresentationPreferencesStore();
 const notificationPresenter = new NotificationPresenter({
   loadShortcutPreferences: () => notificationShortcutPreferencesStore.load(),
   saveButtonBindings: (notificationId, revision, buttons) =>
@@ -315,6 +317,27 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
       void queueActionInvoke(message).then(
         (result) => sendResponse(result),
         () => sendResponse({ queued: false, accepted: false }),
+      );
+      return true;
+
+    case 'get-options-overview':
+      void getOptionsOverview().then(
+        (overview) => sendResponse({ overview }),
+        () => sendResponse({ overview: { state: 'needs-repair', devices: [], badgeEnabled: true } }),
+      );
+      return true;
+
+    case 'save-notification-presentation-preferences':
+      void notificationPresentationPreferencesStore.save(message.preferences).then(
+        async () => { await updateToolbarBadge(); sendResponse({ saved: true }); },
+        () => sendResponse({ saved: false }),
+      );
+      return true;
+
+    case 'clear-local-notification-state':
+      void clearLocalNotificationState().then(
+        () => sendResponse({ cleared: true }),
+        () => sendResponse({ cleared: false }),
       );
       return true;
 
@@ -603,6 +626,81 @@ async function drainActionInvokes(): Promise<void> {
   }
 }
 
+async function getOptionsOverview(): Promise<{
+  state: 'not-configured' | 'waiting-approval' | 'connecting' | 'online' | 'offline' |
+    'access-removed' | 'needs-repair';
+  serverOrigin?: string;
+  localDeviceName?: string;
+  devices: Array<{
+    displayName: string;
+    deviceType: 'android' | 'chrome';
+    isCurrentDevice: boolean;
+    accessCurrent: boolean;
+  }>;
+  badgeEnabled: boolean;
+}> {
+  const [connection, credential, pending, preferences] = await Promise.all([
+    chrome.storage.local.get(CONNECTION_STATE_KEY),
+    credentialStore.load(),
+    pendingMembershipStore.load(),
+    notificationPresentationPreferencesStore.load(),
+  ]);
+  if (credential === undefined) {
+    if (pending !== undefined) {
+      const serverOrigin = pending.serverOrigin;
+      pending.authToken.fill(0);
+      pending.canonicalProof?.fill(0);
+      return { state: 'waiting-approval', serverOrigin, devices: [], ...preferences };
+    }
+    return { state: 'not-configured', devices: [], ...preferences };
+  }
+  pending?.authToken.fill(0);
+  pending?.canonicalProof?.fill(0);
+  try {
+    const membership = await workspaceMembershipStore.load(
+      credential.workspaceId,
+      credential.deviceId,
+    );
+    if (membership !== undefined && !membership.localDeviceActive) {
+      return {
+        state: 'access-removed',
+        serverOrigin: credential.serverOrigin,
+        devices: [],
+        ...preferences,
+      };
+    }
+    const devices = await workspaceMembershipStore.listAuthorizedDevices(
+      credential.workspaceId,
+      credential.deviceId,
+      BigInt(Date.now()),
+    );
+    const rawConnection = connection[CONNECTION_STATE_KEY] ?? DEFAULT_CONNECTION_STATE;
+    const state = rawConnection === 'online' ? 'online'
+      : rawConnection === 'connecting' ? 'connecting' : 'offline';
+    return {
+      state,
+      serverOrigin: credential.serverOrigin,
+      localDeviceName: devices.find((device) => device.isCurrentDevice)?.displayName,
+      devices,
+      ...preferences,
+    };
+  } finally {
+    credential.authToken.fill(0);
+  }
+}
+
+async function clearLocalNotificationState(): Promise<void> {
+  const states = await notificationStateStore.listVisible();
+  for (const state of states) {
+    await markProgrammaticClose(state.chromeNotificationId, 'local-mirror-state-cleared');
+    await new Promise<void>((resolve) => {
+      chrome.notifications.clear(state.chromeNotificationId, () => resolve());
+    });
+  }
+  await notificationStateStore.hideVisibleForPresentation();
+  await updateToolbarBadge();
+}
+
 async function getPopupNotifications(): Promise<{
   state: string;
   notifications: Array<ReturnType<typeof interactionSummary> & {
@@ -666,8 +764,9 @@ async function markPopupNotificationsViewed(message: Record<string, unknown>): P
 }
 
 async function updateToolbarBadge(): Promise<void> {
-  const popup = await getPopupNotifications();
-  const unseen = popup.notifications.filter((notification) => notification.isNew).length;
+  const preferences = await notificationPresentationPreferencesStore.load();
+  const popup = preferences.badgeEnabled ? await getPopupNotifications() : undefined;
+  const unseen = popup?.notifications.filter((notification) => notification.isNew).length ?? 0;
   await chrome.action.setBadgeBackgroundColor({ color: '#385ca8' });
   await chrome.action.setBadgeText({ text: unseen === 0 ? '' : unseen > 999 ? '999+' : String(unseen) });
 }

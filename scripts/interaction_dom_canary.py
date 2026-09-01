@@ -311,6 +311,40 @@ def main() -> None:
                     raise RuntimeError("Failed to seed isolated production stores")
 
                 page.command("Page.navigate", {
+                    "url": f"chrome-extension://{extension_id}/options/index.html",
+                })
+                options = evaluate_until(page, """
+(() => {
+  const devices = Array.from(document.querySelectorAll('#device-list .device'));
+  const badge = document.getElementById('badge-enabled');
+  if (devices.length < 2 || !badge || badge.disabled) return false;
+  return {
+    deviceText: devices.map((device) => device.textContent).join('\\n'),
+    bodyText: document.body.innerText,
+    badgeEnabled: badge.checked,
+    registrationHidden: document.getElementById('registration-form')?.hidden,
+  };
+})()
+""", args.timeout_seconds)
+                forbidden_options_text = (
+                    "synthetic", "credential rotation", "lifecycle", "worker persistence")
+                if "Canary Android" not in options["deviceText"] or \
+                        not options["badgeEnabled"] or not options["registrationHidden"] or \
+                        any(value in options["bodyText"].lower() for value in forbidden_options_text):
+                    raise RuntimeError(f"Options did not render the product device model: {options!r}")
+                if page.evaluate("document.getElementById('badge-enabled').click(); true") is not True:
+                    raise RuntimeError("Options badge switch was not available")
+                badge_disabled = evaluate_until(page, """
+(async () => {
+  const value = (await chrome.storage.local.get('notificationPresentationPreferencesV1'))
+    .notificationPresentationPreferencesV1;
+  return value?.badgeEnabled === false;
+})()
+""", args.timeout_seconds)
+                if badge_disabled is not True:
+                    raise RuntimeError("Options did not persist the badge preference")
+
+                page.command("Page.navigate", {
                     "url": f"chrome-extension://{extension_id}/popup/index.html",
                 })
                 popup = evaluate_until(page, """
@@ -449,6 +483,41 @@ def main() -> None:
                     raise RuntimeError("Business canary entered the interaction URL after submission")
                 if reply in submitted["bodyText"] or distractor in submitted["bodyText"]:
                     raise RuntimeError("Submitted or unrelated reply content remained visible in the DOM")
+
+                page.command("Page.navigate", {
+                    "url": f"chrome-extension://{extension_id}/options/index.html",
+                })
+                evaluate_until(page, "document.querySelectorAll('#device-list .device').length >= 2", args.timeout_seconds)
+                page.evaluate("document.getElementById('clear-local-notifications').click()")
+                page.evaluate("document.getElementById('confirm-clear').click()")
+                cleared = evaluate_until(page, """
+(async () => {
+  const databases = await indexedDB.databases();
+  if (!databases.some((database) => database.name === 'syncnotifications-notification-state-v1')) {
+    return { cleared: true };
+  }
+  const database = await new Promise((resolve, reject) => {
+    const open = indexedDB.open('syncnotifications-notification-state-v1', 2);
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => resolve(open.result);
+  });
+  const states = await new Promise((resolve, reject) => {
+    const transaction = database.transaction('notification-state', 'readonly');
+    const request = transaction.objectStore('notification-state').getAll();
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+  });
+  database.close();
+  if (states.length > 0 && states.every((state) =>
+      state.phase !== 'visible' || state.locallyHiddenRevision === state.revision)) {
+    return { cleared: true };
+  }
+  const status = document.getElementById('notification-settings-status')?.textContent;
+  return status ? { cleared: false, status } : false;
+})()
+""", args.timeout_seconds)
+                if not cleared["cleared"]:
+                    raise RuntimeError(f"Options did not clear local notification state: {cleared!r}")
                 page.drain_events()
                 diagnostics = "\n".join(page.diagnostic_texts)
                 if any(value in diagnostics for value in (title, body, reply, distractor)):
@@ -462,6 +531,9 @@ def main() -> None:
                     "reply_input_cleared_after_submit": True,
                     "reply_request_bound_to_action_and_revision": True,
                     "production_worker_boundary_crossed": True,
+                    "product_options_device_directory_rendered": True,
+                    "badge_preference_persisted": True,
+                    "local_notification_clear_confirmed": True,
                     "authority_certified_recipient_resolved": True,
                     "canonical_one_shot_pending_action_persisted": True,
                     "business_canary_url_matches": 0,
