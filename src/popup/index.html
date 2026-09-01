@@ -3,24 +3,29 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Notification Mirroring</title>
+    <title data-i18n="appName">SevenMirror</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
     <main>
-      <h1>Notification Mirroring</h1>
-      <p id="status" role="status">Loading…</p>
-      <p class="hint">Pairing and encrypted notification sync are not implemented yet.</p>
-      <button id="open-options" type="button">Open settings</button>
-      <hr />
-      <section aria-labelledby="lifecycle-title">
-        <h2 id="lifecycle-title">Phase 0 lifecycle test</h2>
-        <div class="actions">
-          <button id="create-test" type="button">Create test notification</button>
-          <button id="clear-test" type="button">Clear programmatically</button>
+      <header class="popup-header">
+        <div>
+          <h1 data-i18n="appName">SevenMirror</h1>
+          <p id="connection-status" class="connection-status" role="status" data-i18n="popupLoading">Loading…</p>
         </div>
-        <p id="worker-starts">Worker starts: loading…</p>
-        <pre id="close-audit">No close event recorded.</pre>
+        <button id="open-options" class="icon-button" type="button" data-i18n-aria-label="openSettings" aria-label="Open settings">⚙</button>
+      </header>
+
+      <section aria-labelledby="notifications-title">
+        <div class="section-heading">
+          <h2 id="notifications-title" data-i18n="popupCurrentNotifications">Current notifications</h2>
+          <span id="notification-count" class="count"></span>
+        </div>
+        <div id="notification-list" class="notification-list"></div>
+        <div id="empty" class="empty" role="status" hidden>
+          <h2 id="empty-title"></h2>
+          <p id="empty-body"></p>
+        </div>
       </section>
     </main>
     <script type="module" src="./main.ts"></script>

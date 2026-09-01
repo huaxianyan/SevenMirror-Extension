@@ -3,6 +3,9 @@ syntax = "proto3";
 package notification.mirroring.v1;
 
 option go_package = "github.com/huaxianyan/SyncNotifications-Server/protocol/generated/notification/v1;notificationv1";
+option java_package = "dev.notificationmirroring.protocol.generated.v1";
+option java_multiple_files = true;
+option java_outer_classname = "EnvelopeProto";
 
 // Envelope contains only the metadata required to authenticate, route, expire,
 // order, and acknowledge a message. payload is always end-to-end encrypted for

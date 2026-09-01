@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n="interactionPageTitle">SevenMirror</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main>
+      <header class="page-header">
+        <span class="brand" data-i18n="interactionPageTitle">SevenMirror</span>
+      </header>
+
+      <article id="notification-detail" class="notification-detail" hidden></article>
+
+      <section id="empty" class="empty" role="status" hidden>
+        <h1 data-i18n="interactionUnavailableTitle">This notification is no longer available</h1>
+        <p data-i18n="interactionUnavailableBody">It may have been cleared or updated on your Android device.</p>
+      </section>
+
+      <p id="status" class="status" role="status" aria-live="polite" data-i18n="interactionLoading">Loading notification…</p>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

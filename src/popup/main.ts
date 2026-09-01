@@ -1,48 +1,124 @@
-import { connectionLabel, type ConnectionState } from '../shared/status';
-import type { CloseAudit } from '../background/lifecycle-spike';
+import type { ConnectionState } from '../shared/status';
+import type { NotificationInteractionSummary } from '../background/notification-interaction';
+import { localizeDocument, message } from '../shared/i18n';
+import { mountNotificationDetail } from '../shared/notification-detail';
 
-interface StatusResponse {
+interface PopupNotification extends NotificationInteractionSummary {
+  isNew: boolean;
+  updatedAtUnixMs: number;
+}
+
+interface PopupResponse {
   state: ConnectionState;
-  lifecycle: {
-    workerStartCount: number;
-    lastCloseAudit?: CloseAudit;
-  };
+  notifications: PopupNotification[];
 }
 
-const status = document.querySelector<HTMLParagraphElement>('#status');
-const workerStarts = document.querySelector<HTMLParagraphElement>('#worker-starts');
-const closeAudit = document.querySelector<HTMLElement>('#close-audit');
-const openOptions = document.querySelector<HTMLButtonElement>('#open-options');
-const createTest = document.querySelector<HTMLButtonElement>('#create-test');
-const clearTest = document.querySelector<HTMLButtonElement>('#clear-test');
+const connectionStatus = requireElement<HTMLParagraphElement>('connection-status');
+const count = requireElement<HTMLSpanElement>('notification-count');
+const list = requireElement<HTMLDivElement>('notification-list');
+const empty = requireElement<HTMLDivElement>('empty');
+const emptyTitle = requireElement<HTMLHeadingElement>('empty-title');
+const emptyBody = requireElement<HTMLParagraphElement>('empty-body');
+const openOptions = requireElement<HTMLButtonElement>('open-options');
 
-async function renderStatus(): Promise<void> {
-  const response = (await chrome.runtime.sendMessage({ type: 'get-status' })) as StatusResponse;
-  if (status) {
-    status.textContent = `Status: ${connectionLabel(response.state)}`;
+localizeDocument();
+openOptions.addEventListener('click', () => chrome.runtime.openOptionsPage());
+void render();
+
+async function render(): Promise<void> {
+  const response = await chrome.runtime.sendMessage({ type: 'get-popup-notifications' }) as PopupResponse;
+  connectionStatus.textContent = connectionStateLabel(response.state);
+  count.textContent = message('popupNotificationCount', response.notifications.length.toString());
+  if (response.notifications.length === 0) {
+    renderEmpty(response.state);
+    return;
   }
-  if (workerStarts) {
-    workerStarts.textContent = `Worker starts observed: ${response.lifecycle.workerStartCount}`;
+
+  list.replaceChildren(...response.notifications.map(renderNotification));
+  list.hidden = false;
+  empty.hidden = true;
+  await chrome.runtime.sendMessage({
+    type: 'mark-popup-notifications-viewed',
+    notifications: response.notifications.map((notification) => ({
+      chromeNotificationId: notification.chromeNotificationId,
+      revision: notification.revision,
+    })),
+  });
+}
+
+function renderNotification(notification: PopupNotification): HTMLElement {
+  const item = document.createElement('details');
+  item.className = 'notification-item';
+  const summary = document.createElement('summary');
+  const heading = document.createElement('span');
+  heading.className = 'notification-heading';
+  const title = document.createElement('strong');
+  title.textContent = notification.title || message('interactionUntitledNotification');
+  const meta = document.createElement('span');
+  meta.className = 'notification-meta';
+  meta.textContent = [
+    notification.sourceApplicationName,
+    notification.sourceName,
+    formatTime(notification.updatedAtUnixMs),
+  ].filter((value) => value.length > 0).join(' · ');
+  heading.append(title, meta);
+  const indicator = document.createElement('span');
+  indicator.className = notification.isNew ? 'new-indicator' : 'new-indicator viewed';
+  indicator.textContent = notification.isNew ? message('popupNewNotification') : '';
+  summary.append(heading, indicator);
+  const excerpt = document.createElement('p');
+  excerpt.className = 'notification-excerpt';
+  excerpt.textContent = notification.body;
+  excerpt.hidden = notification.body.length === 0;
+  const detail = document.createElement('div');
+  detail.className = 'notification-detail';
+  item.append(summary, excerpt, detail);
+  item.addEventListener('toggle', () => {
+    if (item.open && detail.childElementCount === 0) {
+      mountNotificationDetail(detail, notification);
+    }
+  });
+  return item;
+}
+
+function renderEmpty(state: ConnectionState): void {
+  list.hidden = true;
+  empty.hidden = false;
+  if (state === 'not-configured') {
+    emptyTitle.textContent = message('popupSetupRequiredTitle');
+    emptyBody.textContent = message('popupSetupRequiredBody');
+    return;
   }
-  if (closeAudit && response.lifecycle.lastCloseAudit) {
-    const audit = response.lifecycle.lastCloseAudit;
-    closeAudit.textContent = [
-      `Decision: ${audit.decision}`,
-      `byUser: ${audit.byUser}`,
-      `programmatic marker: ${audit.hadProgrammaticMarker}`,
-      `notification: ${audit.notificationId}`,
-    ].join('\n');
+  if (state === 'offline') {
+    emptyTitle.textContent = message('popupConnectionUnavailableTitle');
+    emptyBody.textContent = message('popupConnectionUnavailableBody');
+    return;
+  }
+  emptyTitle.textContent = message('popupNoNotificationsTitle');
+  emptyBody.textContent = message(
+    state === 'connecting' ? 'popupConnectingBody' : 'popupNoNotificationsBody',
+  );
+}
+
+function connectionStateLabel(state: ConnectionState): string {
+  switch (state) {
+    case 'not-configured': return message('connectionNotConfigured');
+    case 'offline': return message('connectionOffline');
+    case 'connecting': return message('connectionConnecting');
+    case 'online': return message('connectionOnline');
   }
 }
 
-openOptions?.addEventListener('click', () => chrome.runtime.openOptionsPage());
-createTest?.addEventListener('click', async () => {
-  await chrome.runtime.sendMessage({ type: 'create-lifecycle-test' });
-  window.close();
-});
-clearTest?.addEventListener('click', async () => {
-  await chrome.runtime.sendMessage({ type: 'clear-lifecycle-test' });
-  await renderStatus();
-});
+function formatTime(timestamp: number): string {
+  if (!Number.isSafeInteger(timestamp) || timestamp <= 0) return '';
+  return new Intl.DateTimeFormat(chrome.i18n.getUILanguage(), {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(timestamp));
+}
 
-void renderStatus();
+function requireElement<T extends HTMLElement>(id: string): T {
+  const element = document.getElementById(id);
+  if (element === null) throw new Error(`Missing popup element: ${id}`);
+  return element as T;
+}

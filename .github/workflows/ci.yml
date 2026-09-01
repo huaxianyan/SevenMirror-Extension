@@ -3,6 +3,7 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -11,14 +12,52 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Verify immutable GitHub Action pins
+        run: |
+          if grep -RPn '^\s*(?:-\s*)?uses:\s+(?!\./)[^@\s]+@(?![0-9a-f]{40}(?:\s|$))' .github/workflows; then
+            echo 'Every external GitHub Action must use an immutable 40-character commit.' >&2
+            exit 1
+          fi
+      - name: Scan Git history for secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: 8.30.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '20'
           cache: npm
+      - name: Verify project license
+        run: |
+          echo '3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986  LICENSE' | sha256sum --check -
+          grep -Fq 'GPL-3.0-only' LICENSE-TRANSITION.md
+          grep -Fq '97c3430f71c85c6b2cffc6fe8184a1f447b2f0fb' LICENSE-TRANSITION.md
+          node -e "if (require('./package.json').license !== 'GPL-3.0-only') process.exit(1)"
       - run: npm ci
+      - name: Audit locked npm dependencies with query-time evidence
+        run: |
+          python3 scripts/test_npm_audit_gate.py
+          python3 scripts/npm_audit_gate.py \
+            --output "$RUNNER_TEMP/chrome-vulnerability-evidence.json" \
+            --revision "$GITHUB_SHA"
       - name: Verify vendored protocol
         run: node protocol/verify-schema.mjs
+      - name: Verify deterministic interaction Worker fixture
+        run: |
+          node node_modules/vite-node/vite-node.mjs \
+            scripts/generate_interaction_worker_fixture.ts > "$RUNNER_TEMP/interaction-worker-fixture.json"
+          cmp scripts/interaction-worker-fixture.json "$RUNNER_TEMP/interaction-worker-fixture.json"
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - name: Build and verify deterministic submission package
+        run: |
+          python3 scripts/test_build_release_package.py
+          python3 scripts/build_release_package.py \
+            --dist dist \
+            --output "$RUNNER_TEMP/sevenmirror-extension-release" \
+            --revision "$GITHUB_SHA" \
+            --package-version "$(node -p "require('./package.json').version")"

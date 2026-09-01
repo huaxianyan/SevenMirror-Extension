@@ -1,0 +1,168 @@
+syntax = "proto3";
+
+package notification.mirroring.v1;
+
+option go_package = "github.com/huaxianyan/SyncNotifications-Server/protocol/generated/notification/v1;notificationv1";
+option java_package = "dev.notificationmirroring.protocol.generated.v1";
+option java_multiple_files = true;
+option java_outer_classname = "PayloadProto";
+
+// EncryptedPayload is serialized before HPKE sealing. Its type and every
+// business field are opaque to the relay.
+message EncryptedPayload {
+  uint32 schema_version = 1;
+
+  oneof body {
+    ActionInvoke action_invoke = 10;
+    ActionResult action_result = 11;
+    ActionResultAck action_result_ack = 12;
+    IdentityKeyTransition identity_key_transition = 13;
+    IdentityKeyTransitionAck identity_key_transition_ack = 14;
+    IdentityKeyTransitionCommit identity_key_transition_commit = 15;
+    NotificationUpsert notification_upsert = 16;
+    NotificationRemoved notification_removed = 17;
+    NotificationSnapshotManifest notification_snapshot_manifest = 18;
+    NotificationSnapshotRequest notification_snapshot_request = 19;
+  }
+}
+
+// ActionInvoke asks the source Android device to execute exactly one operation
+// against a specific notification revision. pendingIntent is never sent.
+message ActionInvoke {
+  string notification_id = 1;
+  uint64 notification_revision = 2;
+  bytes action_id = 3;
+  bytes idempotency_key = 4;
+  optional string reply_text = 5;
+  // SevenMirror-owned dismissal. It is mutually exclusive with action_id and reply_text.
+  bool dismiss_notification = 6;
+}
+
+// ActionResult reports the locally observed result without claiming that the
+// source application's remote service completed its business operation.
+message ActionResult {
+  bytes idempotency_key = 1;
+  ActionResultStatus status = 2;
+  optional string detail = 3;
+}
+
+// ActionResultAck proves that one Chrome recipient durably reconciled the
+// exact canonical action.result bytes identified by result_sha256.
+message ActionResultAck {
+  bytes idempotency_key = 1;
+  bytes result_sha256 = 2;
+}
+
+// IdentityKeyTransition proposes one successor while the previous approved
+// sender key is still available. It is valid only under payload schema v2.
+message IdentityKeyTransition {
+  bytes transition_id = 1;
+  bytes previous_key_id = 2;
+  bytes new_public_key = 3;
+  bytes new_key_id = 4;
+}
+
+// IdentityKeyTransitionAck binds a peer to the exact canonical transition and
+// is encrypted to the proposed new recipient key.
+message IdentityKeyTransitionAck {
+  bytes transition_id = 1;
+  bytes previous_key_id = 2;
+  bytes new_key_id = 3;
+  bytes transition_sha256 = 4;
+}
+
+// IdentityKeyTransitionCommit proves possession of the proposed new private
+// key and binds the exact acknowledgement created by this peer.
+message IdentityKeyTransitionCommit {
+  bytes transition_id = 1;
+  bytes previous_key_id = 2;
+  bytes new_key_id = 3;
+  bytes transition_sha256 = 4;
+  bytes ack_sha256 = 5;
+}
+
+// NotificationUpsert carries the bounded display state of one source-device
+// notification. The authenticated envelope sender supplies sourceDeviceId.
+message NotificationUpsert {
+  string notification_id = 1;
+  uint64 notification_revision = 2;
+  optional string title = 3;
+  optional string body = 4;
+  optional NotificationMedia app_icon = 5;
+  optional NotificationMedia avatar = 6;
+  bool contains_content_image = 7;
+  repeated NotificationActionDescriptor actions = 8;
+  // Stable Android package name used only inside E2EE content for local rules.
+  string source_application_id = 9;
+  // User-visible Android application label preserved as source application data.
+  string source_application_name = 10;
+}
+
+// NotificationActionDescriptor exposes only the bounded action metadata needed
+// by Chrome. Android retains every executable capability locally.
+message NotificationActionDescriptor {
+  bytes action_id = 1;
+  string title = 2;
+  bool requires_text_input = 3;
+  bool allows_free_form_input = 4;
+}
+
+// NotificationMedia carries one normalized static image inside the same E2EE
+// plaintext as its notification. Resource references and external URLs are forbidden.
+message NotificationMedia {
+  bytes content_sha256 = 1;
+  NotificationMediaMimeType mime_type = 2;
+  uint32 width = 3;
+  uint32 height = 4;
+  bytes encoded_bytes = 5;
+}
+
+enum NotificationMediaMimeType {
+  NOTIFICATION_MEDIA_MIME_TYPE_UNSPECIFIED = 0;
+  NOTIFICATION_MEDIA_MIME_TYPE_PNG = 1;
+  NOTIFICATION_MEDIA_MIME_TYPE_WEBP = 2;
+}
+
+// NotificationRemoved is authoritative for one notification revision. Chrome
+// retains this revision so a delayed older upsert cannot resurrect the item.
+message NotificationRemoved {
+  string notification_id = 1;
+  uint64 notification_revision = 2;
+}
+
+// NotificationSnapshotManifest declares the complete active notification set
+// at one source-wide revision high-water mark. It carries no notification text;
+// matching upserts are delivered first in independent encrypted envelopes.
+message NotificationSnapshotManifest {
+  uint64 high_water_revision = 1;
+  repeated NotificationSnapshotEntry active_notifications = 2;
+  // Present only when responding to an authenticated recovery request.
+  optional bytes recovery_request_id = 3;
+}
+
+// NotificationSnapshotRequest asks one authenticated Android source for a fresh,
+// complete snapshot after recipient relay history became unavailable.
+message NotificationSnapshotRequest {
+  bytes recovery_request_id = 1;
+  uint64 reset_high_water_delivery_id = 2;
+}
+
+message NotificationSnapshotEntry {
+  string notification_id = 1;
+  uint64 notification_revision = 2;
+}
+
+enum ActionResultStatus {
+  ACTION_RESULT_STATUS_UNSPECIFIED = 0;
+  ACTION_RESULT_STATUS_SUCCEEDED = 1;
+  ACTION_RESULT_STATUS_NOTIFICATION_NOT_FOUND = 2;
+  ACTION_RESULT_STATUS_STALE_NOTIFICATION_VERSION = 3;
+  ACTION_RESULT_STATUS_ACTION_NOT_FOUND = 4;
+  ACTION_RESULT_STATUS_TEXT_REQUIRED = 5;
+  ACTION_RESULT_STATUS_TEXT_NOT_SUPPORTED = 6;
+  ACTION_RESULT_STATUS_PENDING_INTENT_CANCELLED = 7;
+  ACTION_RESULT_STATUS_INTERNAL_ERROR = 8;
+  // The operation tuple was committed but a crash prevented a reliable local
+  // result from being stored. The operation MUST NOT be executed again.
+  ACTION_RESULT_STATUS_OUTCOME_UNKNOWN = 9;
+}

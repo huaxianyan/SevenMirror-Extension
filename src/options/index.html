@@ -3,12 +3,148 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Notification Mirroring Settings</title>
+    <title data-i18n="settingsTitle">SevenMirror Settings</title>
+    <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <main>
-      <h1>Notification Mirroring Settings</h1>
-      <p>Private server pairing will be implemented after the E2EE ADR is accepted.</p>
-    </main>
+    <header class="top-bar">
+      <strong data-i18n="appName">SevenMirror</strong>
+      <span id="extension-version" data-i18n="extensionVersionChecking">Extension version: checking…</span>
+    </header>
+    <div class="layout">
+      <nav aria-label="Settings" data-i18n-aria-label="settingsNavigation">
+        <a href="#connection" data-i18n="optionsConnection">Connection</a>
+        <a href="#devices" data-i18n="optionsDevices">Devices</a>
+        <a href="#notifications" data-i18n="optionsNotifications">Notifications</a>
+        <a href="../shortcuts/index.html" data-i18n="optionsShortcuts">Shortcuts</a>
+        <a href="#data-privacy" data-i18n="optionsDataPrivacy">Data and privacy</a>
+        <a href="#about" data-i18n="optionsAbout">About</a>
+      </nav>
+
+      <main>
+        <section id="connection" aria-labelledby="connection-title">
+          <h1 id="connection-title" data-i18n="optionsConnection">Connection</h1>
+          <div class="card status-card">
+            <h2 id="connection-state" data-i18n="checkingRegistration">Checking registration state…</h2>
+            <p id="connection-guidance"></p>
+            <dl id="connection-details" hidden>
+              <div><dt data-i18n="serverOrigin">Server address</dt><dd id="saved-server-origin"></dd></div>
+              <div><dt data-i18n="optionsCurrentDevice">Current device</dt><dd id="current-device-name"></dd></div>
+            </dl>
+            <button id="reconnect-transport" class="secondary" type="button" hidden data-i18n="retryConnection">Reconnect</button>
+            <button id="re-enroll-device" class="danger-secondary" type="button" hidden data-i18n="optionsReEnrollDevice">Register this device again</button>
+          </div>
+
+          <form id="registration-form" class="card" autocomplete="off" hidden>
+            <h2 data-i18n="optionsJoinTitle">Join your private service</h2>
+            <p class="supporting" data-i18n="optionsJoinBody">Generate a one-time Chrome joining code in the SevenMirror server administration page.</p>
+            <label>
+              <span data-i18n="serverOrigin">Server address</span>
+              <input id="server-origin" name="server-origin" type="url"
+                     placeholder="https://notify.example" data-i18n-placeholder="serverOriginPlaceholder"
+                     required spellcheck="false" />
+            </label>
+            <label>
+              <span data-i18n="oneTimePairingCode">One-time joining code</span>
+              <input id="pairing-code" name="pairing-code" type="password"
+                     minlength="32" maxlength="32" required autocomplete="new-password" />
+            </label>
+            <label>
+              <span data-i18n="deviceName">Device name</span>
+              <input id="device-name" name="device-name" type="text"
+                     value="Chrome" maxlength="100" required />
+            </label>
+            <button id="register" type="submit" data-i18n="submitJoinRequest">Submit join request</button>
+          </form>
+          <p id="registration-status" role="status" aria-live="polite"></p>
+        </section>
+
+        <section id="devices" aria-labelledby="devices-title">
+          <h1 id="devices-title" data-i18n="optionsDevices">Devices</h1>
+          <p class="supporting" data-i18n="optionsDevicesBody">Devices authorized to use this SevenMirror workspace.</p>
+          <div id="device-counts" class="summary"></div>
+          <div id="device-list" class="device-list"></div>
+          <p id="devices-empty" class="empty" data-i18n="optionsDevicesUnavailable">Device information will be available after approval.</p>
+          <p class="supporting" data-i18n="optionsDeviceAdminBoundary">Approve, remove, or reject devices in the server administration page.</p>
+        </section>
+
+        <section id="notifications" aria-labelledby="notifications-title">
+          <h1 id="notifications-title" data-i18n="optionsNotifications">Notifications</h1>
+          <div class="card">
+            <label class="switch-row">
+              <span><strong data-i18n="optionsBadgeTitle">New notification badge</strong><small data-i18n="optionsBadgeBody">Show how many notifications have not been viewed in the Popup.</small></span>
+              <input id="badge-enabled" type="checkbox" role="switch" />
+            </label>
+          </div>
+          <div class="card">
+            <h2 data-i18n="optionsSourcesTitle">Android sources</h2>
+            <p class="supporting" data-i18n="optionsSourcesBody">Choose which authorized Android devices appear on this Chrome device.</p>
+            <div id="source-list" class="compact-list"></div>
+            <p id="sources-empty" class="supporting" data-i18n="optionsSourcesEmpty">No authorized Android source is available.</p>
+          </div>
+          <div class="card option-list">
+            <label class="switch-row">
+              <span><strong data-i18n="optionsNativeNotificationsTitle">Browser notifications</strong><small data-i18n="optionsNativeNotificationsBody">Show new notifications outside the SevenMirror Popup.</small></span>
+              <input id="native-notifications-enabled" type="checkbox" role="switch" />
+            </label>
+            <label class="switch-row">
+              <span><strong data-i18n="optionsShowBodyTitle">Notification text</strong><small data-i18n="optionsShowBodyBody">Show notification text in SevenMirror and browser notifications.</small></span>
+              <input id="show-body" type="checkbox" role="switch" />
+            </label>
+            <label class="switch-row">
+              <span><strong data-i18n="optionsShowImagesTitle">App icons and avatars</strong><small data-i18n="optionsShowImagesBody">Use images supplied by Android in browser notifications.</small></span>
+              <input id="show-images" type="checkbox" role="switch" />
+            </label>
+            <label class="switch-row">
+              <span><strong data-i18n="optionsSilentNotificationsTitle">Silent browser notifications</strong><small data-i18n="optionsSilentNotificationsBody">Show browser notifications without a sound.</small></span>
+              <input id="silent-notifications" type="checkbox" role="switch" />
+            </label>
+          </div>
+          <a class="button-link" href="../shortcuts/index.html" data-i18n="openShortcutSettings">Notification shortcut settings</a>
+          <p class="supporting" data-i18n="optionsLocalDisplayBoundary">Browser display settings affect only this Chrome device. Android controls which notifications may leave the phone.</p>
+          <p id="notification-settings-status" role="status" aria-live="polite"></p>
+        </section>
+
+        <section id="data-privacy" aria-labelledby="data-privacy-title">
+          <h1 id="data-privacy-title" data-i18n="optionsDataPrivacy">Data and privacy</h1>
+          <div class="card">
+            <h2 data-i18n="optionsLocalDataTitle">Local notification data</h2>
+            <p class="supporting" data-i18n="optionsLocalDataBody">Current mirrored notifications are stored only in this Chrome profile.</p>
+            <button id="clear-local-notifications" class="danger-secondary" type="button" data-i18n="optionsClearLocalNotifications">Clear local notification list</button>
+          </div>
+        </section>
+
+        <section id="about" aria-labelledby="about-title">
+          <h1 id="about-title" data-i18n="optionsAbout">About</h1>
+          <div class="card">
+            <p data-i18n="optionsLicense">SevenMirror is provided under the GNU GPLv3 license.</p>
+            <p><a href="https://github.com/huaxianyan/SevenMirror-Extension" target="_blank" rel="noreferrer" data-i18n="optionsProjectLink">Project documentation</a></p>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="re-enroll-confirmation">
+      <form method="dialog">
+        <h2 data-i18n="optionsReEnrollConfirmTitle">Register this Chrome device again?</h2>
+        <p data-i18n="optionsReEnrollConfirmBody">Its previous access has been removed. SevenMirror will clear the old workspace access from this Chrome profile, then return to setup.</p>
+        <div class="dialog-actions">
+          <button value="cancel" class="secondary" data-i18n="cancel">Cancel</button>
+          <button id="confirm-re-enroll" value="confirm" class="danger" data-i18n="optionsReEnrollConfirmAction">Clear old access</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="clear-confirmation">
+      <form method="dialog">
+        <h2 data-i18n="optionsClearConfirmTitle">Clear the local notification list?</h2>
+        <p data-i18n="optionsClearConfirmBody">This removes notifications saved in this Chrome profile. New notifications can arrive again.</p>
+        <div class="dialog-actions">
+          <button value="cancel" class="secondary" data-i18n="cancel">Cancel</button>
+          <button id="confirm-clear" value="confirm" class="danger" data-i18n="optionsClearConfirmAction">Clear local list</button>
+        </div>
+      </form>
+    </dialog>
+    <script type="module" src="./main.ts"></script>
   </body>
 </html>

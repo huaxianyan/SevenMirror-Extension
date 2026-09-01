@@ -1,12 +1,69 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 
-const schema = await readFile(new URL('./vendor/notification/v1/envelope.proto', import.meta.url));
-const expected = (await readFile(new URL('./SCHEMA_SHA256', import.meta.url), 'utf8')).trim();
-const actual = createHash('sha256').update(schema).digest('hex');
+async function verify(assetPath, hashPath) {
+  const asset = await readFile(new URL(assetPath, import.meta.url));
+  const expected = (await readFile(new URL(hashPath, import.meta.url), 'utf8')).trim();
+  const actual = createHash('sha256').update(asset).digest('hex');
 
-if (actual !== expected) {
-  console.error(`Vendored protocol hash mismatch: expected ${expected}, got ${actual}`);
-  process.exit(1);
+  if (actual !== expected) {
+    console.error(
+      `Vendored protocol hash mismatch for ${assetPath}: expected ${expected}, got ${actual}`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+  console.log(`Protocol asset verified: ${assetPath} ${actual}`);
 }
-console.log(`Protocol schema verified: ${actual}`);
+
+await verify('./vendor/notification/v1/envelope.proto', './SCHEMA_SHA256');
+await verify('./vendor/notification/v1/payload.proto', './PAYLOAD_SCHEMA_SHA256');
+await verify('./vendor/membership/v1/membership.proto', './MEMBERSHIP_SCHEMA_SHA256');
+await verify('./workspace-membership-v1.md', './MEMBERSHIP_SPEC_SHA256');
+await verify(
+  './test-vectors/workspace-membership-v1.json',
+  './MEMBERSHIP_VECTOR_SHA256',
+);
+await verify('./encrypted-payload-v1.md', './PAYLOAD_SPEC_SHA256');
+await verify(
+  './test-vectors/encrypted-payload-v1.json',
+  './PAYLOAD_VECTOR_SHA256',
+);
+await verify('./routing-header-v1.md', './ROUTING_HEADER_SPEC_SHA256');
+await verify(
+  './test-vectors/routing-header-v1.json',
+  './ROUTING_HEADER_VECTOR_SHA256',
+);
+await verify('./encrypted-envelope-v1.md', './ENCRYPTED_ENVELOPE_SPEC_SHA256');
+await verify(
+  './test-vectors/encrypted-envelope-v1.json',
+  './ENCRYPTED_ENVELOPE_VECTOR_SHA256',
+);
+await verify('./device-auth-frame-v1.md', './DEVICE_AUTH_SPEC_SHA256');
+await verify('./transport-heartbeat-v1.md', './TRANSPORT_HEARTBEAT_SPEC_SHA256');
+await verify('./relay-delivery-v1.md', './RELAY_DELIVERY_SPEC_SHA256');
+await verify(
+  './test-vectors/relay-delivery-v1.json',
+  './RELAY_DELIVERY_VECTOR_SHA256',
+);
+await verify(
+  './transport-credential-rotation-v1.md',
+  './TRANSPORT_CREDENTIAL_ROTATION_SPEC_SHA256',
+);
+await verify(
+  './e2ee-identity-key-transition-v1.md',
+  './E2EE_IDENTITY_TRANSITION_SPEC_SHA256',
+);
+await verify(
+  './test-vectors/e2ee-identity-key-transition-v1.json',
+  './E2EE_IDENTITY_TRANSITION_VECTOR_SHA256',
+);
+await verify(
+  './test-vectors/device-auth-frame-v1.json',
+  './DEVICE_AUTH_VECTOR_SHA256',
+);
+await verify('./trusted-device-pairing-v1.md', './TRUST_PAIRING_SPEC_SHA256');
+await verify(
+  './test-vectors/trusted-device-pairing-v1.json',
+  './TRUST_PAIRING_VECTOR_SHA256',
+);

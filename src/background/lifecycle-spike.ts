@@ -4,7 +4,10 @@ const LAST_DEBUG_NOTIFICATION_KEY = 'spike003.lastDebugNotificationId';
 const PROGRAMMATIC_MARKERS_KEY = 'spike003.programmaticCloseMarkers';
 const LAST_CLOSE_AUDIT_KEY = 'spike003.lastCloseAudit';
 const WORKER_START_COUNT_KEY = 'spike003.workerStartCount';
-const MARKER_TTL_MS = 5 * 60 * 1_000;
+const MARKER_TTL_MS = 10_000;
+
+const immediateMarkers = new Map<string, ProgrammaticMarker>();
+let markerMutation = Promise.resolve();
 
 interface ProgrammaticMarker {
   reason: string;
@@ -51,17 +54,20 @@ export async function clearLifecycleTestNotification(): Promise<boolean> {
   await markProgrammaticClose(id, 'popup-test-clear');
   const cleared = await clearNotification(id);
   if (!cleared) {
-    await consumeProgrammaticMarker(id);
+    await consumeProgrammaticCloseMarker(id);
   }
   return cleared;
 }
 
-export async function handleNotificationClosed(notificationId: string, byUser: boolean): Promise<void> {
-  if (!notificationId.startsWith('spike003:')) {
-    return;
+export async function handleNotificationClosed(
+  notificationId: string,
+  byUser: boolean,
+): Promise<CloseAudit | undefined> {
+  if (!notificationId.startsWith('spike003:') && !notificationId.startsWith('sn1:')) {
+    return undefined;
   }
 
-  const marker = await consumeProgrammaticMarker(notificationId);
+  const marker = await consumeProgrammaticCloseMarker(notificationId);
   const decision = decideClose({
     byUser,
     hasProgrammaticMarker: marker !== undefined,
@@ -74,6 +80,7 @@ export async function handleNotificationClosed(notificationId: string, byUser: b
     observedAt: Date.now(),
   };
   await chrome.storage.local.set({ [LAST_CLOSE_AUDIT_KEY]: audit });
+  return audit;
 }
 
 export async function getLifecycleSpikeStatus(): Promise<{
@@ -93,34 +100,52 @@ function clearNotification(notificationId: string): Promise<boolean> {
   });
 }
 
-async function markProgrammaticClose(notificationId: string, reason: string): Promise<void> {
-  const stored = await chrome.storage.local.get(PROGRAMMATIC_MARKERS_KEY);
-  const markers = asMarkers(stored[PROGRAMMATIC_MARKERS_KEY]);
-  markers[notificationId] = { reason, createdAt: Date.now() };
-  await chrome.storage.local.set({ [PROGRAMMATIC_MARKERS_KEY]: markers });
+export async function markProgrammaticClose(notificationId: string, reason: string): Promise<void> {
+  const marker = { reason, createdAt: Date.now() };
+  immediateMarkers.set(notificationId, marker);
+  await mutateMarkers(async () => {
+    const stored = await chrome.storage.local.get(PROGRAMMATIC_MARKERS_KEY);
+    const markers = asMarkers(stored[PROGRAMMATIC_MARKERS_KEY]);
+    markers[notificationId] = marker;
+    await chrome.storage.local.set({ [PROGRAMMATIC_MARKERS_KEY]: markers });
+  });
 }
 
-async function consumeProgrammaticMarker(
+export async function consumeProgrammaticCloseMarker(
   notificationId: string,
 ): Promise<ProgrammaticMarker | undefined> {
-  const stored = await chrome.storage.local.get(PROGRAMMATIC_MARKERS_KEY);
-  const markers = asMarkers(stored[PROGRAMMATIC_MARKERS_KEY]);
-  const marker = markers[notificationId];
-  if (marker) {
-    delete markers[notificationId];
-    await chrome.storage.local.set({ [PROGRAMMATIC_MARKERS_KEY]: markers });
-  }
-  return marker;
+  const immediate = immediateMarkers.get(notificationId);
+  immediateMarkers.delete(notificationId);
+  return mutateMarkers(async () => {
+    const stored = await chrome.storage.local.get(PROGRAMMATIC_MARKERS_KEY);
+    const markers = asMarkers(stored[PROGRAMMATIC_MARKERS_KEY]);
+    const marker = immediate ?? markers[notificationId];
+    if (markers[notificationId] !== undefined) {
+      delete markers[notificationId];
+      await chrome.storage.local.set({ [PROGRAMMATIC_MARKERS_KEY]: markers });
+    }
+    return marker !== undefined && marker.createdAt >= Date.now() - MARKER_TTL_MS
+      ? marker
+      : undefined;
+  });
 }
 
 async function pruneExpiredMarkers(): Promise<void> {
-  const stored = await chrome.storage.local.get(PROGRAMMATIC_MARKERS_KEY);
-  const markers = asMarkers(stored[PROGRAMMATIC_MARKERS_KEY]);
-  const cutoff = Date.now() - MARKER_TTL_MS;
-  const retained = Object.fromEntries(
-    Object.entries(markers).filter(([, marker]) => marker.createdAt >= cutoff),
-  );
-  await chrome.storage.local.set({ [PROGRAMMATIC_MARKERS_KEY]: retained });
+  await mutateMarkers(async () => {
+    const stored = await chrome.storage.local.get(PROGRAMMATIC_MARKERS_KEY);
+    const markers = asMarkers(stored[PROGRAMMATIC_MARKERS_KEY]);
+    const cutoff = Date.now() - MARKER_TTL_MS;
+    const retained = Object.fromEntries(
+      Object.entries(markers).filter(([, marker]) => marker.createdAt >= cutoff),
+    );
+    await chrome.storage.local.set({ [PROGRAMMATIC_MARKERS_KEY]: retained });
+  });
+}
+
+function mutateMarkers<T>(operation: () => Promise<T>): Promise<T> {
+  const result = markerMutation.then(operation);
+  markerMutation = result.then(() => undefined, () => undefined);
+  return result;
 }
 
 function asMarkers(value: unknown): ProgrammaticMarkers {

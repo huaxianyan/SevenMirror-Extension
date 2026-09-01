@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n="shortcutSettingsTitle">Notification shortcuts</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header class="top-bar">
+      <strong data-i18n="appName">SevenMirror</strong>
+      <a href="../options/index.html" data-i18n="shortcutBackToSettings">Back to settings</a>
+    </header>
+    <div class="layout">
+      <nav aria-label="Settings" data-i18n-aria-label="settingsNavigation">
+        <a href="../options/index.html#connection" data-i18n="optionsConnection">Connection</a>
+        <a href="../options/index.html#devices" data-i18n="optionsDevices">Devices</a>
+        <a href="../options/index.html#notifications" data-i18n="optionsNotifications">Notifications</a>
+        <a href="#shortcut-settings" aria-current="page" data-i18n="optionsShortcuts">Shortcuts</a>
+        <a href="../options/index.html#data-privacy" data-i18n="optionsDataPrivacy">Data and privacy</a>
+        <a href="../options/index.html#about" data-i18n="optionsAbout">About</a>
+      </nav>
+
+      <main id="shortcut-settings">
+        <header class="page-heading">
+          <h1 data-i18n="shortcutSettingsTitle">Notification shortcuts</h1>
+          <p data-i18n="shortcutSettingsDescription">
+            Choose which actions are easiest to reach from Chrome notifications.
+          </p>
+        </header>
+
+        <form id="shortcut-form" novalidate>
+          <section class="panel" aria-labelledby="clear-title">
+            <label class="toggle-row">
+              <span>
+                <strong id="clear-title" data-i18n="shortcutPinClear">Always show Clear</strong>
+                <small data-i18n="shortcutPinClearDescription">Keep Clear available for the notification on your phone.</small>
+              </span>
+              <input id="pin-dismiss" type="checkbox" role="switch" disabled />
+            </label>
+          </section>
+
+          <section class="rules-section" aria-labelledby="rules-title">
+            <div class="section-heading">
+              <div>
+                <h2 id="rules-title" data-i18n="shortcutPriorityRules">Priority rules</h2>
+                <p data-i18n="shortcutPriorityDescription">Rules are checked from top to bottom. Use the move buttons to change priority.</p>
+              </div>
+              <button id="add-rule" type="button" disabled data-i18n="shortcutAddRule">Add rule</button>
+            </div>
+            <ol id="rules" class="rules"></ol>
+            <p id="empty-rules" class="empty" data-i18n="shortcutNoRules">No priority rules. Other actions remain available after opening the notification.</p>
+          </section>
+
+          <footer>
+            <button id="save" class="primary" type="submit" disabled data-i18n="shortcutSave">Save changes</button>
+            <p id="status" role="status" aria-live="polite"></p>
+          </footer>
+        </form>
+      </main>
+    </div>
+
+    <template id="rule-template">
+      <li class="rule">
+        <div class="rule-heading">
+          <h3 class="rule-title"></h3>
+          <div class="rule-actions">
+            <button class="move-up" type="button" data-i18n-aria-label="shortcutMoveUp">↑</button>
+            <button class="move-down" type="button" data-i18n-aria-label="shortcutMoveDown">↓</button>
+            <button class="remove" type="button" data-i18n="shortcutRemoveRule">Remove</button>
+          </div>
+        </div>
+        <div class="rule-fields">
+          <label>
+            <span data-i18n="shortcutMatch">Match</span>
+            <select class="match-kind">
+              <option value="reply" data-i18n="shortcutMatchReply">Needs a reply</option>
+              <option value="title-exact" data-i18n="shortcutMatchExact">Action title is exactly</option>
+              <option value="title-contains" data-i18n="shortcutMatchContains">Action title contains</option>
+            </select>
+          </label>
+          <label class="title-field">
+            <span data-i18n="shortcutActionTitle">Action title</span>
+            <input class="match-value" type="text" maxlength="256" autocomplete="off" />
+            <small class="field-error" hidden data-i18n="shortcutActionTitleRequired">Enter an action title.</small>
+          </label>
+          <label>
+            <span data-i18n="shortcutApplication">Application</span>
+            <select class="application"></select>
+          </label>
+        </div>
+      </li>
+    </template>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
