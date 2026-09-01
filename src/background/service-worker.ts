@@ -22,7 +22,11 @@ import {
 import { NotificationPresenter } from './notification-presenter';
 import { NotificationButtonBindingStore } from './notification-button-binding-store';
 import { NotificationShortcutPreferencesStore } from './notification-shortcuts';
-import { NotificationPresentationPreferencesStore } from './notification-presentation-preferences';
+import {
+  NotificationPresentationPreferencesStore,
+  sourceEnabled,
+  type NotificationPresentationPreferences,
+} from './notification-presentation-preferences';
 import {
   CertifiedReEnrollmentResetStore,
   completeCertifiedReEnrollmentReset,
@@ -76,6 +80,7 @@ const notificationPresentationPreferencesStore = new NotificationPresentationPre
 const certifiedReEnrollmentResetStore = new CertifiedReEnrollmentResetStore();
 const notificationPresenter = new NotificationPresenter({
   loadShortcutPreferences: () => notificationShortcutPreferencesStore.load(),
+  loadPresentationPreferences: () => notificationPresentationPreferencesStore.load(),
   saveButtonBindings: (notificationId, revision, buttons) =>
     notificationButtonBindingStore.save(notificationId, revision, buttons),
   removeButtonBindings: (notificationId) => notificationButtonBindingStore.remove(notificationId),
@@ -125,7 +130,10 @@ transportRuntime = new TransportRuntime(
       options?.allowReplayDuplicate ?? false,
     );
     if (result.kind === 'notification') {
-      await notificationPresenter.present(result.receipt);
+      const sourceName = result.receipt.kind === 'item'
+        ? await resolvePresentationSourceName(result.receipt.reconciliation.state)
+        : undefined;
+      await notificationPresenter.present(result.receipt, sourceName);
       await updateToolbarBadge();
       if (result.receipt.kind === 'snapshot' &&
           result.receipt.recoveryRequestId !== undefined) {
@@ -341,7 +349,7 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
 
     case 'save-notification-presentation-preferences':
       void notificationPresentationPreferencesStore.save(message.preferences).then(
-        async () => { await updateToolbarBadge(); sendResponse({ saved: true }); },
+        async () => { await refreshNotificationPresentation(); sendResponse({ saved: true }); },
         () => sendResponse({ saved: false }),
       );
       return true;
@@ -700,6 +708,7 @@ async function completePendingCertifiedReEnrollmentReset(): Promise<boolean> {
       }
     },
     clearWorkspaceState: async () => {
+      const presentationPreferences = await notificationPresentationPreferencesStore.load();
       await Promise.all([
         pendingActionStore.clear(),
         outboundSequenceStore.clear(),
@@ -711,6 +720,10 @@ async function completePendingCertifiedReEnrollmentReset(): Promise<boolean> {
         identityStore.clear(),
         workspaceMembershipStore.clear(),
         notificationButtonBindingStore.clearAll(),
+        notificationPresentationPreferencesStore.save({
+          ...presentationPreferences,
+          mutedSourceDeviceIds: [],
+        }),
       ]);
     },
     clearConnectionState: async () => {
@@ -726,12 +739,18 @@ async function getOptionsOverview(): Promise<{
   serverOrigin?: string;
   localDeviceName?: string;
   devices: Array<{
+    deviceKey: string;
     displayName: string;
     deviceType: 'android' | 'chrome';
     isCurrentDevice: boolean;
     accessCurrent: boolean;
   }>;
   badgeEnabled: boolean;
+  nativeNotificationsEnabled: boolean;
+  showBody: boolean;
+  showImages: boolean;
+  silentNotifications: boolean;
+  mutedSourceDeviceIds: string[];
 }> {
   if (await certifiedReEnrollmentResetStore.isPending()) {
     const preferences = await notificationPresentationPreferencesStore.load();
@@ -787,6 +806,40 @@ async function getOptionsOverview(): Promise<{
   }
 }
 
+async function resolvePresentationSourceName(
+  state: MirroredNotificationState,
+): Promise<string | undefined> {
+  const credential = await credentialStore.load();
+  if (credential === undefined) return undefined;
+  try {
+    return await businessPeerResolver.resolveNotificationSourceName(
+      credential.workspaceId,
+      credential.deviceId,
+      state.sourceDeviceId,
+      Date.now(),
+    );
+  } finally {
+    credential.authToken.fill(0);
+  }
+}
+
+function presentationSummary(
+  state: MirroredNotificationState,
+  sourceName: string,
+  preferences: NotificationPresentationPreferences,
+): ReturnType<typeof interactionSummary> {
+  const summary = interactionSummary(state, sourceName);
+  return preferences.showBody ? summary : { ...summary, body: '' };
+}
+
+async function refreshNotificationPresentation(): Promise<void> {
+  const states = await notificationStateStore.listVisible();
+  for (const state of states) {
+    await notificationPresenter.presentState(state, await resolvePresentationSourceName(state));
+  }
+  await updateToolbarBadge();
+}
+
 async function clearLocalNotificationState(): Promise<void> {
   const states = await notificationStateStore.listVisible();
   for (const state of states) {
@@ -806,10 +859,11 @@ async function getPopupNotifications(): Promise<{
     updatedAtUnixMs: number;
   }>;
 }> {
-  const [stored, presentations, credential] = await Promise.all([
+  const [stored, presentations, credential, preferences] = await Promise.all([
     chrome.storage.local.get(CONNECTION_STATE_KEY),
     notificationStateStore.listVisibleForPresentation(),
     credentialStore.load(),
+    notificationPresentationPreferencesStore.load(),
   ]);
   if (credential === undefined) {
     return {
@@ -820,6 +874,7 @@ async function getPopupNotifications(): Promise<{
   try {
     const notifications = [];
     for (const presentation of presentations) {
+      if (!sourceEnabled(preferences, presentation.state.sourceDeviceId)) continue;
       const sourceName = await businessPeerResolver.resolveNotificationSourceName(
         credential.workspaceId,
         credential.deviceId,
@@ -828,7 +883,7 @@ async function getPopupNotifications(): Promise<{
       );
       if (sourceName === undefined) continue;
       notifications.push({
-        ...interactionSummary(presentation.state, sourceName),
+        ...presentationSummary(presentation.state, sourceName, preferences),
         isNew: presentation.isNew,
         updatedAtUnixMs: presentation.updatedAtUnixMs,
       });
@@ -871,7 +926,10 @@ async function updateToolbarBadge(): Promise<void> {
 
 async function openNotificationInteraction(notificationId: string): Promise<void> {
   const state = await notificationStateStore.findVisibleByChromeNotificationId(notificationId);
-  if (state === undefined) return;
+  if (state === undefined || !sourceEnabled(
+    await notificationPresentationPreferencesStore.load(),
+    state.sourceDeviceId,
+  )) return;
   await chrome.tabs.create({
     url: interactionPageUrl(chrome.runtime.getURL('/'), notificationId),
   });
@@ -885,6 +943,8 @@ async function getNotificationInteraction(
     message.chromeNotificationId,
   );
   if (state === undefined) return undefined;
+  const preferences = await notificationPresentationPreferencesStore.load();
+  if (!sourceEnabled(preferences, state.sourceDeviceId)) return undefined;
   const credential = await credentialStore.load();
   if (credential === undefined) return undefined;
   try {
@@ -894,7 +954,7 @@ async function getNotificationInteraction(
       state.sourceDeviceId,
       Date.now(),
     );
-    return sourceName === undefined ? undefined : interactionSummary(state, sourceName);
+    return sourceName === undefined ? undefined : presentationSummary(state, sourceName, preferences);
   } finally {
     credential.authToken.fill(0);
   }
@@ -910,6 +970,9 @@ async function invokeNotificationInteraction(message: Record<string, unknown>): 
     message.chromeNotificationId,
   );
   if (state === undefined || state.revision !== message.revision) return { outcome: 'changed' };
+  if (!sourceEnabled(await notificationPresentationPreferencesStore.load(), state.sourceDeviceId)) {
+    return { outcome: 'unavailable' };
+  }
 
   let result: Awaited<ReturnType<typeof queueStateOperation>>;
   if (message.operation === 'dismiss') {
@@ -1022,6 +1085,9 @@ async function queueStateOperation(
     | { actionId: Uint8Array; replyText?: string; sendOnce?: boolean }
     | { dismissNotification: true },
 ): Promise<{ queued: boolean; accepted: boolean; idempotencyKey: string } | undefined> {
+  if (!sourceEnabled(await notificationPresentationPreferencesStore.load(), state.sourceDeviceId)) {
+    return undefined;
+  }
   const credential = await credentialStore.load();
   if (credential === undefined) return undefined;
   try {

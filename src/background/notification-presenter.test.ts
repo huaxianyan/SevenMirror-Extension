@@ -46,6 +46,8 @@ describe('Notification presentation', () => {
       payloadSha256: new Uint8Array(32).fill(2),
       sourceApplicationName: 'Example Chat',
       title: 'New message',
+      body: 'Private preview',
+      appIcon: appIcon(),
       actions: [
         {
           actionId: new Uint8Array(16).fill(3),
@@ -66,6 +68,14 @@ describe('Notification presentation', () => {
       notificationIconUrl: () => 'extension://icon',
       dismissButtonTitle: () => 'Clear',
       moreButtonTitle: () => 'More',
+      loadPresentationPreferences: async () => ({
+        badgeEnabled: true,
+        nativeNotificationsEnabled: true,
+        showBody: false,
+        showImages: false,
+        silentNotifications: true,
+        mutedSourceDeviceIds: [],
+      }),
       loadShortcutPreferences: async () => ({
         pinDismiss: true,
         rules: [{
@@ -81,11 +91,17 @@ describe('Notification presentation', () => {
     await presenter.present({
       kind: 'item',
       reconciliation: { disposition: 'applied', state },
-    });
+    }, 'Bedroom phone');
 
     expect(events).toEqual(['bind:7:action,dismiss', 'create']);
     expect(nativeOptions[0]?.buttons).toEqual([{ title: 'Reply' }, { title: 'Clear' }]);
-    expect(nativeOptions[0]?.title).toContain('Example Chat');
+    expect(nativeOptions[0]).toMatchObject({
+      title: 'New message · Example Chat · Bedroom phone',
+      message: '',
+      iconUrl: 'extension://icon',
+      silent: true,
+    });
+    expect(nativeOptions[0]?.title).not.toMatch(/[0-9a-f]{12}/);
   });
 
   it('uses only media whose encoded and decoded dimensions match the bounded declaration', async () => {

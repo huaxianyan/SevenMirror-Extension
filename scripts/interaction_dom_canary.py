@@ -492,6 +492,54 @@ def main() -> None:
                     "url": f"chrome-extension://{extension_id}/options/index.html",
                 })
                 evaluate_until(page, "document.querySelectorAll('#device-list .device').length >= 2", args.timeout_seconds)
+                for control_id, field, expected in (
+                    ("native-notifications-enabled", "nativeNotificationsEnabled", False),
+                    ("show-body", "showBody", False),
+                    ("show-images", "showImages", False),
+                    ("silent-notifications", "silentNotifications", True),
+                ):
+                    page.evaluate(f"document.getElementById('{control_id}').click()")
+                    preference_saved = evaluate_until(page, f"""
+(async () => {{
+  const value = (await chrome.storage.local.get('notificationPresentationPreferencesV1'))
+    .notificationPresentationPreferencesV1;
+  return value?.{field} === {str(expected).lower()} &&
+    document.getElementById('{control_id}')?.disabled === false;
+}})()
+""", args.timeout_seconds)
+                    if preference_saved is not True:
+                        raise RuntimeError(f"Options did not persist {field}")
+                page.evaluate("document.querySelector('.source-toggle input').click()")
+                source_hidden = evaluate_until(page, """
+(async () => {
+  const value = (await chrome.storage.local.get('notificationPresentationPreferencesV1'))
+    .notificationPresentationPreferencesV1;
+  if (value?.mutedSourceDeviceIds?.length !== 1) return false;
+  const popup = await chrome.runtime.sendMessage({ type: 'get-popup-notifications' });
+  const native = await new Promise((resolve) => chrome.notifications.getAll(resolve));
+  const toggle = document.querySelector('.source-toggle input');
+  return popup.notifications.length === 0 && Object.keys(native).length === 0 &&
+    toggle?.disabled === false && toggle.checked === false;
+})()
+""", args.timeout_seconds)
+                if source_hidden is not True:
+                    raise RuntimeError("Muted Android source remained visible on Chrome")
+                page.evaluate("document.querySelector('.source-toggle input').click()")
+                source_restored = evaluate_until(page, """
+(async () => {
+  const value = (await chrome.storage.local.get('notificationPresentationPreferencesV1'))
+    .notificationPresentationPreferencesV1;
+  if (value?.mutedSourceDeviceIds?.length !== 0) return false;
+  const popup = await chrome.runtime.sendMessage({ type: 'get-popup-notifications' });
+  const native = await new Promise((resolve) => chrome.notifications.getAll(resolve));
+  const toggle = document.querySelector('.source-toggle input');
+  return popup.notifications.length === 1 && popup.notifications[0].body === '' &&
+    Object.keys(native).length === 0 && toggle?.disabled === false && toggle.checked === true;
+})()
+""", args.timeout_seconds)
+                if source_restored is not True:
+                    raise RuntimeError("Chrome display preferences did not reconcile current notifications")
+
                 page.evaluate("document.getElementById('clear-local-notifications').click()")
                 page.evaluate("document.getElementById('confirm-clear').click()")
                 cleared = evaluate_until(page, """
@@ -516,12 +564,25 @@ def main() -> None:
       state.phase !== 'visible' || state.locallyHiddenRevision === state.revision)) {
     return { cleared: true };
   }
+  const confirm = document.getElementById('confirm-clear');
+  if (confirm?.disabled) return false;
   const status = document.getElementById('notification-settings-status')?.textContent;
   return status ? { cleared: false, status } : false;
 })()
 """, args.timeout_seconds)
                 if not cleared["cleared"]:
                     raise RuntimeError(f"Options did not clear local notification state: {cleared!r}")
+                page.evaluate("document.querySelector('.source-toggle input').click()")
+                muted_before_reset = evaluate_until(page, """
+(async () => {
+  const value = (await chrome.storage.local.get('notificationPresentationPreferencesV1'))
+    .notificationPresentationPreferencesV1;
+  return value?.mutedSourceDeviceIds?.length === 1 &&
+    document.querySelector('.source-toggle input')?.disabled === false;
+})()
+""", args.timeout_seconds)
+                if muted_before_reset is not True:
+                    raise RuntimeError("Source filter was not durable before certified reset")
 
                 revoked = page.evaluate("""
 (async () => {
@@ -609,7 +670,12 @@ def main() -> None:
       'syncnotifications-relay-delivery-cursor-v1',
     ].includes(database.name)).map((database) => database.name),
     preferencePreserved:
-      storage.notificationPresentationPreferencesV1?.badgeEnabled === false,
+      storage.notificationPresentationPreferencesV1?.badgeEnabled === false &&
+      storage.notificationPresentationPreferencesV1?.nativeNotificationsEnabled === false &&
+      storage.notificationPresentationPreferencesV1?.showBody === false &&
+      storage.notificationPresentationPreferencesV1?.showImages === false &&
+      storage.notificationPresentationPreferencesV1?.silentNotifications === true &&
+      storage.notificationPresentationPreferencesV1?.mutedSourceDeviceIds?.length === 0,
     resetIntentPresent: storage['reenrollment-reset'] !== undefined,
     bindingCount: Object.keys(storage).filter((key) =>
       key.startsWith('notificationButtonBindingV1:')).length,
@@ -636,6 +702,8 @@ def main() -> None:
                     "production_worker_boundary_crossed": True,
                     "product_options_device_directory_rendered": True,
                     "badge_preference_persisted": True,
+                    "android_source_filter_reconciled": True,
+                    "notification_display_preferences_persisted": True,
                     "local_notification_clear_confirmed": True,
                     "certified_removal_re_enrollment_reset": True,
                     "re_enrollment_preferences_preserved": True,

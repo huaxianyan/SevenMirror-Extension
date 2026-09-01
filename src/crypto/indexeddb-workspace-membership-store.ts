@@ -27,6 +27,7 @@ interface StoredMembershipState {
 }
 
 export interface WorkspaceDeviceSummary {
+  deviceKey: string;
   displayName: string;
   deviceType: 'android' | 'chrome';
   isCurrentDevice: boolean;
@@ -261,6 +262,7 @@ export class IndexedDbWorkspaceMembershipStore {
         throw new Error('Workspace roster contains an unsupported device type');
       }
       return {
+        deviceKey: toHex(certificate.deviceId),
         displayName: certificate.displayName,
         deviceType: certificate.deviceType === DeviceType.ANDROID ? 'android' : 'chrome',
         isCurrentDevice: equal(certificate.deviceId, localDeviceId),
@@ -391,6 +393,10 @@ function validateId(value: Uint8Array, name: string): void {
 }
 function key(workspaceId: Uint8Array, deviceId: Uint8Array): string { return `${hex(workspaceId)}:${hex(deviceId)}`; }
 function hex(value: Uint8Array): string { return Array.from(value, (item) => item.toString(16).padStart(2, '0')).join(''); }
+function toHex(value: Uint8Array): string {
+  return Array.from(value, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
 function equal(left: Uint8Array, right: Uint8Array): boolean { return left.byteLength === right.byteLength && left.every((item, index) => item === right[index]); }
 function optionalEqual(left?: Uint8Array, right?: Uint8Array): boolean { return left === undefined ? right === undefined : right !== undefined && equal(left, right); }
 function requestResult<T>(request: IDBRequest<T>): Promise<T> { return new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed')); }); }

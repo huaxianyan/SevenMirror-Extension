@@ -77,8 +77,27 @@
           </div>
           <div class="card">
             <h2 data-i18n="optionsSourcesTitle">Android sources</h2>
+            <p class="supporting" data-i18n="optionsSourcesBody">Choose which authorized Android devices appear on this Chrome device.</p>
             <div id="source-list" class="compact-list"></div>
             <p id="sources-empty" class="supporting" data-i18n="optionsSourcesEmpty">No authorized Android source is available.</p>
+          </div>
+          <div class="card option-list">
+            <label class="switch-row">
+              <span><strong data-i18n="optionsNativeNotificationsTitle">Browser notifications</strong><small data-i18n="optionsNativeNotificationsBody">Show new notifications outside the SevenMirror Popup.</small></span>
+              <input id="native-notifications-enabled" type="checkbox" role="switch" />
+            </label>
+            <label class="switch-row">
+              <span><strong data-i18n="optionsShowBodyTitle">Notification text</strong><small data-i18n="optionsShowBodyBody">Show notification text in SevenMirror and browser notifications.</small></span>
+              <input id="show-body" type="checkbox" role="switch" />
+            </label>
+            <label class="switch-row">
+              <span><strong data-i18n="optionsShowImagesTitle">App icons and avatars</strong><small data-i18n="optionsShowImagesBody">Use images supplied by Android in browser notifications.</small></span>
+              <input id="show-images" type="checkbox" role="switch" />
+            </label>
+            <label class="switch-row">
+              <span><strong data-i18n="optionsSilentNotificationsTitle">Silent browser notifications</strong><small data-i18n="optionsSilentNotificationsBody">Show browser notifications without a sound.</small></span>
+              <input id="silent-notifications" type="checkbox" role="switch" />
+            </label>
           </div>
           <a class="button-link" href="../shortcuts/index.html" data-i18n="openShortcutSettings">Notification shortcut settings</a>
           <p class="supporting" data-i18n="optionsLocalDisplayBoundary">Browser display settings affect only this Chrome device. Android controls which notifications may leave the phone.</p>

@@ -9,6 +9,12 @@ import type {
 } from '../crypto/indexeddb-notification-state-store';
 import { NotificationMediaMimeType } from '../protocol/generated/notification/v1/payload_pb';
 import {
+  DEFAULT_NOTIFICATION_PRESENTATION_PREFERENCES,
+  FAIL_CLOSED_NOTIFICATION_PRESENTATION_PREFERENCES,
+  sourceEnabled,
+  type NotificationPresentationPreferences,
+} from './notification-presentation-preferences';
+import {
   DEFAULT_SHORTCUT_PREFERENCES,
   notificationButtons,
   type NotificationButton,
@@ -39,6 +45,7 @@ export interface NotificationPresenterOptions {
   dismissButtonTitle?: () => string;
   moreButtonTitle?: () => string;
   loadShortcutPreferences?: () => Promise<NotificationShortcutPreferences>;
+  loadPresentationPreferences?: () => Promise<NotificationPresentationPreferences>;
   saveButtonBindings?: (
     chromeNotificationId: string,
     revision: string,
@@ -56,6 +63,7 @@ export class NotificationPresenter {
   private readonly dismissButtonTitle: () => string;
   private readonly moreButtonTitle: () => string;
   private readonly loadShortcutPreferences: () => Promise<NotificationShortcutPreferences>;
+  private readonly loadPresentationPreferences: () => Promise<NotificationPresentationPreferences>;
   private readonly saveButtonBindings: NotificationPresenterOptions['saveButtonBindings'];
   private readonly removeButtonBindings: NotificationPresenterOptions['removeButtonBindings'];
 
@@ -72,11 +80,13 @@ export class NotificationPresenter {
       (() => chrome.i18n.getMessage('notificationMoreButton') || 'More');
     this.loadShortcutPreferences = options.loadShortcutPreferences ??
       (async () => DEFAULT_SHORTCUT_PREFERENCES);
+    this.loadPresentationPreferences = options.loadPresentationPreferences ??
+      (async () => DEFAULT_NOTIFICATION_PRESENTATION_PREFERENCES);
     this.saveButtonBindings = options.saveButtonBindings;
     this.removeButtonBindings = options.removeButtonBindings;
   }
 
-  async present(receipt: NotificationReceipt): Promise<void> {
+  async present(receipt: NotificationReceipt, sourceName?: string): Promise<void> {
     if (receipt.kind === 'snapshot') {
       for (const state of receipt.reconciliation.closedStates) {
         await this.removeButtonBindings?.(state.chromeNotificationId);
@@ -92,15 +102,21 @@ export class NotificationPresenter {
       await this.closeProgrammatically(state.chromeNotificationId, 'source-notification-removed');
       return;
     }
-    await this.presentState(state);
+    await this.presentState(state, sourceName);
   }
 
-  async presentState(state: MirroredNotificationState): Promise<void> {
+  async presentState(state: MirroredNotificationState, sourceName?: string): Promise<void> {
     if (state.phase !== 'visible') return;
-    const sourceRef = toHex(state.sourceDeviceId).slice(0, 12);
-    const preferences = await this.loadShortcutPreferences()
+    const presentation = await this.loadPresentationPreferences()
+      .catch(() => FAIL_CLOSED_NOTIFICATION_PRESENTATION_PREFERENCES);
+    if (!presentation.nativeNotificationsEnabled || !sourceEnabled(presentation, state.sourceDeviceId)) {
+      await this.removeButtonBindings?.(state.chromeNotificationId);
+      await this.closeProgrammatically(state.chromeNotificationId, 'local-presentation-filter');
+      return;
+    }
+    const shortcuts = await this.loadShortcutPreferences()
       .catch(() => DEFAULT_SHORTCUT_PREFERENCES);
-    const buttons = notificationButtons(state, preferences, {
+    const buttons = notificationButtons(state, shortcuts, {
       dismiss: this.dismissButtonTitle(),
       more: this.moreButtonTitle(),
     });
@@ -108,10 +124,14 @@ export class NotificationPresenter {
     const applicationName = state.sourceApplicationName ?? 'Android';
     const options: chrome.notifications.NotificationOptions<true> = {
       type: 'basic',
-      iconUrl: await this.resolveIconUrl(state.avatar, state.appIcon),
-      title: `${state.title ?? 'Notification'} · ${applicationName} · Android ${sourceRef}`,
-      message: state.body ?? '',
+      iconUrl: presentation.showImages
+        ? await this.resolveIconUrl(state.avatar, state.appIcon)
+        : this.notificationIconUrl(),
+      title: [state.title ?? 'Notification', applicationName, sourceName]
+        .filter((value) => value !== undefined && value.length > 0).join(' · '),
+      message: presentation.showBody ? state.body ?? '' : '',
       priority: 0,
+      silent: presentation.silentNotifications,
       requireInteraction: true,
       buttons: buttons.map((button) => ({ title: button.title })),
     };
@@ -259,8 +279,4 @@ function toBase64(bytes: Uint8Array): string {
     binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
   }
   return btoa(binary);
-}
-
-function toHex(value: Uint8Array): string {
-  return Array.from(value, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }

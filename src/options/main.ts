@@ -14,13 +14,23 @@ interface OptionsOverview {
   serverOrigin?: string;
   localDeviceName?: string;
   devices: Array<{
+    deviceKey: string;
     displayName: string;
     deviceType: 'android' | 'chrome';
     isCurrentDevice: boolean;
     accessCurrent: boolean;
   }>;
   badgeEnabled: boolean;
+  nativeNotificationsEnabled: boolean;
+  showBody: boolean;
+  showImages: boolean;
+  silentNotifications: boolean;
+  mutedSourceDeviceIds: string[];
 }
+
+type PresentationPreferences = Pick<OptionsOverview,
+  'badgeEnabled' | 'nativeNotificationsEnabled' | 'showBody' | 'showImages' |
+  'silentNotifications' | 'mutedSourceDeviceIds'>;
 
 const identityStore = new IndexedDbIdentityStore();
 const credentialStore = new IndexedDbTransportCredentialStore();
@@ -48,11 +58,22 @@ const devicesEmpty = requireElement<HTMLElement>('devices-empty');
 const sourceList = requireElement<HTMLElement>('source-list');
 const sourcesEmpty = requireElement<HTMLElement>('sources-empty');
 const badgeEnabled = requireElement<HTMLInputElement>('badge-enabled');
+const nativeNotificationsEnabled = requireElement<HTMLInputElement>('native-notifications-enabled');
+const showBody = requireElement<HTMLInputElement>('show-body');
+const showImages = requireElement<HTMLInputElement>('show-images');
+const silentNotifications = requireElement<HTMLInputElement>('silent-notifications');
 const notificationSettingsStatus = requireElement<HTMLElement>('notification-settings-status');
 const clearLocalNotifications = requireElement<HTMLButtonElement>('clear-local-notifications');
 const clearConfirmation = requireElement<HTMLDialogElement>('clear-confirmation');
 const confirmClear = requireElement<HTMLButtonElement>('confirm-clear');
-let savedBadgeEnabled = true;
+let savedPreferences: PresentationPreferences = {
+  badgeEnabled: true,
+  nativeNotificationsEnabled: true,
+  showBody: true,
+  showImages: true,
+  silentNotifications: false,
+  mutedSourceDeviceIds: [],
+};
 
 localizeDocument();
 versionOutput.textContent = message('extensionVersionValue', chrome.runtime.getManifest().version);
@@ -94,21 +115,25 @@ confirmReEnroll.addEventListener('click', (event) => {
 });
 
 badgeEnabled.addEventListener('change', () => {
-  badgeEnabled.disabled = true;
-  notificationSettingsStatus.textContent = message('optionsSaving');
-  void chrome.runtime.sendMessage({
-    type: 'save-notification-presentation-preferences',
-    preferences: { badgeEnabled: badgeEnabled.checked },
-  }).then((response: { saved?: boolean }) => {
-    if (response.saved) savedBadgeEnabled = badgeEnabled.checked;
-    else badgeEnabled.checked = savedBadgeEnabled;
-    notificationSettingsStatus.textContent = message(
-      response.saved ? 'optionsSaved' : 'optionsSaveFailed',
-    );
-  }).catch(() => {
-    badgeEnabled.checked = savedBadgeEnabled;
-    notificationSettingsStatus.textContent = message('optionsSaveFailed');
-  }).finally(() => { badgeEnabled.disabled = false; });
+  void savePresentationPreferences({ ...savedPreferences, badgeEnabled: badgeEnabled.checked });
+});
+nativeNotificationsEnabled.addEventListener('change', () => {
+  void savePresentationPreferences({
+    ...savedPreferences,
+    nativeNotificationsEnabled: nativeNotificationsEnabled.checked,
+  });
+});
+showBody.addEventListener('change', () => {
+  void savePresentationPreferences({ ...savedPreferences, showBody: showBody.checked });
+});
+showImages.addEventListener('change', () => {
+  void savePresentationPreferences({ ...savedPreferences, showImages: showImages.checked });
+});
+silentNotifications.addEventListener('change', () => {
+  void savePresentationPreferences({
+    ...savedPreferences,
+    silentNotifications: silentNotifications.checked,
+  });
 });
 
 clearLocalNotifications.addEventListener('click', () => clearConfirmation.showModal());
@@ -131,9 +156,9 @@ async function render(): Promise<void> {
     overview: OptionsOverview;
   };
   renderConnection(response.overview);
-  renderDevices(response.overview.devices);
-  savedBadgeEnabled = response.overview.badgeEnabled;
-  badgeEnabled.checked = savedBadgeEnabled;
+  savedPreferences = preferencesFromOverview(response.overview);
+  applyPreferenceInputs(savedPreferences);
+  renderDevices(response.overview);
 }
 
 function renderConnection(overview: OptionsOverview): void {
@@ -153,7 +178,8 @@ function renderConnection(overview: OptionsOverview): void {
   }
 }
 
-function renderDevices(devices: OptionsOverview['devices']): void {
+function renderDevices(overview: OptionsOverview): void {
+  const { devices } = overview;
   const androidCount = devices.filter((device) => device.deviceType === 'android').length;
   const chromeCount = devices.filter((device) => device.deviceType === 'chrome').length;
   deviceCounts.textContent = devices.length === 0
@@ -178,12 +204,82 @@ function renderDevices(devices: OptionsOverview['devices']): void {
 
   const sources = devices.filter((device) => device.deviceType === 'android');
   sourceList.replaceChildren(...sources.map((source) => {
-    const item = document.createElement('div');
-    item.className = 'device';
-    item.textContent = source.displayName;
-    return item;
+    const label = document.createElement('label');
+    label.className = 'switch-row source-toggle';
+    const copy = document.createElement('span');
+    const name = document.createElement('strong');
+    name.textContent = source.displayName;
+    const state = document.createElement('small');
+    const enabled = !overview.mutedSourceDeviceIds.includes(source.deviceKey);
+    state.textContent = message(enabled ? 'optionsSourceShown' : 'optionsSourceHidden');
+    copy.append(name, state);
+    const toggle = document.createElement('input');
+    toggle.type = 'checkbox';
+    toggle.setAttribute('role', 'switch');
+    toggle.checked = enabled;
+    toggle.addEventListener('change', () => {
+      const muted = new Set(savedPreferences.mutedSourceDeviceIds);
+      if (toggle.checked) muted.delete(source.deviceKey);
+      else muted.add(source.deviceKey);
+      void savePresentationPreferences({
+        ...savedPreferences,
+        mutedSourceDeviceIds: [...muted].sort(),
+      });
+    });
+    label.append(copy, toggle);
+    return label;
   }));
   sourcesEmpty.hidden = sources.length !== 0;
+}
+
+function preferencesFromOverview(overview: OptionsOverview): PresentationPreferences {
+  return {
+    badgeEnabled: overview.badgeEnabled,
+    nativeNotificationsEnabled: overview.nativeNotificationsEnabled,
+    showBody: overview.showBody,
+    showImages: overview.showImages,
+    silentNotifications: overview.silentNotifications,
+    mutedSourceDeviceIds: [...overview.mutedSourceDeviceIds],
+  };
+}
+
+function applyPreferenceInputs(preferences: PresentationPreferences): void {
+  badgeEnabled.checked = preferences.badgeEnabled;
+  nativeNotificationsEnabled.checked = preferences.nativeNotificationsEnabled;
+  showBody.checked = preferences.showBody;
+  showImages.checked = preferences.showImages;
+  silentNotifications.checked = preferences.silentNotifications;
+}
+
+async function savePresentationPreferences(next: PresentationPreferences): Promise<void> {
+  setPreferenceInputsDisabled(true);
+  notificationSettingsStatus.textContent = message('optionsSaving');
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: 'save-notification-presentation-preferences',
+      preferences: next,
+    }) as { saved?: boolean };
+    if (!response.saved) throw new Error('Preference save failed');
+    savedPreferences = { ...next, mutedSourceDeviceIds: [...next.mutedSourceDeviceIds] };
+    notificationSettingsStatus.textContent = message('optionsSaved');
+    await render();
+  } catch {
+    applyPreferenceInputs(savedPreferences);
+    notificationSettingsStatus.textContent = message('optionsSaveFailed');
+  } finally {
+    setPreferenceInputsDisabled(false);
+  }
+}
+
+function setPreferenceInputsDisabled(disabled: boolean): void {
+  for (const input of [
+    badgeEnabled,
+    nativeNotificationsEnabled,
+    showBody,
+    showImages,
+    silentNotifications,
+    ...Array.from(sourceList.querySelectorAll<HTMLInputElement>('input')),
+  ]) input.disabled = disabled;
 }
 
 async function submitRegistration(): Promise<void> {
