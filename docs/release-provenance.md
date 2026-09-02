@@ -1,6 +1,20 @@
 # Chrome Extension release provenance and rollback
 
-Status: **release-channel engineering baseline; independent review and Chrome Web Store publication evidence remain required**
+Status: **protected release-candidate baseline; independent review and Chrome Web Store publication evidence remain required**
+
+## Release authority
+
+The release job targets the GitHub `release-candidate` environment. That
+environment accepts only protected branches and requires explicit approval from
+the repository administrator before attestation permissions become available.
+The `main` branch separately requires a pull request and the Extension CI check,
+blocks force-push and deletion, and applies those rules to administrators.
+
+Only `huaxianyan` currently has repository access, so this approval is a second
+step by the same identity rather than independent review. Before production
+release, add a second trusted reviewer, require approval by someone other than
+the last pusher, enable environment self-review prevention, and retain the
+publisher-account boundary as a separate control.
 
 ## Deterministic submission package
 
