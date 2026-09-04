@@ -76,7 +76,7 @@ export async function beginChromeMembership(
     await journal.prepareRegistration(pending, authority, challengeEnc, challengeCiphertext);
     await store.pinAuthority(pending.workspaceId, pending.deviceId, authority);
     const challenge = await openIdentityPossessionChallenge(
-      request.identity.privateKey,
+      request.identity,
       { workspaceId: pending.workspaceId, deviceId: pending.deviceId, identityKeyId },
       challengeEnc,
       challengeCiphertext,
@@ -216,7 +216,7 @@ async function recoverChromeProof(
   const publicKey = await serializeIdentityPublicKey(identity);
   if (!equalBytes(await deriveIdentityKeyId(publicKey), pending.identityKeyId)) throw new Error('Pending enrollment identity no longer matches');
   if (pending.canonicalProof) return pending.canonicalProof.slice();
-  const challenge = await openIdentityPossessionChallenge(identity.privateKey, {
+  const challenge = await openIdentityPossessionChallenge(identity, {
     workspaceId: pending.workspaceId, deviceId: pending.deviceId, identityKeyId: pending.identityKeyId,
   }, pending.challengeEnc, pending.challengeCiphertext);
   const canonicalChallenge = encodeIdentityPossessionChallenge(challenge);

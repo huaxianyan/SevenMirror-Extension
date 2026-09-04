@@ -1,6 +1,7 @@
 import { Aes128Gcm, CipherSuite, DhkemP256HkdfSha256, HkdfSha256 } from '@hpke/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import vector from '../../protocol/test-vectors/workspace-membership-v1.json';
+import { generateNonExtractableIdentity } from '../crypto/auth-hpke';
 import {
   createPendingIdentityProof,
   decodeIdentityPossessionChallenge,
@@ -8,6 +9,7 @@ import {
   decodeSignedAuthorityKeyTransition,
   decodeSignedDeviceCertificate,
   decodeSignedWorkspaceRoster,
+  encodeIdentityPossessionChallenge,
   encodePendingIdentityProof,
   openIdentityPossessionChallenge,
   verifyDisplayNameCertificateTransition,
@@ -24,15 +26,51 @@ describe('Workspace Membership v1', () => {
 
   it('opens the Base HPKE challenge and matches the canonical proof', async () => {
     const suite = new CipherSuite({ kem: new DhkemP256HkdfSha256(), kdf: new HkdfSha256(), aead: new Aes128Gcm() });
-    const privateKey = await suite.kem.deserializePrivateKey(fromHex(vector.identityPrivateScalarHex));
+    const identity = {
+      privateKey: await suite.kem.deserializePrivateKey(fromHex(vector.identityPrivateScalarHex)),
+      publicKey: await suite.kem.deserializePublicKey(fromHex(vector.identityPublicKeyHex)),
+    };
     const binding = { workspaceId: fromHex(vector.workspaceIdHex), deviceId: fromHex(vector.deviceIdHex), identityKeyId: fromHex(vector.identityKeyIdHex) };
-    const challenge = await openIdentityPossessionChallenge(privateKey, binding, fromHex(vector.possessionHpkeEncapsulatedKeyHex), fromHex(vector.possessionHpkeCiphertextHex));
+    const challenge = await openIdentityPossessionChallenge(identity, binding, fromHex(vector.possessionHpkeEncapsulatedKeyHex), fromHex(vector.possessionHpkeCiphertextHex));
     expect(challenge).toEqual(decodeIdentityPossessionChallenge(fromHex(vector.challengeEncodedHex)));
     const proof = decodePendingIdentityProof(fromHex(vector.proofEncodedHex));
     expect(await createPendingIdentityProof(fromHex(vector.challengeEncodedHex)))
       .toEqual(fromHex(vector.proofEncodedHex));
     expect(encodePendingIdentityProof(proof)).toEqual(fromHex(vector.proofEncodedHex));
     expect(proof.challengeSecret).toEqual(challenge.challengeSecret);
+  });
+
+  it('opens a server challenge with the persisted non-extractable browser identity', async () => {
+    const suite = new CipherSuite({ kem: new DhkemP256HkdfSha256(), kdf: new HkdfSha256(), aead: new Aes128Gcm() });
+    const identity = await generateNonExtractableIdentity();
+    const workspaceId = new Uint8Array(16).fill(1);
+    const deviceId = new Uint8Array(16).fill(2);
+    const publicKey = new Uint8Array(await suite.kem.serializePublicKey(identity.publicKey));
+    const identityKeyId = new Uint8Array(await crypto.subtle.digest('SHA-256', publicKey));
+    const challenge = decodeIdentityPossessionChallenge(fromHex(vector.challengeEncodedHex));
+    challenge.workspaceId = workspaceId;
+    challenge.deviceId = deviceId;
+    challenge.identityKeyId = identityKeyId;
+    const plaintext = encodeIdentityPossessionChallenge(challenge);
+    const info = Uint8Array.from([
+      ...new TextEncoder().encode('SyncNotifications-membership-possession-hpke-info-v1\0'),
+      ...workspaceId,
+      ...deviceId,
+      ...identityKeyId,
+    ]);
+    const sender = await suite.createSenderContext({
+      recipientPublicKey: identity.publicKey,
+      info,
+    });
+    const ciphertext = new Uint8Array(await sender.seal(plaintext, new Uint8Array()));
+
+    expect(identity.privateKey.extractable).toBe(false);
+    await expect(openIdentityPossessionChallenge(
+      identity,
+      { workspaceId, deviceId, identityKeyId },
+      new Uint8Array(sender.enc),
+      ciphertext,
+    )).resolves.toEqual(challenge);
   });
 
   it('verifies the canonical certificate and linked roster signatures', async () => {
