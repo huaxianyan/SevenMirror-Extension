@@ -70,14 +70,14 @@ export async function createPendingIdentityProof(canonicalChallenge: Uint8Array)
 }
 
 export async function openIdentityPossessionChallenge(
-  recipientPrivateKey: CryptoKey,
+  recipientIdentity: CryptoKeyPair,
   binding: { workspaceId: Uint8Array; deviceId: Uint8Array; identityKeyId: Uint8Array },
   encapsulatedKey: Uint8Array,
   ciphertext: Uint8Array,
 ): Promise<IdentityPossessionChallenge> {
   validateBinding(binding.workspaceId, binding.deviceId, binding.identityKeyId);
   const context = await hpkeSuite.createRecipientContext({
-    recipientKey: recipientPrivateKey,
+    recipientKey: recipientIdentity,
     enc: encapsulatedKey,
     info: concat(textEncoder.encode(domains.hpkeInfo), binding.workspaceId, binding.deviceId, binding.identityKeyId),
   });
