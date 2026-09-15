@@ -7,6 +7,7 @@ import {
   normalizeServerOrigin,
 } from '../transport/indexeddb-transport-credential-store';
 import { localizeDocument, message } from '../shared/i18n';
+import { CONNECTION_STATE_STORAGE_KEY } from '../shared/status';
 import { resolveSettingsPage } from './settings-navigation';
 
 interface OptionsOverview {
@@ -178,6 +179,12 @@ async function render(): Promise<void> {
 function renderConnection(overview: OptionsOverview): void {
   connectionState.textContent = message(`optionsState_${overview.state.replaceAll('-', '_')}`);
   connectionGuidance.textContent = message(`optionsGuidance_${overview.state.replaceAll('-', '_')}`);
+  // Leaving the waiting state makes the "ask an administrator to approve" line stale, and it
+  // would contradict the state shown above it. The reload path never displayed it either.
+  if (overview.state !== 'not-configured' && overview.state !== 'waiting-approval' &&
+      registrationStatus.textContent === message('waitingForAdminApproval')) {
+    registrationStatus.textContent = '';
+  }
   const configured = overview.state !== 'not-configured';
   registrationForm.hidden = configured;
   reconnect.hidden = overview.state === 'not-configured' || overview.state === 'access-removed' ||
@@ -352,6 +359,49 @@ function requireElement<T extends HTMLElement>(id: string): T {
   const element = document.getElementById(id);
   if (element === null) throw new Error(`Missing options element: ${id}`);
   return element as T;
+}
+
+/**
+ * The worker publishes every connection state change (admin approval, access removal,
+ * drop and reconnect) into `chrome.storage.local`. Without this listener the page keeps
+ * showing whatever it rendered at load time, so a user waiting for admin approval would
+ * never see the page turn ready on its own.
+ */
+const OVERVIEW_REFRESH_DELAY_MS = 150;
+let overviewRefreshTimer: number | undefined;
+let overviewRefreshInFlight = false;
+let overviewRefreshQueued = false;
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== 'local' || !(CONNECTION_STATE_STORAGE_KEY in changes)) return;
+  scheduleOverviewRefresh();
+});
+
+function scheduleOverviewRefresh(): void {
+  if (overviewRefreshTimer !== undefined) return;
+  overviewRefreshTimer = window.setTimeout(() => {
+    overviewRefreshTimer = undefined;
+    void refreshOverviewInBackground();
+  }, OVERVIEW_REFRESH_DELAY_MS);
+}
+
+async function refreshOverviewInBackground(): Promise<void> {
+  if (overviewRefreshInFlight) {
+    overviewRefreshQueued = true;
+    return;
+  }
+  overviewRefreshInFlight = true;
+  try {
+    await render();
+  } catch {
+    // Keep the last rendered state; the next change or a manual action retries.
+  } finally {
+    overviewRefreshInFlight = false;
+    if (overviewRefreshQueued) {
+      overviewRefreshQueued = false;
+      scheduleOverviewRefresh();
+    }
+  }
 }
 
 void render().catch(() => {

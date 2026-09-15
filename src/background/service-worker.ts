@@ -6,7 +6,10 @@ import {
   markProgrammaticClose,
   recordWorkerStart,
 } from './lifecycle-spike';
-import { DEFAULT_CONNECTION_STATE } from '../shared/status';
+import {
+  CONNECTION_STATE_STORAGE_KEY as CONNECTION_STATE_KEY,
+  DEFAULT_CONNECTION_STATE,
+} from '../shared/status';
 import { runE2eePersistenceSpike } from './e2ee-spike';
 import { IndexedDbIdentityStore } from '../crypto/indexeddb-identity-store';
 import { ActionInvokeOutbox } from '../crypto/action-invoke-outbox';
@@ -55,7 +58,6 @@ import {
   validateReplyText,
 } from './notification-interaction';
 
-const CONNECTION_STATE_KEY = 'connectionState';
 const TRANSPORT_RECONNECT_ALARM = 'transport-reconnect-v1';
 const MEMBERSHIP_REFRESH_ALARM = 'membership-refresh-v1';
 const ACTION_INVOKE_RETRY_ALARM = 'action-invoke-retry-v1';
