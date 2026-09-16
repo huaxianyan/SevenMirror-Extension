@@ -28,6 +28,7 @@ export function mountNotificationDetail(
   container: HTMLElement,
   notification: NotificationInteractionSummary,
 ): void {
+  container.classList.add('notification-detail');
   const source = element('p', 'notification-detail-source');
   source.textContent = message('interactionSource', notification.sourceName);
   const application = element('p', 'notification-detail-application');
