@@ -4,7 +4,7 @@ Manifest V3 extension for private, end-to-end encrypted Android notification mir
 
 Repository: <https://github.com/huaxianyan/SevenMirror-Extension>
 
-> Status: cryptographic, replay, durable action invoke/result reconciliation, code-gated registration, Chrome recoverable credential rotation, textual trusted-device approval, and authenticated WebSocket lifecycle are implemented. Real notification synchronization remains disabled.
+> Status: cryptographic, replay, durable action invoke/result reconciliation, code-gated registration, Chrome recoverable credential rotation, textual trusted-device approval, and authenticated WebSocket lifecycle are implemented. Real notification synchronization is implemented and carries third-party content only for packages the phone user explicitly selects, through the mandatory per-recipient E2EE and authority-authorized recipient chain. No reviewed release approves it: released behavior keeps it gated until the security findings and the two-real-Android OEM/network validation are complete and a reviewed release explicitly changes the gate.
 
 ## Requirements
 
@@ -70,7 +70,7 @@ Outbound `action.invoke` now persists the exact canonical invoke payload, Androi
 
 The Worker retries network/socket failures with jittered exponential backoff from 1 second up to 60 seconds. A single connection generation suppresses duplicate error/close retries, successful `SNO1` authentication resets the sequence, explicit connect/disconnect cancels pending work, and `chrome.alarms` preserves scheduled wakeups across MV3 Worker suspension. Persistent local identity or encrypted-delivery failures stop fail-closed rather than being retried as network failures.
 
-Server directory data can never populate the pin store implicitly. Textual trusted-device approval and Chrome transport-credential rotation are implemented, but camera QR UX, Android dual-slot rotation, E2EE identity rotation, lost-device recovery, snapshot-required recovery, Android durable submission, multi-device offline convergence, and independent security review remain incomplete. No real notification content may use this transport yet.
+Server directory data can never populate the pin store implicitly. Textual trusted-device approval and Chrome transport-credential rotation are implemented, but camera QR UX, Android dual-slot rotation, E2EE identity rotation, lost-device recovery, snapshot-required recovery, Android durable submission, multi-device offline convergence, and independent security review remain incomplete. No reviewed release has approved real notification content yet, and the gate only changes with the security findings and the two-real-Android OEM/network validation.
 
 ## License
 
