@@ -1,3 +1,5 @@
+@import "../shared/switch.css";
+
 :root {
   color-scheme: light dark;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -38,6 +40,9 @@ body { margin: 0; background: var(--background); color: var(--text); }
 nav { position: sticky; top: 88px; align-self: start; display: grid; gap: 4px; }
 nav a { min-height: 44px; display: flex; align-items: center; padding: 8px 12px; border-radius: 10px; color: var(--text); text-decoration: none; font-weight: 600; }
 nav a:hover { background: color-mix(in srgb, var(--text) 8%, transparent); }
+/* Body links had no rule at all, so the About page fell back to the browser's default
+   purple underline, while the shortcuts page already styled its own link. */
+a { color: var(--primary); }
 nav a[aria-current="page"] { background: color-mix(in srgb, var(--primary) 14%, transparent); color: var(--primary); }
 main { min-width: 0; }
 .settings-page > section { padding: 8px 0 40px; }
@@ -68,11 +73,15 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .device-list, .compact-list { display: grid; gap: 10px; margin-top: 16px; }
 .device { display: grid; gap: 5px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
 .device-meta { color: var(--muted); font-size: 13px; }
+/* A device whose access lapsed looked identical to an authorized one; the only difference
+   was the words "needs access renewed" inside the same grey meta line. */
+.device.access-expired { border-color: color-mix(in srgb, var(--danger) 38%, var(--border)); }
+.device.access-expired .device-meta { color: var(--danger); }
 .empty { padding: 20px; border: 1px dashed var(--border); border-radius: 12px; color: var(--muted); text-align: center; }
 .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 24px; cursor: pointer; }
 .switch-row span { display: grid; gap: 5px; }
 .switch-row small { color: var(--muted); line-height: 1.4; }
-.switch-row input { width: 22px; height: 22px; flex: none; }
+.switch-row input { flex: none; }
 .option-list { padding-block: 4px; }
 .option-list .switch-row { min-height: 68px; padding-block: 12px; }
 .option-list .switch-row + .switch-row { border-top: 1px solid var(--border); }

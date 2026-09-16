@@ -10,6 +10,12 @@ export interface NotificationInteractionSummary {
   sourceApplicationName: string;
   title: string;
   body: string;
+  /**
+   * When the mirror arrived, from the same field the popup list sorts and prints by
+   * (`MirroredNotificationPresentation.updatedAtUnixMs` is this same value), so the detail
+   * view cannot disagree with the row the user clicked.
+   */
+  updatedAtUnixMs: number;
   actions: Array<{
     actionId: string;
     title: string;
@@ -120,6 +126,7 @@ export function interactionSummary(
     sourceApplicationName: state.sourceApplicationName ?? '',
     title: state.title ?? '',
     body: state.body ?? '',
+    updatedAtUnixMs: state.receivedAtUnixMs ?? 0,
     actions: (state.actions ?? []).map((action) => ({
       actionId: toHex(action.actionId),
       title: action.title,

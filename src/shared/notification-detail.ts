@@ -4,6 +4,7 @@ import {
   waitForNotificationRemoval,
 } from '../background/notification-interaction';
 import { message } from './i18n';
+import { formatClockTime } from './time';
 
 type NotificationOperation =
   | { operation: 'dismiss' }
@@ -31,9 +32,15 @@ export function mountNotificationDetail(
   container.classList.add('notification-detail');
   const source = element('p', 'notification-detail-source');
   source.textContent = message('interactionSource', notification.sourceName);
+  // Application and arrival time share one line. The row is otherwise empty for a mirror
+  // with neither, and a third grey line above the title was too much.
   const application = element('p', 'notification-detail-application');
-  application.textContent = notification.sourceApplicationName;
-  application.hidden = notification.sourceApplicationName.length === 0;
+  const meta = [
+    notification.sourceApplicationName,
+    formatClockTime(notification.updatedAtUnixMs),
+  ].filter((part) => part.length > 0);
+  application.textContent = meta.join(' · ');
+  application.hidden = meta.length === 0;
   const title = element('h2', 'notification-detail-title');
   title.textContent = notification.title || message('interactionUntitledNotification');
   const body = element('p', 'notification-detail-body');

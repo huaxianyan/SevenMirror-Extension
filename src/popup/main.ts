@@ -2,6 +2,7 @@ import type { ConnectionState } from '../shared/status';
 import type { NotificationInteractionSummary } from '../background/notification-interaction';
 import { localizeDocument, message } from '../shared/i18n';
 import { mountNotificationDetail } from '../shared/notification-detail';
+import { formatClockTime } from '../shared/time';
 import { filterBySource, sourceChoices } from './source-filter';
 
 interface PopupNotification extends NotificationInteractionSummary {
@@ -31,6 +32,8 @@ let current: PopupResponse = { state: 'connecting', notifications: [] };
 let listScrollTop = 0;
 
 localizeDocument();
+// 图标按钮没有可见文字，悬停提示补上它去哪，和 aria-label 用同一个键。
+backToList.title = message('popupBackToNotifications');
 openOptions.addEventListener('click', () => chrome.runtime.openOptionsPage());
 sourceFilter.addEventListener('change', renderList);
 backToList.addEventListener('click', showList);
@@ -81,7 +84,7 @@ function renderNotification(notification: PopupNotification): HTMLElement {
   meta.textContent = [
     notification.sourceName,
     notification.sourceApplicationName,
-    formatTime(notification.updatedAtUnixMs),
+    formatClockTime(notification.updatedAtUnixMs),
   ].filter((value) => value.length > 0).join(' · ');
   const excerpt = document.createElement('span');
   excerpt.className = 'notification-excerpt';
@@ -148,14 +151,6 @@ function option(value: string, label: string): HTMLOptionElement {
   result.value = value;
   result.textContent = label;
   return result;
-}
-
-function formatTime(timestamp: number): string {
-  if (!Number.isSafeInteger(timestamp) || timestamp <= 0) return '';
-  return new Intl.DateTimeFormat(chrome.i18n.getUILanguage(), {
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(timestamp));
 }
 
 function requireElement<T extends HTMLElement>(id: string): T {

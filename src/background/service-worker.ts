@@ -862,7 +862,6 @@ async function getPopupNotifications(): Promise<{
   notifications: Array<ReturnType<typeof interactionSummary> & {
     sourceKey: string;
     isNew: boolean;
-    updatedAtUnixMs: number;
   }>;
 }> {
   const [stored, presentations, credential, preferences] = await Promise.all([
@@ -888,11 +887,12 @@ async function getPopupNotifications(): Promise<{
         Date.now(),
       );
       if (sourceName === undefined) continue;
+      // The arrival time now travels inside the summary itself, so the popup list and the
+      // detail view read the same field.
       notifications.push({
         ...presentationSummary(presentation.state, sourceName, preferences),
         sourceKey: toHex(presentation.state.sourceDeviceId),
         isNew: presentation.isNew,
-        updatedAtUnixMs: presentation.updatedAtUnixMs,
       });
     }
     return {

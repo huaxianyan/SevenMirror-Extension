@@ -53,12 +53,15 @@ const reEnrollConfirmation = requireElement<HTMLDialogElement>('re-enroll-confir
 const confirmReEnroll = requireElement<HTMLButtonElement>('confirm-re-enroll');
 const connectionState = requireElement<HTMLHeadingElement>('connection-state');
 const connectionGuidance = requireElement<HTMLParagraphElement>('connection-guidance');
+const connectionHint = requireElement<HTMLParagraphElement>('connection-hint');
+const connectionStatusCard = requireElement<HTMLElement>('connection-status-card');
 const connectionDetails = requireElement<HTMLElement>('connection-details');
 const savedServerOrigin = requireElement<HTMLElement>('saved-server-origin');
 const currentDeviceName = requireElement<HTMLElement>('current-device-name');
 const deviceCounts = requireElement<HTMLElement>('device-counts');
 const deviceList = requireElement<HTMLElement>('device-list');
 const devicesEmpty = requireElement<HTMLElement>('devices-empty');
+const deviceAdminBoundary = requireElement<HTMLElement>('device-admin-boundary');
 const sourceList = requireElement<HTMLElement>('source-list');
 const sourcesEmpty = requireElement<HTMLElement>('sources-empty');
 const badgeEnabled = requireElement<HTMLInputElement>('badge-enabled');
@@ -186,7 +189,16 @@ function renderConnection(overview: OptionsOverview): void {
     registrationStatus.textContent = '';
   }
   const configured = overview.state !== 'not-configured';
+  // Before setup this card only repeated what the join form below it already says ("set up
+  // this Chrome device" above "join your private service"), so the page opened with two
+  // overlapping cards. The form carries the whole message on its own.
+  connectionStatusCard.hidden = !configured;
   registrationForm.hidden = configured;
+  // Waiting for approval is the one state where the button reads as "press this to get
+  // approved". It only retries the transport, so the page also says what happens next.
+  const waitingForApproval = overview.state === 'waiting-approval';
+  connectionHint.hidden = !waitingForApproval;
+  if (waitingForApproval) connectionHint.textContent = message('optionsWaitingApprovalHint');
   reconnect.hidden = overview.state === 'not-configured' || overview.state === 'access-removed' ||
     overview.state === 'resetting' || overview.state === 'needs-repair';
   reEnrollDevice.hidden = overview.state !== 'access-removed' && overview.state !== 'resetting';
@@ -208,7 +220,7 @@ function renderDevices(overview: OptionsOverview): void {
     : message('optionsDeviceCounts', [androidCount.toString(), chromeCount.toString()]);
   deviceList.replaceChildren(...devices.map((device) => {
     const card = document.createElement('article');
-    card.className = 'device';
+    card.className = device.accessCurrent ? 'device' : 'device access-expired';
     const name = document.createElement('strong');
     name.textContent = device.displayName;
     const meta = document.createElement('span');
@@ -222,6 +234,9 @@ function renderDevices(overview: OptionsOverview): void {
     return card;
   }));
   devicesEmpty.hidden = devices.length !== 0;
+  // "Approve, remove, or reject devices in the server administration page" is advice about a
+  // list that does not exist yet; it only makes sense once there are devices to act on.
+  deviceAdminBoundary.hidden = devices.length === 0;
 
   const sources = devices.filter((device) => device.deviceType === 'android');
   sourceList.replaceChildren(...sources.map((source) => {
