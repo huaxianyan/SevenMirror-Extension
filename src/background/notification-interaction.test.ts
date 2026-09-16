@@ -3,7 +3,10 @@ import type { MirroredNotificationState } from '../crypto/indexeddb-notification
 import {
   interactionPageUrl,
   interactionSummary,
+  interactionWindowMargin,
   interactionWindowOptions,
+  interactionWindowPlacement,
+  interactionWorkArea,
   resolveCurrentAction,
   validateReplyText,
   waitForNotificationRemoval,
@@ -62,6 +65,64 @@ describe('Notification interaction window', () => {
       ['Mark read', false],
     ]);
     expect(JSON.stringify(summary)).not.toContain('0101010101010101');
+  });
+
+  it('places the window in one step when the work area is known', () => {
+    const url = interactionPageUrl('chrome-extension://example/', 'sn1:notification');
+    expect(interactionWindowOptions(url, { left: 0, top: 0, width: 1_986, height: 1_152 }))
+      .toEqual({
+        url,
+        type: 'popup',
+        focused: true,
+        width: 440,
+        height: 680,
+        left: 1_530,
+        top: 456,
+      });
+  });
+
+  it('opens without an explicit position when the work area is unknown', () => {
+    const url = interactionPageUrl('chrome-extension://example/', 'sn1:notification');
+    const options = interactionWindowOptions(url, undefined);
+    expect(options.left).toBeUndefined();
+    expect(options.top).toBeUndefined();
+  });
+
+  it('anchors to the primary display work area', () => {
+    const secondary = { isPrimary: false, workArea: { left: 2_048, top: 0, width: 1_986, height: 1_152 } };
+    const primary = { isPrimary: true, workArea: { left: 0, top: 0, width: 1_986, height: 1_152 } };
+    expect(interactionWorkArea([secondary, primary])).toEqual(primary.workArea);
+    expect(interactionWorkArea([secondary])).toEqual(secondary.workArea);
+    expect(interactionWorkArea([])).toBeUndefined();
+  });
+
+  it('anchors the interaction window to the bottom-right corner of the work area', () => {
+    expect(interactionWindowPlacement(
+      { left: 0, top: 0, width: 1_986, height: 1_152 },
+      { width: 442, height: 682 },
+    )).toEqual({
+      left: 1_986 - 442 - interactionWindowMargin,
+      top: 1_152 - 682 - interactionWindowMargin,
+    });
+  });
+
+  it('places the default window size without an explicit size argument', () => {
+    expect(interactionWindowPlacement({ left: 0, top: 0, width: 1_986, height: 1_152 }))
+      .toEqual({ left: 1_530, top: 456 });
+  });
+
+  it('keeps a non-primary display origin when placing the window', () => {
+    expect(interactionWindowPlacement(
+      { left: 2_048, top: 120, width: 1_986, height: 1_152 },
+      { width: 442, height: 682 },
+    )).toEqual({ left: 2_048 + 1_528, top: 120 + 454 });
+  });
+
+  it('falls back to the work area origin when the window does not fit', () => {
+    expect(interactionWindowPlacement(
+      { left: 120, top: 40, width: 300, height: 300 },
+      { width: 442, height: 682 },
+    )).toEqual({ left: 120, top: 40 });
   });
 
   it('accepts only non-blank replies within the protocol byte limit', () => {

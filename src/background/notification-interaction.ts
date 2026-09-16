@@ -18,19 +18,79 @@ export interface NotificationInteractionSummary {
   }>;
 }
 
+export interface WindowSize {
+  width: number;
+  height: number;
+}
+
+export interface ScreenWorkArea {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+export interface InteractionWindowPlacement {
+  left: number;
+  top: number;
+}
+
+/** The part of a display description that window placement depends on. */
+export interface DisplayWorkArea {
+  isPrimary: boolean;
+  workArea: ScreenWorkArea;
+}
+
+/** Gap kept between the interaction window and the work area edges. */
+export const interactionWindowMargin = 16;
+
+export const interactionWindowSize: WindowSize = { width: 440, height: 680 };
+
 export function interactionPageUrl(extensionBaseUrl: string, chromeNotificationId: string): string {
   const url = new URL('interaction/index.html', extensionBaseUrl);
   url.searchParams.set('notification', chromeNotificationId);
   return url.href;
 }
 
-export function interactionWindowOptions(url: string): chrome.windows.CreateData {
-  return {
+/**
+ * Resolves the work area the interaction window anchors to, so the service worker can
+ * place the window before it is created instead of letting it appear top-left first.
+ */
+export function interactionWorkArea(
+  displays: readonly DisplayWorkArea[],
+): ScreenWorkArea | undefined {
+  return (displays.find((display) => display.isPrimary) ?? displays[0])?.workArea;
+}
+
+export function interactionWindowOptions(
+  url: string,
+  workArea?: ScreenWorkArea,
+): chrome.windows.CreateData {
+  const options: chrome.windows.CreateData = {
     url,
     type: 'popup',
     focused: true,
-    width: 440,
-    height: 680,
+    ...interactionWindowSize,
+  };
+  if (workArea === undefined) return options;
+  return { ...options, ...interactionWindowPlacement(workArea) };
+}
+
+/**
+ * Anchors the interaction window to the bottom-right corner of the work area, so it
+ * opens next to the notification that was just clicked instead of the default
+ * top-left cascade. A window larger than the work area falls back to its origin,
+ * which keeps the title bar reachable and satisfies the minimum-visible-bounds
+ * requirement Chromium enforces on window creation and moves.
+ */
+export function interactionWindowPlacement(
+  workArea: ScreenWorkArea,
+  windowSize: WindowSize = interactionWindowSize,
+  margin = interactionWindowMargin,
+): InteractionWindowPlacement {
+  return {
+    left: workArea.left + Math.max(0, workArea.width - windowSize.width - margin),
+    top: workArea.top + Math.max(0, workArea.height - windowSize.height - margin),
   };
 }
 

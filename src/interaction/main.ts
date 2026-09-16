@@ -1,6 +1,10 @@
 import { localizeDocument } from '../shared/i18n';
 import { mountNotificationDetail } from '../shared/notification-detail';
-import type { NotificationInteractionSummary } from '../background/notification-interaction';
+import { interactionWindowPlacement } from '../background/notification-interaction';
+import type {
+  NotificationInteractionSummary,
+  ScreenWorkArea,
+} from '../background/notification-interaction';
 
 interface InteractionResponse {
   notification?: NotificationInteractionSummary;
@@ -10,8 +14,38 @@ const detail = requireElement<HTMLElement>('notification-detail');
 const empty = requireElement<HTMLElement>('empty');
 const status = requireElement<HTMLParagraphElement>('status');
 
+placeInteractionWindow();
 localizeDocument();
 void loadNotification();
+
+/**
+ * The service worker already places this window before creating it, so the common case
+ * leaves it untouched. This is the fallback for when it cannot: a browser build without
+ * the display permission, or a display lookup that failed.
+ *
+ * It moves only when the position actually differs, because an unconditional moveTo would
+ * reintroduce the very jump the pre-creation placement exists to remove. The tolerance
+ * absorbs the one-pixel difference between the requested bounds and the settled frame.
+ */
+function placeInteractionWindow(): void {
+  const { left, top } = interactionWindowPlacement(workArea());
+  if (Math.abs(window.screenX - left) <= 2 && Math.abs(window.screenY - top) <= 2) return;
+  window.moveTo(left, top);
+}
+
+/**
+ * Chromium reports the work area origin through availLeft/availTop, which the standard
+ * DOM typings do not declare. Both default to the primary display origin.
+ */
+function workArea(): ScreenWorkArea {
+  const currentScreen = window.screen as Screen & { availLeft?: number; availTop?: number };
+  return {
+    left: currentScreen.availLeft ?? 0,
+    top: currentScreen.availTop ?? 0,
+    width: currentScreen.availWidth,
+    height: currentScreen.availHeight,
+  };
+}
 
 async function loadNotification(): Promise<void> {
   const chromeNotificationId = new URL(location.href).searchParams.get('notification');

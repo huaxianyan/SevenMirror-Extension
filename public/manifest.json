@@ -5,7 +5,7 @@
   "default_locale": "en",
   "version": "0.1.21",
   "minimum_chrome_version": "116",
-  "permissions": ["alarms", "notifications", "storage"],
+  "permissions": ["alarms", "notifications", "storage", "system.display"],
   "host_permissions": [],
   "optional_host_permissions": [
     "https://*/*",

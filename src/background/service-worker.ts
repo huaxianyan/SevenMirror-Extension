@@ -54,9 +54,11 @@ import {
   interactionPageUrl,
   interactionSummary,
   interactionWindowOptions,
+  interactionWorkArea,
   resolveCurrentAction,
   validateReplyText,
 } from './notification-interaction';
+import type { ScreenWorkArea } from './notification-interaction';
 
 const TRANSPORT_RECONNECT_ALARM = 'transport-reconnect-v1';
 const MEMBERSHIP_REFRESH_ALARM = 'membership-refresh-v1';
@@ -937,7 +939,22 @@ async function openNotificationInteraction(notificationId: string): Promise<void
   )) return;
   await chrome.windows.create(interactionWindowOptions(
     interactionPageUrl(chrome.runtime.getURL('/'), notificationId),
+    await interactionWorkAreaFromDisplays(),
   ));
+}
+
+/**
+ * Reads the work area that the interaction window anchors to. Asking ahead of creation is
+ * what keeps the window from appearing in Chromium's default top-left cascade and jumping
+ * to the corner afterwards. A missing display list yields no work area, which opens the
+ * window at the default position rather than failing to open it at all.
+ */
+async function interactionWorkAreaFromDisplays(): Promise<ScreenWorkArea | undefined> {
+  try {
+    return interactionWorkArea(await chrome.system.display.getInfo());
+  } catch {
+    return undefined;
+  }
 }
 
 async function getNotificationInteraction(
