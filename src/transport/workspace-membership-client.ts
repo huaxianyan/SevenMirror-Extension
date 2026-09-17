@@ -8,6 +8,7 @@ import {
   decodeSignedAuthorityKeyTransition,
   decodeSignedWorkspaceRoster,
   encodeIdentityPossessionChallenge,
+  encodeSignedDeviceCertificate,
   openIdentityPossessionChallenge,
 } from '../protocol/workspace-membership';
 import { normalizeServerOrigin } from './indexeddb-transport-credential-store';
@@ -172,7 +173,9 @@ export async function refreshChromeMembership(
     });
     for (const encoded of response.rosters) {
       const roster = fromBase64UrlVariable(encoded, 'roster');
-      const rosterEpoch = decodeSignedWorkspaceRoster(roster).roster!.rosterEpoch;
+      const rosterBody = decodeSignedWorkspaceRoster(roster).roster;
+      if (rosterBody === undefined) throw new Error('Membership roster body is missing');
+      const rosterEpoch = rosterBody.rosterEpoch;
       const current = await store.load(pending.workspaceId, pending.deviceId);
       if (current === undefined) throw new Error('Membership state disappeared during reconciliation');
       const transition = transitions.find((item) =>
@@ -181,8 +184,15 @@ export async function refreshChromeMembership(
       if (transition) {
         await store.reconcileAuthorityTransition(pending.workspaceId, pending.deviceId, transition.bytes, roster);
       } else {
-        const currentCertificate = current.signedCertificate ?? certificate;
-        await store.reconcileApproved(pending.workspaceId, pending.deviceId, currentCertificate, roster);
+        // Adopt this epoch's own certificate from the roster: an administrator rename replaces it,
+        // and the store accepts the replacement only through an exact display-name transition
+        // verified against the durable predecessor roster. Absent from the roster means keep the old one.
+        const local = rosterBody.activeCertificates.find((item) =>
+          item.certificate !== undefined && equalBytes(item.certificate.deviceId, pending.deviceId));
+        const proposed = local === undefined
+          ? (current.signedCertificate ?? certificate)
+          : encodeSignedDeviceCertificate(local);
+        await store.reconcileApproved(pending.workspaceId, pending.deviceId, proposed, roster);
       }
     }
     const accepted = await store.load(pending.workspaceId, pending.deviceId);

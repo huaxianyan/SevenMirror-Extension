@@ -130,4 +130,47 @@ describe('Workspace Membership HTTP client', () => {
       await store.clear();
     }
   });
+
+  it('adopts a certified display-name replacement published by the administrator', async () => {
+    const store = new IndexedDbWorkspaceMembershipStore(`membership-http-${crypto.randomUUID()}`);
+    const workspace = fromHex(vector.workspaceIdHex); const device = fromHex(vector.deviceIdHex);
+    await store.pinAuthority(workspace, device, fromHex(vector.authorityPublicKeyHex));
+    const responses: unknown[] = [
+      {
+        state: 'approved', authority_public_key: b64(fromHex(vector.authorityPublicKeyHex)),
+        authority_transitions: [], signed_certificate: b64(fromHex(vector.certificateEncodedHex)),
+        rosters: [b64(fromHex(vector.initialRosterEncodedHex))], latest_roster_epoch: '1',
+      },
+      {
+        state: 'approved', authority_public_key: b64(fromHex(vector.authorityPublicKeyHex)),
+        authority_transitions: [], signed_certificate: b64(fromHex(vector.renamedCertificateEncodedHex)),
+        rosters: [b64(fromHex(vector.renameRosterEncodedHex))], latest_roster_epoch: '2',
+      },
+    ];
+    const requests: string[] = [];
+    const fetcher = async (_input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      requests.push(String((JSON.parse(String(init?.body)) as { after_roster_epoch: string }).after_roster_epoch));
+      return Response.json(responses.shift(), { status: 200 });
+    };
+    const pending = {
+      serverOrigin: 'https://membership.example', workspaceId: workspace, deviceId: device,
+      authToken: new Uint8Array(32).fill(8), identityKeyId: fromHex(vector.identityKeyIdHex),
+    };
+    try {
+      const initial = await refreshChromeMembership(pending, store, fetcher);
+      expect(initial).toMatchObject({ serverState: 'approved', transportEligible: true });
+      expect(initial.state.signedCertificate).toEqual(fromHex(vector.certificateEncodedHex));
+
+      const renamed = await refreshChromeMembership(pending, store, fetcher);
+      expect(renamed).toMatchObject({ serverState: 'approved', transportEligible: true });
+      expect(renamed.state.rosterEpoch).toBe(2n);
+      expect(renamed.state.signedCertificate).toEqual(fromHex(vector.renamedCertificateEncodedHex));
+      expect(requests).toEqual(['0', '1']);
+
+      const devices = await store.listAuthorizedDevices(workspace, device, 1_800_000_060_000n);
+      expect(devices).toMatchObject([{ displayName: 'Chrome-Renamed', isCurrentDevice: true }]);
+    } finally {
+      await store.clear();
+    }
+  });
 });

@@ -115,6 +115,13 @@ describe('Workspace Membership v1', () => {
     await expect(verifySignedDeviceCertificate(certificate, authority)).rejects.toThrow(/signature/i);
   });
 
+  it('rejects a roster that replaces the local certificate without an exact transition', () => {
+    const initial = decodeSignedWorkspaceRoster(fromHex(vector.initialRosterEncodedHex));
+    const unlinked = decodeSignedWorkspaceRoster(fromHex(vector.renameRosterEncodedHex));
+    unlinked.roster!.certificateTransitions = [];
+    expect(() => verifyRosterCertificateTransitions(initial, unlinked)).toThrow('exact transition');
+  });
+
   it('uses strict Ed25519 verification when WebCrypto does not support the algorithm', async () => {
     const nativeImportKey = crypto.subtle.importKey.bind(crypto.subtle);
     vi.spyOn(crypto.subtle, 'importKey').mockImplementation(
