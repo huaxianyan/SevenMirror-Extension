@@ -18,7 +18,7 @@ describe('synthetic ACK hold boundary', () => {
   it('accepts only the app-owned synthetic invoke bound to the exact business key', () => {
     const key = new Uint8Array(16).fill(3);
     const appOwned = invoke(
-      '0|dev.notificationmirroring.android|10001|null|12345',
+      '0|com.neko7ina.sevenmirror|10001|null|12345',
       key,
     );
     expect(isAppOwnedSyntheticInvoke(appOwned, key)).toBe(true);

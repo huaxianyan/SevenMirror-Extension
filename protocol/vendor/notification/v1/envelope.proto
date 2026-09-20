@@ -3,7 +3,7 @@ syntax = "proto3";
 package notification.mirroring.v1;
 
 option go_package = "github.com/huaxianyan/SyncNotifications-Server/protocol/generated/notification/v1;notificationv1";
-option java_package = "dev.notificationmirroring.protocol.generated.v1";
+option java_package = "com.neko7ina.sevenmirror.protocol.generated.v1";
 option java_multiple_files = true;
 option java_outer_classname = "EnvelopeProto";
 

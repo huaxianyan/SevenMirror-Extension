@@ -1,6 +1,6 @@
 import { decodeEncryptedPayloadV1 } from '../protocol/encrypted-payload';
 
-const SYNTHETIC_ANDROID_PACKAGE = 'dev.notificationmirroring.android';
+const SYNTHETIC_ANDROID_PACKAGE = 'com.neko7ina.sevenmirror';
 
 /** Restricts the temporary ACK hold to this app's exported synthetic notification operation. */
 export function isAppOwnedSyntheticInvoke(

@@ -398,7 +398,7 @@ async function notificationFrame(
     : createNotificationUpsertPayload({
       notificationId: 'synthetic.notification/42',
       notificationRevision: revision,
-      sourceApplicationId: 'dev.notificationmirroring.android',
+      sourceApplicationId: 'com.neko7ina.sevenmirror',
       sourceApplicationName: 'SevenMirror',
       title: 'Synthetic notification',
       body,
