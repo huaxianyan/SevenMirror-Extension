@@ -97,7 +97,7 @@
   "shortcutSaveFailed": { "message": "Changes were not saved. Check every rule and try again." },
   "shortcutLoadFailed": { "message": "Shortcut settings could not be loaded. Reload the settings page." },
   "shortcutSyncTitle": { "message": "Sync across browsers" },
-  "shortcutSyncDescription": { "message": "Every browser in your workspace shares one set of rules. They are encrypted before they are uploaded, so the server cannot read the keywords." },
+  "shortcutSyncDescription": { "message": "Every browser in your workspace shares one set of rules. Saving here uploads them, and this browser adopts changes made elsewhere when it starts and periodically while it runs. They are encrypted before they are uploaded, so the server cannot read the keywords." },
   "shortcutSyncOff": { "message": "Rules are stored in this browser only." },
   "shortcutSyncOn": { "message": "Rules are shared with the other browsers in your workspace." },
   "shortcutSyncOnWithTime": { "message": "Rules are shared with the other browsers in your workspace. Last synced $TIME$.", "placeholders": { "time": { "content": "$1" } } },

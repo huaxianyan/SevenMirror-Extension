@@ -75,6 +75,8 @@ const MEMBERSHIP_REFRESH_ALARM = 'membership-refresh-v1';
 const ACTION_INVOKE_RETRY_ALARM = 'action-invoke-retry-v1';
 const ACTION_RESULT_ACK_RETRY_ALARM = 'action-result-ack-retry-v1';
 const SNAPSHOT_RECOVERY_RETRY_ALARM = 'snapshot-recovery-retry-v1';
+const SHORTCUT_SYNC_PULL_ALARM = 'shortcut-sync-pull-v1';
+const SHORTCUT_SYNC_PULL_PERIOD_MINUTES = 10;
 const SYNTHETIC_ACK_HOLD_MAX_MS = 10 * 60_000;
 const TRANSPORT_AUTH_WATCHDOG_MS = 60_000;
 let syntheticAckHold: { idempotencyKeyHex: string; expiresAtUnixMs: number } | undefined;
@@ -223,7 +225,25 @@ chrome.runtime.onInstalled.addListener(async () => {
   if (stored[CONNECTION_STATE_KEY] === undefined) {
     await chrome.storage.local.set({ [CONNECTION_STATE_KEY]: DEFAULT_CONNECTION_STATE });
   }
+  await resumeShortcutSyncPull();
 });
+
+// Rules another browser publishes only ever arrive on a pull, so every browser start
+// looks once and then keeps looking on a timer. Alarms are not guaranteed to outlive a
+// restart, so the start re-arms it rather than trusting whatever survived.
+chrome.runtime.onStartup.addListener(() => {
+  void resumeShortcutSyncPull();
+});
+
+async function resumeShortcutSyncPull(): Promise<void> {
+  try {
+    if (!(await shortcutSyncCoordinator.status()).enabled) return;
+    await scheduleShortcutSyncPull();
+    await pullShortcutPreferencesQuietly();
+  } catch {
+    // A browser that cannot even read its own state waits for the next start.
+  }
+}
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === TRANSPORT_RECONNECT_ALARM) {
@@ -236,6 +256,8 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     void drainActionResultAcks();
   } else if (alarm.name === SNAPSHOT_RECOVERY_RETRY_ALARM) {
     void snapshotRecoveryCoordinator.retry().catch(() => transportRuntime.failClosed());
+  } else if (alarm.name === SHORTCUT_SYNC_PULL_ALARM) {
+    void pullShortcutPreferencesQuietly();
   }
 });
 
@@ -320,10 +342,7 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
       return true;
 
     case 'disable-notification-shortcut-sync':
-      void shortcutSyncCoordinator.disable().then(
-        () => sendResponse({ disabled: true }),
-        () => sendResponse({ disabled: false }),
-      );
+      void disableShortcutSync().then(sendResponse);
       return true;
 
     case 'pull-notification-shortcut-sync':
@@ -1153,20 +1172,58 @@ async function enableShortcutSync(passphrase: unknown): Promise<{
   try {
     const result = await shortcutSyncCoordinator.enable(passphrase);
     if (result.pulled) await refreshPresentedNotifications();
+    await scheduleShortcutSyncPull();
     return { enabled: true, pulled: result.pulled };
   } catch (error) {
     return { enabled: false, failure: shortcutSyncFailure(error) };
   }
 }
 
+async function disableShortcutSync(): Promise<{ disabled: boolean }> {
+  try {
+    await shortcutSyncCoordinator.disable();
+    await chrome.alarms.clear(SHORTCUT_SYNC_PULL_ALARM);
+    return { disabled: true };
+  } catch {
+    return { disabled: false };
+  }
+}
+
+/** Applies a newer server revision locally, re-rendering notifications when it changed. */
+async function applyShortcutSyncPull(): Promise<boolean> {
+  const result = await shortcutSyncCoordinator.pull();
+  if (result.changed) await refreshPresentedNotifications();
+  return result.changed;
+}
+
 async function pullShortcutSync(): Promise<{ changed: boolean; failure?: ShortcutSyncOutcome }> {
   try {
-    const result = await shortcutSyncCoordinator.pull();
-    if (result.changed) await refreshPresentedNotifications();
-    return { changed: result.changed };
+    return { changed: await applyShortcutSyncPull() };
   } catch (error) {
     return { changed: false, failure: shortcutSyncFailure(error) };
   }
+}
+
+/**
+ * Pulls the shared rules on a timer, where no outcome may reach the user. A browser
+ * that turned synchronization off — or lost its membership — must stop waking the
+ * worker too, so those two outcomes clear the alarm rather than retrying forever.
+ */
+async function pullShortcutPreferencesQuietly(): Promise<void> {
+  try {
+    await applyShortcutSyncPull();
+  } catch (error) {
+    if (error instanceof ShortcutSyncDisabledError || error instanceof ShortcutSyncNotEnrolledError) {
+      await chrome.alarms.clear(SHORTCUT_SYNC_PULL_ALARM);
+    }
+  }
+}
+
+async function scheduleShortcutSyncPull(): Promise<void> {
+  await chrome.alarms.create(SHORTCUT_SYNC_PULL_ALARM, {
+    delayInMinutes: SHORTCUT_SYNC_PULL_PERIOD_MINUTES,
+    periodInMinutes: SHORTCUT_SYNC_PULL_PERIOD_MINUTES,
+  });
 }
 
 async function invokeNotificationButton(notificationId: string, buttonIndex: number): Promise<void> {

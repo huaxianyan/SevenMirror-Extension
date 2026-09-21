@@ -97,7 +97,7 @@
   "shortcutSaveFailed": { "message": "未能保存更改。请检查每条规则后重试。" },
   "shortcutLoadFailed": { "message": "无法载入快捷操作设置。请刷新设置页面。" },
   "shortcutSyncTitle": { "message": "跨浏览器同步" },
-  "shortcutSyncDescription": { "message": "同一个服务区里的浏览器共用一套规则。规则加密后才上传，服务端看不到里面的关键字。" },
+  "shortcutSyncDescription": { "message": "同一个服务区里的浏览器共用一套规则。在这里保存即上传，本机在浏览器启动时以及之后每隔一段时间自动采用其他浏览器改过的版本。规则加密后才上传，服务端看不到里面的关键字。" },
   "shortcutSyncOff": { "message": "规则目前只存在这台浏览器上。" },
   "shortcutSyncOn": { "message": "规则与服务区里的其他浏览器共用。" },
   "shortcutSyncOnWithTime": { "message": "规则与服务区里的其他浏览器共用，最近同步于 $TIME$。", "placeholders": { "time": { "content": "$1" } } },
