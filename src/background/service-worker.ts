@@ -25,6 +25,16 @@ import {
 import { NotificationPresenter } from './notification-presenter';
 import { NotificationButtonBindingStore } from './notification-button-binding-store';
 import { NotificationShortcutPreferencesStore } from './notification-shortcuts';
+import { ShortcutSyncStore, WrongShortcutPassphraseError } from './shortcut-sync';
+import {
+  ShortcutSyncCoordinator,
+  ShortcutSyncDisabledError,
+  ShortcutSyncNotEnrolledError,
+} from './shortcut-sync-coordinator';
+import {
+  WorkspacePreferenceConflictError,
+  WorkspacePreferenceDeniedError,
+} from '../transport/workspace-preferences-client';
 import {
   NotificationPresentationPreferencesStore,
   sourceEnabled,
@@ -81,6 +91,11 @@ const notificationStateStore = new IndexedDbNotificationStateStore();
 const relayDeliveryCursorStore = new IndexedDbRelayDeliveryCursorStore();
 const notificationButtonBindingStore = new NotificationButtonBindingStore();
 const notificationShortcutPreferencesStore = new NotificationShortcutPreferencesStore();
+const shortcutSyncCoordinator = new ShortcutSyncCoordinator(
+  credentialStore,
+  new ShortcutSyncStore(),
+  notificationShortcutPreferencesStore,
+);
 const notificationPresentationPreferencesStore = new NotificationPresentationPreferencesStore();
 const certifiedReEnrollmentResetStore = new CertifiedReEnrollmentResetStore();
 const notificationPresenter = new NotificationPresenter({
@@ -291,9 +306,28 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
 
     case 'save-notification-shortcut-settings':
       void saveNotificationShortcutSettings(message.preferences).then(
-        () => sendResponse({ saved: true }),
+        (result) => sendResponse({ saved: true, sync: result.sync }),
         () => sendResponse({ saved: false }),
       );
+      return true;
+
+    case 'get-notification-shortcut-sync-status':
+      void shortcutSyncCoordinator.status().then(sendResponse, () => sendResponse(undefined));
+      return true;
+
+    case 'enable-notification-shortcut-sync':
+      void enableShortcutSync(message.passphrase).then(sendResponse);
+      return true;
+
+    case 'disable-notification-shortcut-sync':
+      void shortcutSyncCoordinator.disable().then(
+        () => sendResponse({ disabled: true }),
+        () => sendResponse({ disabled: false }),
+      );
+      return true;
+
+    case 'pull-notification-shortcut-sync':
+      void pullShortcutSync().then(sendResponse);
       return true;
 
     case 'get-synthetic-action-target':
@@ -1063,13 +1097,76 @@ async function getNotificationShortcutSettings(): Promise<{
   };
 }
 
-async function saveNotificationShortcutSettings(value: unknown): Promise<void> {
+type ShortcutSyncOutcome =
+  | 'synced'
+  | 'disabled'
+  | 'not-enrolled'
+  | 'wrong-passphrase'
+  | 'conflict'
+  | 'denied'
+  | 'failed';
+
+async function saveNotificationShortcutSettings(value: unknown): Promise<{ sync: ShortcutSyncOutcome }> {
   await notificationShortcutPreferencesStore.save(value);
+  await refreshPresentedNotifications();
+  return { sync: await publishShortcutPreferences() };
+}
+
+/** Re-renders every visible notification so it picks up the current rules. */
+async function refreshPresentedNotifications(): Promise<void> {
   const states = await notificationStateStore.listVisible();
   await Promise.allSettled(states.map(async (state) => notificationPresenter.presentState(
     state,
     await resolvePresentationSourceName(state),
   )));
+}
+
+/**
+ * Publishes the local rules to the workspace copy. Failing to publish never fails
+ * the local save: the browser keeps working with its own rules and the settings
+ * page reports the synchronization outcome on its own.
+ */
+async function publishShortcutPreferences(): Promise<ShortcutSyncOutcome> {
+  try {
+    await shortcutSyncCoordinator.push(await notificationShortcutPreferencesStore.load());
+    return 'synced';
+  } catch (error) {
+    return shortcutSyncFailure(error);
+  }
+}
+
+function shortcutSyncFailure(error: unknown): ShortcutSyncOutcome {
+  if (error instanceof ShortcutSyncDisabledError) return 'disabled';
+  if (error instanceof ShortcutSyncNotEnrolledError) return 'not-enrolled';
+  if (error instanceof WrongShortcutPassphraseError) return 'wrong-passphrase';
+  if (error instanceof WorkspacePreferenceConflictError) return 'conflict';
+  if (error instanceof WorkspacePreferenceDeniedError) return 'denied';
+  return 'failed';
+}
+
+async function enableShortcutSync(passphrase: unknown): Promise<{
+  enabled: boolean;
+  pulled?: boolean;
+  failure?: ShortcutSyncOutcome;
+}> {
+  if (typeof passphrase !== 'string') return { enabled: false, failure: 'failed' };
+  try {
+    const result = await shortcutSyncCoordinator.enable(passphrase);
+    if (result.pulled) await refreshPresentedNotifications();
+    return { enabled: true, pulled: result.pulled };
+  } catch (error) {
+    return { enabled: false, failure: shortcutSyncFailure(error) };
+  }
+}
+
+async function pullShortcutSync(): Promise<{ changed: boolean; failure?: ShortcutSyncOutcome }> {
+  try {
+    const result = await shortcutSyncCoordinator.pull();
+    if (result.changed) await refreshPresentedNotifications();
+    return { changed: result.changed };
+  } catch (error) {
+    return { changed: false, failure: shortcutSyncFailure(error) };
+  }
 }
 
 async function invokeNotificationButton(notificationId: string, buttonIndex: number): Promise<void> {

@@ -23,11 +23,27 @@ export function initShortcutSettings(): void {
   const addRule = requireDocumentElement<HTMLButtonElement>('add-rule');
   const status = requireDocumentElement<HTMLElement>('shortcut-status');
   const template = requireDocumentElement<HTMLTemplateElement>('rule-template');
+  const syncState = requireDocumentElement<HTMLElement>('shortcut-sync-state');
+  const syncEnableFields = requireDocumentElement<HTMLElement>('shortcut-sync-enable-fields');
+  const syncPassphrase = requireDocumentElement<HTMLInputElement>('shortcut-sync-passphrase');
+  const syncEnable = requireDocumentElement<HTMLButtonElement>('shortcut-sync-enable');
+  const syncActions = requireDocumentElement<HTMLElement>('shortcut-sync-actions');
+  const syncPull = requireDocumentElement<HTMLButtonElement>('shortcut-sync-pull');
+  const syncDisable = requireDocumentElement<HTMLButtonElement>('shortcut-sync-disable');
+  const syncStatus = requireDocumentElement<HTMLElement>('shortcut-sync-status');
   let rules: NotificationShortcutRule[] = [];
   let applications: ApplicationOption[] = [];
   let loaded = false;
 
   void load();
+  void loadSyncStatus();
+
+  syncPassphrase.addEventListener('input', () => {
+    syncEnable.disabled = syncPassphrase.value.length === 0;
+  });
+  syncEnable.addEventListener('click', () => void enableSync());
+  syncPull.addEventListener('click', () => void pullSync());
+  syncDisable.addEventListener('click', () => void disableSync());
 
   pinDismiss.addEventListener('change', markDirty);
   addRule.addEventListener('click', () => {
@@ -69,14 +85,127 @@ export function initShortcutSettings(): void {
       const response = await chrome.runtime.sendMessage({
         type: 'save-notification-shortcut-settings',
         preferences: { pinDismiss: pinDismiss.checked, rules },
-      }) as { saved?: boolean } | undefined;
+      }) as { saved?: boolean; sync?: string } | undefined;
       if (!response?.saved) throw new Error('Shortcut save failed');
       setStatus(message('shortcutSaved'));
+      // Saving locally always succeeds. A failed publish is reported separately so
+      // the browser never looks as though it shared rules it did not.
+      if (response.sync !== undefined && response.sync !== 'synced' && response.sync !== 'disabled') {
+        setSyncStatus(message(syncFailureMessage(response.sync)));
+        await loadSyncStatus();
+      }
     } catch {
       setStatus(message('shortcutSaveFailed'));
     } finally {
       setFormDisabled(false);
     }
+  }
+
+  async function loadSyncStatus(): Promise<void> {
+    const status = await chrome.runtime.sendMessage({
+      type: 'get-notification-shortcut-sync-status',
+    }) as { enabled: boolean; revision: number; lastSyncedAtMs?: number } | undefined;
+    renderSyncStatus(status);
+  }
+
+  function renderSyncStatus(
+    status: { enabled: boolean; revision: number; lastSyncedAtMs?: number } | undefined,
+  ): void {
+    // An unavailable background worker is not the same as "synchronization is off",
+    // so the section reports the failure instead of offering the enable form.
+    syncEnableFields.hidden = status === undefined || status.enabled;
+    syncActions.hidden = status === undefined || !status.enabled;
+    syncEnable.disabled = status === undefined || syncPassphrase.value.length === 0;
+    if (status === undefined) {
+      syncState.textContent = message('shortcutSyncUnavailable');
+      return;
+    }
+    if (!status.enabled) {
+      syncState.textContent = message('shortcutSyncOff');
+      return;
+    }
+    syncState.textContent = status.lastSyncedAtMs === undefined
+      ? message('shortcutSyncOn')
+      : message('shortcutSyncOnWithTime', new Date(status.lastSyncedAtMs).toLocaleString());
+  }
+
+  async function enableSync(): Promise<void> {
+    const passphrase = syncPassphrase.value;
+    if (passphrase.length === 0) return;
+    setSyncBusy(true);
+    setSyncStatus(message('shortcutSyncWorking'));
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'enable-notification-shortcut-sync',
+        passphrase,
+      }) as { enabled: boolean; pulled?: boolean; failure?: string } | undefined;
+      if (response?.enabled !== true) {
+        setSyncStatus(message(syncFailureMessage(response?.failure)));
+        return;
+      }
+      syncPassphrase.value = '';
+      // Adopting the workspace rules replaces the local ones, so the form has to
+      // show what actually applies now instead of what was on screen.
+      if (response.pulled === true) await load();
+      await loadSyncStatus();
+      setSyncStatus(message(response.pulled === true ? 'shortcutSyncAdopted' : 'shortcutSyncPublished'));
+    } finally {
+      setSyncBusy(false);
+    }
+  }
+
+  async function pullSync(): Promise<void> {
+    setSyncBusy(true);
+    setSyncStatus(message('shortcutSyncWorking'));
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'pull-notification-shortcut-sync',
+      }) as { changed: boolean; failure?: string } | undefined;
+      if (response?.failure !== undefined) {
+        setSyncStatus(message(syncFailureMessage(response.failure)));
+        await loadSyncStatus();
+        return;
+      }
+      if (response?.changed === true) await load();
+      await loadSyncStatus();
+      setSyncStatus(message(response?.changed === true ? 'shortcutSyncUpdated' : 'shortcutSyncUpToDate'));
+    } finally {
+      setSyncBusy(false);
+    }
+  }
+
+  async function disableSync(): Promise<void> {
+    setSyncBusy(true);
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'disable-notification-shortcut-sync',
+      }) as { disabled: boolean } | undefined;
+      await loadSyncStatus();
+      setSyncStatus(message(response?.disabled === true ? 'shortcutSyncTurnedOff' : 'shortcutSyncFailed'));
+    } finally {
+      setSyncBusy(false);
+    }
+  }
+
+  function setSyncBusy(busy: boolean): void {
+    syncEnable.disabled = busy || syncPassphrase.value.length === 0;
+    syncPull.disabled = busy;
+    syncDisable.disabled = busy;
+  }
+
+  function syncFailureMessage(code: string | undefined): string {
+    switch (code) {
+      case 'not-enrolled': return 'shortcutSyncNotEnrolled';
+      case 'wrong-passphrase': return 'shortcutSyncWrongPassphrase';
+      case 'conflict': return 'shortcutSyncConflict';
+      case 'denied': return 'shortcutSyncDenied';
+      case 'disabled': return 'shortcutSyncOff';
+      default: return 'shortcutSyncFailed';
+    }
+  }
+
+  function setSyncStatus(value: string): void {
+    syncStatus.textContent = value;
   }
 
   function renderRules(focusRuleId?: string): void {

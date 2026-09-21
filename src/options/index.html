@@ -139,6 +139,29 @@
               <p id="shortcut-status" role="status" aria-live="polite"></p>
             </footer>
           </form>
+
+          <section class="sync-section" aria-labelledby="shortcut-sync-title">
+            <div class="section-heading">
+              <div>
+                <h2 id="shortcut-sync-title" data-i18n="shortcutSyncTitle">Sync across browsers</h2>
+                <p data-i18n="shortcutSyncDescription">Keep the same rules in every browser of your workspace. The server stores them sealed and never sees the keywords.</p>
+              </div>
+            </div>
+            <div class="card">
+              <p id="shortcut-sync-state" class="supporting"></p>
+              <div id="shortcut-sync-enable-fields" hidden>
+                <label for="shortcut-sync-passphrase" data-i18n="shortcutSyncPassphrase">Synchronization passphrase</label>
+                <input id="shortcut-sync-passphrase" type="password" autocomplete="new-password" />
+                <p class="supporting" data-i18n="shortcutSyncPassphraseHint">Use the same passphrase in every browser that should share these rules. The server stores them encrypted, so it cannot read the keywords.</p>
+                <button id="shortcut-sync-enable" class="secondary" type="button" disabled data-i18n="shortcutSyncEnable">Turn on synchronization</button>
+              </div>
+              <div id="shortcut-sync-actions" hidden>
+                <button id="shortcut-sync-pull" class="secondary" type="button" data-i18n="shortcutSyncNow">Sync now</button>
+                <button id="shortcut-sync-disable" class="danger-secondary" type="button" data-i18n="shortcutSyncDisable">Turn off synchronization</button>
+              </div>
+              <p id="shortcut-sync-status" role="status" aria-live="polite"></p>
+            </div>
+          </section>
         </section>
         </div>
 
