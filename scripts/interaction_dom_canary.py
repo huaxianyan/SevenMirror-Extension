@@ -366,7 +366,7 @@ chrome.storage.local.set({{
 }})
 """)
                 page.command("Page.navigate", {
-                    "url": f"chrome-extension://{extension_id}/shortcuts/index.html",
+                    "url": f"chrome-extension://{extension_id}/options/index.html#shortcut-settings",
                 })
                 shortcut_structure = evaluate_until(page, """
 (() => {

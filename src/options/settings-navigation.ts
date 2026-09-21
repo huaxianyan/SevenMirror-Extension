@@ -1,6 +1,7 @@
 export const settingsPageIds = [
   'connection-devices',
   'notifications',
+  'shortcut-settings',
   'data-privacy',
   'about',
 ] as const;

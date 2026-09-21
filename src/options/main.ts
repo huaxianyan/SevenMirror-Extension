@@ -9,6 +9,7 @@ import {
 import { localizeDocument, message } from '../shared/i18n';
 import { CONNECTION_STATE_STORAGE_KEY } from '../shared/status';
 import { resolveSettingsPage } from './settings-navigation';
+import { initShortcutSettings } from './shortcut-settings';
 
 interface OptionsOverview {
   state: 'not-configured' | 'waiting-approval' | 'connecting' | 'online' | 'offline' |
@@ -84,6 +85,7 @@ let savedPreferences: PresentationPreferences = {
 
 localizeDocument();
 showSettingsPage();
+initShortcutSettings();
 window.addEventListener('hashchange', showSettingsPage);
 versionOutput.textContent = message('extensionVersionValue', chrome.runtime.getManifest().version);
 

@@ -89,6 +89,38 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .source-toggle + .source-toggle { border-top: 1px solid var(--border); }
 .button-link { margin-top: 16px; }
 #registration-status, #notification-settings-status { min-height: 24px; }
+/* Shortcut settings render inside this document now, so their controls follow the page's card,
+   field and button rules instead of a second stylesheet that could drift from them. */
+#shortcut-form { display: grid; }
+.rules-section { margin-top: 32px; }
+.section-heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; }
+.section-heading p { margin: 0; color: var(--muted); }
+.rules { display: grid; margin: 20px 0 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); overflow: hidden; }
+.rules:empty { display: none; }
+.rule { display: grid; gap: 12px; padding: 18px; }
+.rule + .rule { border-top: 1px solid var(--border); }
+.rule-title { margin: 0; font-size: 15px; }
+/* The move and remove buttons belong to the rule body, not to the card: aligning them with the
+   whole card floated them between the title and the fields. The last column keeps them on the
+   field row, centred on it. */
+.rule-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+.rule-fields label { color: var(--muted); font-size: 14px; }
+.rule-fields small { font-weight: 400; }
+.rule-fields select { width: 100%; min-height: 44px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--background); color: var(--text); }
+.rule-fields input[aria-invalid="true"] { border-color: var(--danger); }
+.field-error { color: var(--danger); }
+.rule-actions { display: flex; align-items: center; gap: 10px; }
+/* Chevron icons instead of the ↑ / ↓ characters, which rendered as whatever the platform font
+   felt like and read as text rather than as a control. */
+.move-buttons { display: grid; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.move-buttons button { display: flex; align-items: center; justify-content: center; width: 34px; height: 24px; min-height: 0; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--muted); }
+.move-buttons button:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 10%, var(--surface)); color: var(--text); }
+.move-buttons button + button { border-top: 1px solid var(--border); }
+.move-icon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.remove { min-height: 40px; padding: 8px 14px; }
+#empty-rules { margin: 20px 0 0; }
+.form-actions { display: flex; align-items: center; gap: 16px; margin-top: 28px; }
+#shortcut-status { min-height: 24px; color: var(--muted); }
 dialog { width: min(480px, calc(100% - 32px)); padding: 24px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); color: var(--text); }
 dialog::backdrop { background: rgb(0 0 0 / 45%); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
@@ -99,6 +131,8 @@ dialog::backdrop { background: rgb(0 0 0 / 45%); }
   .layout { grid-template-columns: 1fr; width: min(100% - 32px, 760px); padding-top: 18px; }
   nav { position: static; grid-template-columns: repeat(5, max-content); overflow-x: auto; padding-bottom: 4px; }
   .settings-page > section { padding-top: 8px; }
+  .section-heading { align-items: stretch; flex-direction: column; }
+  .rule-fields { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 520px) {
