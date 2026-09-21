@@ -227,6 +227,13 @@ export class IndexedDbNotificationStateStore {
             revision: highWaterRevision.toString(),
             phase: 'removed',
             payloadSha256: requireDigest(derivedRemovalDigests.get(state.notificationId)),
+            // Same reasoning as in `reconcile`: the application identity survives the content.
+            ...(state.sourceApplicationId === undefined || state.sourceApplicationName === undefined
+              ? {}
+              : {
+                sourceApplicationId: state.sourceApplicationId,
+                sourceApplicationName: state.sourceApplicationName,
+              }),
           };
           await requestResult(stateStore.put(removedState));
           closedStates.push(copyState(removedState));
@@ -341,6 +348,33 @@ export class IndexedDbNotificationStateStore {
     }
   }
 
+  /**
+   * The applications the shortcut picker may offer. Every stored record counts, removed ones
+   * included: a rule is written for the notifications an application will send next, so the
+   * candidates must not depend on what happens to be on screen when the settings are opened.
+   */
+  async listSourceApplications(): Promise<Array<{ id: string; name: string }>> {
+    const database = await this.openDatabase();
+    try {
+      const transaction = database.transaction(STORE_NAME, 'readonly');
+      const completed = transactionCompleted(transaction);
+      const states = await requestResult<MirroredNotificationState[]>(
+        transaction.objectStore(STORE_NAME).getAll(),
+      );
+      await completed;
+      const applications = new Map<string, string>();
+      for (const state of states) {
+        validateStored(state);
+        if (state.sourceApplicationId !== undefined && state.sourceApplicationName !== undefined) {
+          applications.set(state.sourceApplicationId, state.sourceApplicationName);
+        }
+      }
+      return [...applications].map(([id, name]) => ({ id, name }));
+    } finally {
+      database.close();
+    }
+  }
+
   async findVisibleByChromeNotificationId(
     chromeNotificationId: string,
   ): Promise<MirroredNotificationState | undefined> {
@@ -395,6 +429,13 @@ export class IndexedDbNotificationStateStore {
             return { disposition: 'stale', state: copyState(existing) };
           }
           proposed.viewedRevision = existing.viewedRevision;
+          // A removal carries no application identity of its own, but the shortcut rules are chosen
+          // by application and outlive the notification they were picked from. Losing the identity
+          // here emptied the application picker the next time the settings were opened.
+          if (proposed.sourceApplicationId === undefined) {
+            proposed.sourceApplicationId = existing.sourceApplicationId;
+            proposed.sourceApplicationName = existing.sourceApplicationName;
+          }
           if (comparison === 0) {
             if (existing.phase !== proposed.phase ||
                 !bytesEqual(existing.payloadSha256, proposed.payloadSha256)) {

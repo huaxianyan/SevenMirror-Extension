@@ -81,6 +81,7 @@
   "shortcutApplication": { "message": "来源应用" },
   "shortcutAnyApplication": { "message": "所有应用" },
   "shortcutUnavailableApplication": { "message": "此前选择的应用" },
+  "shortcutNoApplications": { "message": "这个浏览器还没有收到过任何应用的通知" },
   "shortcutMoveUp": { "message": "上移规则" },
   "shortcutMoveDown": { "message": "下移规则" },
   "shortcutRemoveRule": { "message": "移除" },

@@ -81,6 +81,7 @@
   "shortcutApplication": { "message": "Source application" },
   "shortcutAnyApplication": { "message": "Any application" },
   "shortcutUnavailableApplication": { "message": "Previously selected application" },
+  "shortcutNoApplications": { "message": "No application has sent a notification to this browser yet" },
   "shortcutMoveUp": { "message": "Move rule up" },
   "shortcutMoveDown": { "message": "Move rule down" },
   "shortcutRemoveRule": { "message": "Remove" },

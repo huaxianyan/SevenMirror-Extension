@@ -1,6 +1,8 @@
 import 'fake-indexeddb/auto';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  createNotificationRemovedPayload,
+  createNotificationSnapshotManifestPayload,
   createNotificationUpsertPayload,
   encodeEncryptedPayloadV1,
 } from '../protocol/encrypted-payload';
@@ -61,15 +63,92 @@ describe('Popup notification presentation state', () => {
   });
 });
 
-function upsert(revision: bigint, body: string): {
+describe('Notification source applications', () => {
+  it('keeps an application selectable after its notification is removed', async () => {
+    const databaseName = `source-applications-${Date.now()}-${Math.random()}`;
+    databaseNames.add(databaseName);
+    const store = new IndexedDbNotificationStateStore(databaseName, () => 1_000);
+    const sourceDeviceId = new Uint8Array(16).fill(9);
+
+    const first = upsert(1n, 'First body');
+    const second = upsert(1n, 'Second body', { notificationId: 'notification-2' });
+    await store.reconcileUpsert(sourceDeviceId, first.value, first.canonical);
+    await store.reconcileUpsert(sourceDeviceId, second.value, second.canonical);
+    expect(await store.listSourceApplications()).toEqual([
+      { id: 'example.app', name: 'Example' },
+    ]);
+
+    await remove(store, sourceDeviceId, 'notification-1', 2n);
+    await remove(store, sourceDeviceId, 'notification-2', 2n);
+
+    expect(await store.listVisible()).toEqual([]);
+    expect(await store.listSourceApplications()).toEqual([
+      { id: 'example.app', name: 'Example' },
+    ]);
+  });
+
+  it('keeps an application selectable after a snapshot closes its notification', async () => {
+    const databaseName = `source-applications-snapshot-${Date.now()}-${Math.random()}`;
+    databaseNames.add(databaseName);
+    const store = new IndexedDbNotificationStateStore(databaseName, () => 1_000);
+    const sourceDeviceId = new Uint8Array(16).fill(11);
+
+    const first = upsert(1n, 'First body');
+    await store.reconcileUpsert(sourceDeviceId, first.value, first.canonical);
+
+    const manifest = createNotificationSnapshotManifestPayload({
+      highWaterRevision: 2n,
+      activeNotifications: [],
+    });
+    if (manifest.body.case !== 'notificationSnapshotManifest') {
+      throw new Error('Unexpected payload');
+    }
+    const closed = await store.reconcileSnapshot(
+      sourceDeviceId,
+      manifest.body.value,
+      encodeEncryptedPayloadV1(manifest),
+    );
+
+    expect(closed.disposition).toBe('applied');
+    expect(closed.closedStates).toHaveLength(1);
+    expect(await store.listVisible()).toEqual([]);
+    expect(await store.listSourceApplications()).toEqual([
+      { id: 'example.app', name: 'Example' },
+    ]);
+  });
+});
+
+function remove(
+  store: IndexedDbNotificationStateStore,
+  sourceDeviceId: Uint8Array,
+  notificationId: string,
+  revision: bigint,
+): Promise<unknown> {
+  const payload = createNotificationRemovedPayload({
+    notificationId,
+    notificationRevision: revision,
+  });
+  if (payload.body.case !== 'notificationRemoved') throw new Error('Unexpected payload');
+  return store.reconcileRemoved(
+    sourceDeviceId,
+    payload.body.value,
+    encodeEncryptedPayloadV1(payload),
+  );
+}
+
+function upsert(revision: bigint, body: string, overrides: {
+  notificationId?: string;
+  sourceApplicationId?: string;
+  sourceApplicationName?: string;
+} = {}): {
   value: NotificationUpsert;
   canonical: Uint8Array;
 } {
   const payload = createNotificationUpsertPayload({
-    notificationId: 'notification-1',
+    notificationId: overrides.notificationId ?? 'notification-1',
     notificationRevision: revision,
-    sourceApplicationId: 'example.app',
-    sourceApplicationName: 'Example',
+    sourceApplicationId: overrides.sourceApplicationId ?? 'example.app',
+    sourceApplicationName: overrides.sourceApplicationName ?? 'Example',
     title: 'Title',
     body,
     containsContentImage: false,

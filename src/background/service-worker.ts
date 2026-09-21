@@ -1053,20 +1053,13 @@ async function getNotificationShortcutSettings(): Promise<{
   preferences: Awaited<ReturnType<NotificationShortcutPreferencesStore['load']>>;
   applications: Array<{ id: string; name: string }>;
 }> {
-  const [preferences, states] = await Promise.all([
+  const [preferences, applications] = await Promise.all([
     notificationShortcutPreferencesStore.load(),
-    notificationStateStore.listVisible(),
+    notificationStateStore.listSourceApplications(),
   ]);
-  const applications = new Map<string, string>();
-  for (const state of states) {
-    if (state.sourceApplicationId !== undefined && state.sourceApplicationName !== undefined) {
-      applications.set(state.sourceApplicationId, state.sourceApplicationName);
-    }
-  }
   return {
     preferences,
-    applications: [...applications].map(([id, name]) => ({ id, name }))
-      .sort((left, right) => left.name.localeCompare(right.name)),
+    applications: [...applications].sort((left, right) => left.name.localeCompare(right.name)),
   };
 }
 

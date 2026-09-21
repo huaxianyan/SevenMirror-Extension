@@ -183,6 +183,14 @@ export function initShortcutSettings(): void {
         name: rule.sourceApplicationName ?? message('shortcutUnavailableApplication'),
       });
     }
+    // A picker holding nothing but "Any application" is indistinguishable from a broken one, which
+    // is exactly how an empty list was read. State the reason instead of leaving it blank.
+    if (options.length === 0) {
+      const explanation = document.createElement('option');
+      explanation.disabled = true;
+      explanation.textContent = message('shortcutNoApplications');
+      select.append(explanation);
+    }
     for (const application of options) {
       const option = document.createElement('option');
       option.value = application.id;
