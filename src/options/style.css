@@ -101,11 +101,11 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .rule + .rule { border-top: 1px solid var(--border); }
 .rule-title { margin: 0; font-size: 15px; }
 /* The move and remove buttons belong to the rule body, not to the card: aligning them with the
-   whole card floated them between the title and the fields. The last column keeps them on the
-   field row, centred on it. */
-.rule-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+   whole card floated them between the title and the fields. They sit in the last column of the
+   field grid, bottom-aligned, and their own height matches the controls' 44px, so the row reads
+   as one line rather than three controls at three heights. */
+.rule-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: 12px; align-items: end; }
 .rule-fields label { color: var(--muted); font-size: 14px; }
-.rule-fields small { font-weight: 400; }
 /* "Needs a reply" hides the action text field without giving up its column: removing it from the
    grid slid the application picker left and pulled that rule's buttons out of the shared column. */
 .title-field.field-inert { visibility: hidden; }
@@ -114,13 +114,14 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .field-error { color: var(--danger); }
 .rule-actions { display: flex; align-items: center; gap: 10px; }
 /* Chevron icons instead of the ↑ / ↓ characters, which rendered as whatever the platform font
-   felt like and read as text rather than as a control. */
-.move-buttons { display: grid; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow: hidden; }
-.move-buttons button { display: flex; align-items: center; justify-content: center; width: 34px; height: 24px; min-height: 0; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--muted); }
+   felt like and read as text rather than as a control. The pair is exactly as tall as a field so
+   the whole column lines up on both edges. */
+.move-buttons { display: grid; grid-template-rows: 1fr 1fr; height: 44px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.move-buttons button { display: flex; align-items: center; justify-content: center; width: 34px; height: 100%; min-height: 0; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--muted); }
 .move-buttons button:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 10%, var(--surface)); color: var(--text); }
 .move-buttons button + button { border-top: 1px solid var(--border); }
 .move-icon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
-.remove { min-height: 40px; padding: 8px 14px; }
+.remove { min-height: 44px; padding: 8px 14px; }
 #empty-rules { margin: 20px 0 0; }
 .form-actions { display: flex; align-items: center; gap: 16px; margin-top: 28px; }
 #shortcut-status { min-height: 24px; color: var(--muted); }
