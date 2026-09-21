@@ -33,8 +33,13 @@ function capturingFetch(response: () => Response): {
 }
 
 describe('workspace preference client', () => {
+  // The deployed server answers this shape verbatim for a key it has never
+  // stored: `preferenceReadResponse{Revision: "0"}` leaves the other fields as Go
+  // zero values, so `payload` and `updated_at_ms` arrive as empty strings.
   it('reports an unwritten key without a payload', async () => {
-    const { calls, fetcher } = capturingFetch(() => jsonResponse({ revision: '0', payload: '', updated_at_ms: '0' }));
+    const { calls, fetcher } = capturingFetch(
+      () => jsonResponse({ revision: '0', payload: '', updated_at_ms: '' }),
+    );
     await expect(readWorkspacePreference(CREDENTIAL, 'notification-shortcuts', fetcher))
       .resolves.toEqual({ revision: 0, updatedAtMs: 0 });
     expect(calls[0].url).toBe('https://relay.test/v1/workspace/preferences/read');
@@ -44,6 +49,22 @@ describe('workspace preference client', () => {
       auth_token: toBase64Url(CREDENTIAL.authToken),
       key: 'notification-shortcuts',
     });
+  });
+
+  it('tolerates a canonical zero timestamp for an unwritten key', async () => {
+    const { fetcher } = capturingFetch(
+      () => jsonResponse({ revision: '0', payload: '', updated_at_ms: '0' }),
+    );
+    await expect(readWorkspacePreference(CREDENTIAL, 'notification-shortcuts', fetcher))
+      .resolves.toEqual({ revision: 0, updatedAtMs: 0 });
+  });
+
+  it('still requires canonical fields once a value is stored', async () => {
+    const { fetcher } = capturingFetch(
+      () => jsonResponse({ revision: '3', payload: toBase64Url(new Uint8Array([1])), updated_at_ms: '' }),
+    );
+    await expect(readWorkspacePreference(CREDENTIAL, 'notification-shortcuts', fetcher))
+      .rejects.toThrow(/not canonical/);
   });
 
   it('decodes a stored payload', async () => {

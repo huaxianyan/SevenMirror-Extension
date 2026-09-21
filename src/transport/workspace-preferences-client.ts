@@ -36,8 +36,11 @@ export async function readWorkspacePreference(
   });
   const body = await readPreferenceJson(response);
   const revision = parseDecimal(body, 'revision');
+  // An unwritten key carries no value, so the server sends its other fields empty
+  // rather than as canonical decimals. Reading the revision first keeps that case
+  // from failing on a field that has no meaning without a stored value.
+  if (revision === 0) return { revision, updatedAtMs: 0 };
   const updatedAtMs = parseDecimal(body, 'updated_at_ms');
-  if (revision === 0) return { revision, updatedAtMs };
   const encoded = body.payload;
   if (typeof encoded !== 'string' || encoded.length === 0) {
     throw new Error('Workspace preference response is missing its payload');
