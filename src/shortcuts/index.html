@@ -13,8 +13,7 @@
     </header>
     <div class="layout">
       <nav aria-label="Settings" data-i18n-aria-label="settingsNavigation">
-        <a href="../options/index.html#connection" data-i18n="optionsConnection">Connection</a>
-        <a href="../options/index.html#devices" data-i18n="optionsDevices">Devices</a>
+        <a href="../options/index.html#connection-devices" data-i18n="optionsConnectionDevices">Connection and devices</a>
         <a href="../options/index.html#notifications" data-i18n="optionsNotifications">Notifications</a>
         <a href="#shortcut-settings" aria-current="page" data-i18n="optionsShortcuts">Shortcuts</a>
         <a href="../options/index.html#data-privacy" data-i18n="optionsDataPrivacy">Data and privacy</a>
@@ -62,32 +61,34 @@
 
     <template id="rule-template">
       <li class="rule">
-        <div class="rule-heading">
+        <div class="rule-body">
           <h3 class="rule-title"></h3>
-          <div class="rule-actions">
-            <button class="move-up" type="button" data-i18n-aria-label="shortcutMoveUp">↑</button>
-            <button class="move-down" type="button" data-i18n-aria-label="shortcutMoveDown">↓</button>
-            <button class="remove" type="button" data-i18n="shortcutRemoveRule">Remove</button>
+          <div class="rule-fields">
+            <label>
+              <span data-i18n="shortcutMatch">Match</span>
+              <select class="match-kind">
+                <option value="reply" data-i18n="shortcutMatchReply">Needs a reply</option>
+                <option value="title-exact" data-i18n="shortcutMatchExact">Action text matches exactly</option>
+                <option value="title-contains" data-i18n="shortcutMatchContains">Action text contains</option>
+              </select>
+            </label>
+            <label class="title-field">
+              <span data-i18n="shortcutActionTitle">Action text</span>
+              <input class="match-value" type="text" maxlength="256" autocomplete="off" />
+              <small class="field-error" hidden data-i18n="shortcutActionTitleRequired">Enter action text.</small>
+            </label>
+            <label>
+              <span data-i18n="shortcutApplication">Application</span>
+              <select class="application"></select>
+            </label>
           </div>
         </div>
-        <div class="rule-fields">
-          <label>
-            <span data-i18n="shortcutMatch">Match</span>
-            <select class="match-kind">
-              <option value="reply" data-i18n="shortcutMatchReply">Needs a reply</option>
-              <option value="title-exact" data-i18n="shortcutMatchExact">Action title is exactly</option>
-              <option value="title-contains" data-i18n="shortcutMatchContains">Action title contains</option>
-            </select>
-          </label>
-          <label class="title-field">
-            <span data-i18n="shortcutActionTitle">Action title</span>
-            <input class="match-value" type="text" maxlength="256" autocomplete="off" />
-            <small class="field-error" hidden data-i18n="shortcutActionTitleRequired">Enter an action title.</small>
-          </label>
-          <label>
-            <span data-i18n="shortcutApplication">Application</span>
-            <select class="application"></select>
-          </label>
+        <div class="rule-actions">
+          <div class="move-buttons">
+            <button class="move-up" type="button" data-i18n-aria-label="shortcutMoveUp">↑</button>
+            <button class="move-down" type="button" data-i18n-aria-label="shortcutMoveDown">↓</button>
+          </div>
+          <button class="remove" type="button" data-i18n="shortcutRemoveRule">Remove</button>
         </div>
       </li>
     </template>

@@ -937,6 +937,9 @@ async function openNotificationInteraction(notificationId: string): Promise<void
     await notificationPresentationPreferencesStore.load(),
     state.sourceDeviceId,
   )) return;
+  // Hide the native notification before the window exists: the interaction window is anchored to
+  // the same bottom-right corner, and a still-visible system toast would cover it.
+  await notificationPresenter.hideForInteraction(notificationId);
   await chrome.windows.create(interactionWindowOptions(
     interactionPageUrl(chrome.runtime.getURL('/'), notificationId),
     await interactionWorkAreaFromDisplays(),

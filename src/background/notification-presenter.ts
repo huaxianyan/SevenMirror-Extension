@@ -144,6 +144,17 @@ export class NotificationPresenter {
     }
   }
 
+  /**
+   * Clears a mirrored notification without any user gesture behind it. The interaction window
+   * opens at the bottom-right corner of the work area, exactly where the system toast sits, so
+   * the notification has to go first. Marking the close programmatic is what keeps it from being
+   * read as the user dismissing the phone notification: the mirror stays visible and the popup can
+   * still act on it.
+   */
+  async hideForInteraction(notificationId: string): Promise<void> {
+    await this.closeProgrammatically(notificationId, 'interaction-open');
+  }
+
   private async resolveIconUrl(
     avatar: MirroredNotificationMedia | undefined,
     appIcon: MirroredNotificationMedia | undefined,

@@ -46,8 +46,7 @@ h2 { margin: 0 0 4px; }
 h3 { margin: 0; font-size: 17px; }
 p { line-height: 1.5; }
 .page-heading p, .section-heading p, small { color: var(--muted); }
-.panel, .rule { border: 1px solid var(--border); border-radius: 16px; background: var(--surface); }
-.panel { padding: 20px; }
+.panel { border: 1px solid var(--border); border-radius: 16px; background: var(--surface); padding: 20px; }
 .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 24px; cursor: pointer; }
 .toggle-row span { display: grid; gap: 5px; }
 .toggle-row small { line-height: 1.4; }
@@ -62,16 +61,22 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
 button:disabled { opacity: .45; cursor: default; }
 .primary { border-color: var(--primary); background: var(--primary); color: var(--on-primary); }
 .primary:hover:not(:disabled) { background: var(--primary-hover); }
-.rules { display: grid; gap: 12px; margin: 20px 0 0; padding: 0; list-style: none; }
-.rule { display: grid; gap: 16px; padding: 18px; }
-.rule-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+/* 所有规则共用一个卡片：规则之间只用分隔线，不再各自成卡。 */
+.rules { display: grid; margin: 20px 0 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); overflow: hidden; }
+.rules:empty { display: none; }
+.rule { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 18px; }
+.rule + .rule { border-top: 1px solid var(--border); }
+.rule-body { display: grid; gap: 12px; min-width: 0; }
 .rule-fields { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
 .rule-fields label { display: grid; align-content: start; gap: 6px; color: var(--muted); font-size: 14px; }
 .rule-fields input, .rule-fields select { width: 100%; min-height: 44px; border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; background: var(--background); color: var(--text); }
 .rule-fields input[aria-invalid="true"] { border-color: var(--danger); }
 .field-error { color: var(--danger); }
-.rule-actions { display: flex; gap: 6px; }
-.rule-actions button { padding-inline: 12px; }
+/* 上移与下移共用一个按钮区域（上下叠放），删除跟在它们后面，三者都在规则末尾。 */
+.rule-actions { display: flex; align-items: center; gap: 10px; }
+.move-buttons { display: grid; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.move-buttons button { width: 36px; height: 26px; min-height: 0; padding: 0; border: 0; border-radius: 0; background: transparent; line-height: 1; }
+.move-buttons button + button { border-top: 1px solid var(--border); }
 .remove { color: var(--danger); }
 .empty { margin: 24px 0; padding: 20px; border: 1px dashed var(--border); border-radius: 12px; color: var(--muted); text-align: center; }
 footer { display: flex; align-items: center; gap: 16px; margin-top: 28px; }
@@ -81,12 +86,13 @@ footer { display: flex; align-items: center; gap: 16px; margin-top: 28px; }
 @media (max-width: 760px) {
   .top-bar { padding-inline: 16px; }
   .layout { grid-template-columns: 1fr; width: min(100% - 32px, 760px); padding-top: 18px; }
-  nav { position: static; grid-template-columns: repeat(6, max-content); overflow-x: auto; padding-bottom: 4px; }
+  nav { position: static; grid-template-columns: repeat(5, max-content); overflow-x: auto; padding-bottom: 4px; }
   .section-heading, footer { align-items: stretch; flex-direction: column; }
+  .rule { grid-template-columns: 1fr; }
   .rule-fields { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 520px) {
-  .top-bar, .rule-heading { align-items: flex-start; flex-direction: column; }
-  .rule-actions { width: 100%; flex-wrap: wrap; }
+  .top-bar { align-items: flex-start; flex-direction: column; }
+  .rule-actions { width: 100%; }
 }

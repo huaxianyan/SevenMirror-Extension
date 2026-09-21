@@ -104,6 +104,60 @@ describe('Notification presentation', () => {
     expect(nativeOptions[0]?.title).not.toMatch(/[0-9a-f]{12}/);
   });
 
+  it('hides a notification for the interaction window without dismissing the phone one', async () => {
+    const events: string[] = [];
+    const notifications: NotificationsApi = {
+      getAll: (callback) => callback({}),
+      create: (_id, _options, callback) => callback?.('sn1:test'),
+      update: (_id, _options, callback) => callback?.(false),
+      clear: (id, callback) => {
+        events.push(`clear:${id}`);
+        callback?.(true);
+      },
+    };
+    const presenter = new NotificationPresenter({
+      notifications,
+      markProgrammatic: async (id, reason) => { events.push(`mark:${reason}`); },
+      consumeProgrammatic: async (id) => {
+        events.push(`consume:${id}`);
+        return undefined;
+      },
+    });
+
+    await presenter.hideForInteraction('sn1:test');
+
+    // The marker has to be written before the clear, or the resulting close event would be read as
+    // the user dismissing the notification and would ask Android to dismiss it too.
+    expect(events).toEqual(['mark:interaction-open', 'clear:sn1:test']);
+  });
+
+  it('consumes the marker it cannot use when the notification is already gone', async () => {
+    const events: string[] = [];
+    const notifications: NotificationsApi = {
+      getAll: (callback) => callback({}),
+      create: (_id, _options, callback) => callback?.('sn1:test'),
+      update: (_id, _options, callback) => callback?.(false),
+      clear: (id, callback) => {
+        events.push(`clear:${id}`);
+        callback?.(false);
+      },
+    };
+    const presenter = new NotificationPresenter({
+      notifications,
+      markProgrammatic: async (id, reason) => { events.push(`mark:${reason}`); },
+      consumeProgrammatic: async (id) => {
+        events.push(`consume:${id}`);
+        return undefined;
+      },
+    });
+
+    await presenter.hideForInteraction('sn1:test');
+
+    // A click on the toast body already closes it on some platforms, so no close event will come
+    // back to consume the marker. Leaving it behind would suppress a real user close for its TTL.
+    expect(events).toEqual(['mark:interaction-open', 'clear:sn1:test', 'consume:sn1:test']);
+  });
+
   it('uses only media whose encoded and decoded dimensions match the bounded declaration', async () => {
     let closed = false;
     const resolved = await notificationMediaDataUrl(appIcon(), async (blob) => {
