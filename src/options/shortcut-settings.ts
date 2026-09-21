@@ -101,7 +101,7 @@ export function initShortcutSettings(): void {
       title.textContent = message('shortcutRuleTitle', position);
       kind.value = rule.match.kind;
       value.value = rule.match.kind === 'reply' ? '' : rule.match.value;
-      titleField.hidden = rule.match.kind === 'reply';
+      setTitleFieldInert(titleField, rule.match.kind === 'reply');
       fieldError.hidden = true;
       renderApplicationOptions(application, rule);
       moveUp.disabled = index === 0;
@@ -115,7 +115,7 @@ export function initShortcutSettings(): void {
         current.match = kind.value === 'reply'
           ? { kind: 'reply' }
           : { kind: kind.value as 'title-exact' | 'title-contains', value: value.value };
-        titleField.hidden = kind.value === 'reply';
+        setTitleFieldInert(titleField, kind.value === 'reply');
         clearFieldError(value, fieldError);
         markDirty();
       });
@@ -204,6 +204,15 @@ export function initShortcutSettings(): void {
     const found = rules.find((rule) => rule.id === id);
     if (found === undefined) throw new Error('Shortcut rule no longer exists');
     return found;
+  }
+
+  /**
+   * "Needs a reply" has no action text, but the field keeps its column. Hiding it outright let
+   * the application picker slide left into that column, which moved the rule's own move and
+   * remove buttons out of the column every other rule puts them in.
+   */
+  function setTitleFieldInert(field: HTMLElement, inert: boolean): void {
+    field.classList.toggle('field-inert', inert);
   }
 
   function clearFieldError(input: HTMLInputElement, error: HTMLElement): void {

@@ -424,4 +424,7 @@ async function refreshOverviewInBackground(): Promise<void> {
 void render().catch(() => {
   connectionState.textContent = message('optionsState_needs_repair');
   connectionGuidance.textContent = message('optionsGuidance_needs_repair');
+}).finally(() => {
+  // The stored switch positions are painted by now, so the capsule transition can play again.
+  document.body.removeAttribute('data-hydrating');
 });

@@ -106,6 +106,9 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .rule-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: 12px; align-items: center; }
 .rule-fields label { color: var(--muted); font-size: 14px; }
 .rule-fields small { font-weight: 400; }
+/* "Needs a reply" hides the action text field without giving up its column: removing it from the
+   grid slid the application picker left and pulled that rule's buttons out of the shared column. */
+.title-field.field-inert { visibility: hidden; }
 .rule-fields select { width: 100%; min-height: 44px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--background); color: var(--text); }
 .rule-fields input[aria-invalid="true"] { border-color: var(--danger); }
 .field-error { color: var(--danger); }

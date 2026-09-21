@@ -41,6 +41,14 @@ input[role="switch"]:checked { background: var(--primary); }
 input[role="switch"]:checked::after { transform: translateX(20px); }
 input[role="switch"]:disabled { opacity: .5; cursor: default; }
 
+/*
+ * The settings page reads the stored positions after the document is already visible, so assigning
+ * them made every switch on the page animate from off to on at load. The page drops this attribute
+ * once it has painted those values; normal user interaction is unaffected.
+ */
+body[data-hydrating] input[role="switch"],
+body[data-hydrating] input[role="switch"]::after { transition: none; }
+
 @media (prefers-reduced-motion: reduce) {
   input[role="switch"],
   input[role="switch"]::after { transition: none; }
