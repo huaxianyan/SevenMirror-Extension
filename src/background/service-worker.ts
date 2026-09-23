@@ -1,11 +1,14 @@
 import {
   clearLifecycleTestNotification,
+  consumeProgrammaticCloseMarker,
   createLifecycleTestNotification,
   getLifecycleSpikeStatus,
   handleNotificationClosed,
   markProgrammaticClose,
   recordWorkerStart,
 } from './lifecycle-spike';
+import { message } from '../shared/i18n';
+import { notificationActionFailureKey } from '../shared/notification-action-failure';
 import {
   CONNECTION_STATE_STORAGE_KEY as CONNECTION_STATE_KEY,
   DEFAULT_CONNECTION_STATE,
@@ -68,7 +71,7 @@ import {
   resolveCurrentAction,
   validateReplyText,
 } from './notification-interaction';
-import type { ScreenWorkArea } from './notification-interaction';
+import type { NotificationOperationLookup, ScreenWorkArea } from './notification-interaction';
 
 const TRANSPORT_RECONNECT_ALARM = 'transport-reconnect-v1';
 const MEMBERSHIP_REFRESH_ALARM = 'membership-refresh-v1';
@@ -1080,15 +1083,27 @@ async function invokeNotificationInteraction(message: Record<string, unknown>): 
       ? { outcome: 'awaiting-result', idempotencyKey: result.idempotencyKey }
       : { outcome: 'unavailable' };
   }
-  return { outcome: result.accepted ? 'sent' : 'queued' };
+  // Every operation returns its key, not only replies: the caller needs it to look up the
+  // stored result, which is the only place a refusal becomes visible before the removal that
+  // a refused clear never produces.
+  return {
+    outcome: result.accepted ? 'sent' : 'queued',
+    idempotencyKey: result.idempotencyKey,
+  };
 }
 
-async function getNotificationInteractionOperation(message: Record<string, unknown>): Promise<{
-  state: 'pending' | 'succeeded' | 'changed' | 'failed' | 'unknown' | 'unavailable';
-}> {
-  const key = parseHex(message.idempotencyKey, 16, 'idempotencyKey');
+/**
+ * Reads the stored terminal state of one operation. Every delivery mode is served here: the
+ * reply flow needs it to report an answer, and the clear flow needs it to report a refusal,
+ * which arrives as a result and never as a removal. `detail` is carried along because it is
+ * the only place the reason for a refusal exists.
+ */
+async function getNotificationInteractionOperation(
+  request: Record<string, unknown>,
+): Promise<NotificationOperationLookup> {
+  const key = parseHex(request.idempotencyKey, 16, 'idempotencyKey');
   const record = await pendingActionStore.get(key);
-  if (record === undefined || record.invokeDeliveryMode !== 'once') return { state: 'unavailable' };
+  if (record === undefined) return { state: 'unavailable' };
   if (record.state === 'pending') return { state: 'pending' };
   switch (record.resultStatus) {
     case ActionResultStatus.SUCCEEDED:
@@ -1098,7 +1113,9 @@ async function getNotificationInteractionOperation(message: Record<string, unkno
     case ActionResultStatus.OUTCOME_UNKNOWN:
       return { state: 'unknown' };
     default:
-      return { state: 'failed' };
+      return record.resultDetail === undefined
+        ? { state: 'failed' }
+        : { state: 'failed', detail: record.resultDetail };
   }
 }
 
@@ -1235,7 +1252,15 @@ async function invokeNotificationButton(notificationId: string, buttonIndex: num
   if (button === undefined) return;
   if (button.kind === 'dismiss') {
     await markProgrammaticClose(notificationId, 'explicit-clear');
-    await queueStateOperation(state, { dismissNotification: true });
+    const queued = await queueStateOperation(state, { dismissNotification: true });
+    if (queued === undefined || !queued.queued) {
+      // Nothing left this browser, so the marker would only make a later manual close look
+      // programmatic and suppress the removal request that close should still send.
+      await consumeProgrammaticCloseMarker(notificationId);
+      await showClearFailure(notificationId, 'interactionRequestUnavailable');
+      return;
+    }
+    await watchClearOutcome(notificationId, queued.idempotencyKey);
     return;
   }
   if (button.kind === 'more' || button.requiresTextInput) {
@@ -1246,6 +1271,48 @@ async function invokeNotificationButton(notificationId: string, buttonIndex: num
     toHex(candidate.actionId) === toHex(button.actionId));
   if (action === undefined || action.requiresTextInput) return;
   await queueStateOperation(state, { actionId: action.actionId });
+}
+
+const CLEAR_OUTCOME_ATTEMPTS = 40;
+const CLEAR_OUTCOME_INTERVAL_MS = 250;
+
+/**
+ * Reports a refused clear on the notification the user clicked, so a refusal stops looking
+ * like a click that did nothing. The button stays in place, which keeps a retry one click
+ * away, and the wording says why. A worker suspended mid-wait drops the update, which is the
+ * accepted cost of not persisting a mapping from operation to notification.
+ */
+async function watchClearOutcome(notificationId: string, idempotencyKey: string): Promise<void> {
+  for (let attempt = 0; attempt < CLEAR_OUTCOME_ATTEMPTS; attempt += 1) {
+    const outcome = await getNotificationInteractionOperation({ idempotencyKey });
+    switch (outcome.state) {
+      case 'succeeded':
+        return;
+      case 'failed':
+        await showClearFailure(notificationId, notificationActionFailureKey(outcome.detail));
+        return;
+      case 'changed':
+        await showClearFailure(notificationId, 'interactionClearStale');
+        return;
+      case 'unknown':
+        await showClearFailure(notificationId, 'interactionResultUnknown');
+        return;
+      default:
+        break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, CLEAR_OUTCOME_INTERVAL_MS));
+  }
+  await showClearFailure(notificationId, 'interactionResultPending');
+}
+
+async function showClearFailure(notificationId: string, messageKey: string): Promise<void> {
+  await new Promise((resolve) => {
+    chrome.notifications.update(
+      notificationId,
+      { message: message(messageKey) },
+      () => resolve(undefined),
+    );
+  });
 }
 
 async function requestNotificationDismiss(notificationId: string): Promise<void> {

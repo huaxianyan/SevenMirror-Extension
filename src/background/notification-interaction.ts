@@ -102,17 +102,57 @@ export function interactionWindowPlacement(
 
 export type NotificationPresence = 'present' | 'removed' | 'lookup-failed';
 
-export async function waitForNotificationRemoval(
+export type NotificationOperationState =
+  | 'pending'
+  | 'succeeded'
+  | 'changed'
+  | 'failed'
+  | 'unknown'
+  | 'unavailable';
+
+export interface NotificationOperationLookup {
+  state: NotificationOperationState;
+  /** The refusal Android reported, still a protocol identifier rather than user text. */
+  detail?: string;
+}
+
+export type NotificationOutcome =
+  | { kind: 'removed' }
+  | { kind: 'failed'; detail?: string }
+  | { kind: 'changed' }
+  | { kind: 'unknown' }
+  | { kind: 'timeout' };
+
+/**
+ * Waits for the phone to finish an operation by watching two independent facts: the mirror
+ * disappearing, which is the only proof the notification is really gone, and the stored
+ * ActionResult, which is where a refusal shows up. `SUCCEEDED` alone does not end the wait —
+ * the platform accepts a cancellation request it may never carry out — but a refusal, a
+ * revision change or an unverifiable outcome ends it at once so the caller can say what
+ * happened instead of leaving "request sent" on screen forever.
+ */
+export async function waitForNotificationOutcome(
   lookup: () => Promise<NotificationPresence>,
+  lookupOperation: (() => Promise<NotificationOperationLookup>) | undefined,
   pause: () => Promise<void>,
   maximumAttempts = 120,
-): Promise<boolean> {
+): Promise<NotificationOutcome> {
   for (let attempt = 0; attempt < maximumAttempts; attempt += 1) {
     const presence = await lookup();
-    if (presence === 'removed') return true;
+    if (presence === 'removed') return { kind: 'removed' };
+    if (lookupOperation !== undefined) {
+      const operation = await lookupOperation();
+      if (operation.state === 'failed') {
+        return operation.detail === undefined
+          ? { kind: 'failed' }
+          : { kind: 'failed', detail: operation.detail };
+      }
+      if (operation.state === 'changed') return { kind: 'changed' };
+      if (operation.state === 'unknown') return { kind: 'unknown' };
+    }
     await pause();
   }
-  return false;
+  return { kind: 'timeout' };
 }
 
 export function interactionSummary(

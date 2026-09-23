@@ -1,9 +1,15 @@
-import type { NotificationInteractionSummary } from '../background/notification-interaction';
+import type {
+  NotificationInteractionSummary,
+  NotificationOperationLookup,
+  NotificationOutcome,
+  NotificationPresence,
+} from '../background/notification-interaction';
 import {
   validateReplyText,
-  waitForNotificationRemoval,
+  waitForNotificationOutcome,
 } from '../background/notification-interaction';
 import { message } from './i18n';
+import { notificationActionFailureKey } from './notification-action-failure';
 import { formatClockTime } from './time';
 
 type NotificationOperation =
@@ -14,10 +20,6 @@ type NotificationOperation =
 interface OperationResponse {
   outcome: 'sent' | 'queued' | 'awaiting-result' | 'unavailable' | 'changed';
   idempotencyKey?: string;
-}
-
-interface ReplyOperationResponse {
-  state: 'pending' | 'succeeded' | 'changed' | 'failed' | 'unknown' | 'unavailable';
 }
 
 interface InteractionLookupResponse {
@@ -52,22 +54,60 @@ export function mountNotificationDetail(
   status.setAttribute('aria-live', 'polite');
 
   const controls: Array<HTMLButtonElement | HTMLTextAreaElement> = [];
-  const closeWhenNotificationIsRemoved = (): void => {
-    void waitForNotificationRemoval(
-      async () => {
-        try {
-          const response = await chrome.runtime.sendMessage({
-            type: 'get-notification-interaction',
-            chromeNotificationId: notification.chromeNotificationId,
-          }) as InteractionLookupResponse;
-          if (response.lookupFailed) return 'lookup-failed';
-          return response.notification === undefined ? 'removed' : 'present';
-        } catch {
-          return 'lookup-failed';
-        }
-      },
+  const lookupPresence = async (): Promise<NotificationPresence> => {
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'get-notification-interaction',
+        chromeNotificationId: notification.chromeNotificationId,
+      }) as InteractionLookupResponse;
+      if (response.lookupFailed) return 'lookup-failed';
+      return response.notification === undefined ? 'removed' : 'present';
+    } catch {
+      return 'lookup-failed';
+    }
+  };
+  const lookupOperation = async (idempotencyKey: string): Promise<NotificationOperationLookup> => {
+    try {
+      return await chrome.runtime.sendMessage({
+        type: 'get-notification-interaction-operation',
+        idempotencyKey,
+      }) as NotificationOperationLookup;
+    } catch {
+      return { state: 'unavailable' };
+    }
+  };
+  /**
+   * Says what the phone answered. A refusal is the only outcome that re-enables the controls,
+   * because it is the phone's final word: acting again is then a new operation instead of a
+   * repeat of one that may still be on its way. The remaining outcomes all mean "the phone has
+   * not finished", which a second click would only duplicate.
+   */
+  const reportOutcome = (outcome: NotificationOutcome): void => {
+    switch (outcome.kind) {
+      case 'removed':
+        window.close();
+        return;
+      case 'failed':
+        status.textContent = message(notificationActionFailureKey(outcome.detail));
+        setDisabled(controls, false);
+        return;
+      case 'changed':
+        status.textContent = message('interactionChanged');
+        return;
+      case 'unknown':
+        status.textContent = message('interactionResultUnknown');
+        return;
+      case 'timeout':
+        status.textContent = message('interactionResultPending');
+        return;
+    }
+  };
+  const watchOutcome = (idempotencyKey?: string): void => {
+    void waitForNotificationOutcome(
+      lookupPresence,
+      idempotencyKey === undefined ? undefined : () => lookupOperation(idempotencyKey),
       () => new Promise((resolve) => window.setTimeout(resolve, 250)),
-    ).then((removed) => { if (removed) window.close(); });
+    ).then(reportOutcome);
   };
   const invoke = async (operation: NotificationOperation): Promise<void> => {
     setDisabled(controls, true);
@@ -81,11 +121,11 @@ export function mountNotificationDetail(
     switch (response.outcome) {
       case 'sent':
         status.textContent = message('interactionRequestSent');
-        closeWhenNotificationIsRemoved();
+        watchOutcome(response.idempotencyKey);
         return;
       case 'queued':
         status.textContent = message('interactionRequestQueued');
-        closeWhenNotificationIsRemoved();
+        watchOutcome(response.idempotencyKey);
         return;
       case 'changed':
         status.textContent = message('interactionChanged');
@@ -94,14 +134,18 @@ export function mountNotificationDetail(
         status.textContent = message('interactionRequestUnavailable');
         setDisabled(controls, false);
         return;
-      case 'awaiting-result':
+      case 'awaiting-result': {
         if (response.idempotencyKey === undefined) {
           status.textContent = message('interactionReplyUnknown');
           return;
         }
         status.textContent = message('interactionReplyWaiting');
-        status.textContent = message(await waitForReplyResult(response.idempotencyKey));
-        closeWhenNotificationIsRemoved();
+        const result = await waitForReplyResult(response.idempotencyKey);
+        status.textContent = message(result);
+        if (result === 'interactionReplySucceeded') watchOutcome();
+        else if (result === 'interactionReplyFailed') setDisabled(controls, false);
+        return;
+      }
     }
   };
 
@@ -176,7 +220,7 @@ async function waitForReplyResult(idempotencyKey: string): Promise<string> {
     const response = await chrome.runtime.sendMessage({
       type: 'get-notification-interaction-operation',
       idempotencyKey,
-    }) as ReplyOperationResponse;
+    }) as NotificationOperationLookup;
     switch (response.state) {
       case 'pending':
         await new Promise((resolve) => setTimeout(resolve, 250));

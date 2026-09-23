@@ -9,7 +9,7 @@ import {
   interactionWorkArea,
   resolveCurrentAction,
   validateReplyText,
-  waitForNotificationRemoval,
+  waitForNotificationOutcome,
 } from './notification-interaction';
 
 const state = (): MirroredNotificationState => ({
@@ -131,32 +131,64 @@ describe('Notification interaction window', () => {
     expect(validateReplyText('你'.repeat(1_334))).toBe('too-long');
   });
 
-  it('closes after an operation removes its notification despite a transient lookup failure', async () => {
+  it('closes once the notification is gone, even after a transient lookup failure', async () => {
     const states = ['lookup-failed', 'present', 'removed'] as const;
     let lookups = 0;
     let pauses = 0;
 
-    const removed = await waitForNotificationRemoval(
+    const outcome = await waitForNotificationOutcome(
       async () => states[lookups++] ?? 'present',
+      undefined,
       async () => { pauses += 1; },
     );
 
-    expect(removed).toBe(true);
+    expect(outcome).toEqual({ kind: 'removed' });
     expect(lookups).toBe(3);
     expect(pauses).toBe(2);
   });
 
-  it('retains the interaction window while its notification still exists', async () => {
+  it('reports a timeout while the notification still exists', async () => {
     let pauses = 0;
 
-    const removed = await waitForNotificationRemoval(
+    const outcome = await waitForNotificationOutcome(
       async () => 'present',
+      undefined,
       async () => { pauses += 1; },
       2,
     );
 
-    expect(removed).toBe(false);
+    expect(outcome).toEqual({ kind: 'timeout' });
     expect(pauses).toBe(2);
+  });
+
+  it('stops waiting as soon as the phone reports a refusal', async () => {
+    let pauses = 0;
+
+    const outcome = await waitForNotificationOutcome(
+      async () => 'present',
+      async () => ({ state: 'failed', detail: 'NOTIFICATION_STILL_ONGOING' }),
+      async () => { pauses += 1; },
+    );
+
+    expect(outcome).toEqual({ kind: 'failed', detail: 'NOTIFICATION_STILL_ONGOING' });
+    expect(pauses).toBe(0);
+  });
+
+  it('keeps waiting for the removal while the stored result is still a success', async () => {
+    let presenceLookups = 0;
+    let operationLookups = 0;
+
+    const outcome = await waitForNotificationOutcome(
+      async () => {
+        presenceLookups += 1;
+        return presenceLookups >= 3 ? 'removed' : 'present';
+      },
+      async () => { operationLookups += 1; return { state: 'succeeded' }; },
+      async () => {},
+    );
+
+    expect(outcome).toEqual({ kind: 'removed' });
+    expect(operationLookups).toBe(2);
   });
 
   it('resolves an action only while the interaction page revision is current', () => {
