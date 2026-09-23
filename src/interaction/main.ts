@@ -1,5 +1,6 @@
 import { localizeDocument } from '../shared/i18n';
 import { mountNotificationDetail } from '../shared/notification-detail';
+import { MARK_NOTIFICATIONS_VIEWED, openedNotificationReference } from '../shared/viewed-notifications';
 import { interactionWindowPlacement } from '../background/notification-interaction';
 import type {
   NotificationInteractionSummary,
@@ -65,6 +66,25 @@ async function loadNotification(): Promise<void> {
   mountNotificationDetail(detail, response.notification);
   detail.hidden = false;
   status.textContent = '';
+  await markViewed(response.notification);
+}
+
+/**
+ * This window shows the detail of one notification, so opening it counts as viewing that
+ * notification and drops it from the toolbar badge.
+ */
+async function markViewed(notification: NotificationInteractionSummary): Promise<void> {
+  try {
+    await chrome.runtime.sendMessage({
+      type: MARK_NOTIFICATIONS_VIEWED,
+      notifications: openedNotificationReference(
+        notification.chromeNotificationId,
+        notification.revision,
+      ),
+    });
+  } catch {
+    // A failed badge update must not hide a detail view the user already opened.
+  }
 }
 
 function showUnavailable(): void {

@@ -194,7 +194,7 @@
   "deviceAuthorized": { "message": "已授权" },
   "deviceAccessExpired": { "message": "需要更新访问权限" },
   "optionsBadgeTitle": { "message": "新通知角标" },
-  "optionsBadgeBody": { "message": "显示尚未在 SevenMirror 窗口中查看的通知数量。" },
+  "optionsBadgeBody": { "message": "显示尚未点开查看的通知数量。" },
   "optionsSourcesTitle": { "message": "Android 来源" },
   "optionsSourcesBody": { "message": "选择哪些已授权 Android 设备的通知可以在这台 Chrome 设备上显示。" },
   "optionsSourcesEmpty": { "message": "暂无已授权的 Android 来源。" },

@@ -3,6 +3,7 @@ import type { NotificationInteractionSummary } from '../background/notification-
 import { localizeDocument, message } from '../shared/i18n';
 import { mountNotificationDetail } from '../shared/notification-detail';
 import { formatClockTime } from '../shared/time';
+import { MARK_NOTIFICATIONS_VIEWED, notificationsToMarkViewed } from '../shared/viewed-notifications';
 import { filterBySource, sourceChoices } from './source-filter';
 
 interface PopupNotification extends NotificationInteractionSummary {
@@ -44,13 +45,6 @@ async function render(): Promise<void> {
   connectionStatus.textContent = connectionStateLabel(current.state);
   renderSourceFilter(current.notifications);
   renderList();
-  await chrome.runtime.sendMessage({
-    type: 'mark-popup-notifications-viewed',
-    notifications: current.notifications.map((notification) => ({
-      chromeNotificationId: notification.chromeNotificationId,
-      revision: notification.revision,
-    })),
-  });
 }
 
 function renderSourceFilter(notifications: PopupNotification[]): void {
@@ -106,12 +100,30 @@ function showDetail(notification: PopupNotification): void {
   detailView.hidden = false;
   document.documentElement.scrollTop = 0;
   backToList.focus();
+  void markViewed(notification);
+}
+
+/**
+ * Opening a notification is what marks it viewed. Listing the Popup deliberately does not, so
+ * the badge keeps counting the rows the user never opened.
+ */
+async function markViewed(notification: PopupNotification): Promise<void> {
+  const notifications = notificationsToMarkViewed(
+    current.notifications,
+    notification.chromeNotificationId,
+  );
+  if (notifications.length === 0) return;
+  // Clear the row first so its "new" mark is already gone when the user returns to the list.
+  notification.isNew = false;
+  await chrome.runtime.sendMessage({ type: MARK_NOTIFICATIONS_VIEWED, notifications });
 }
 
 function showList(): void {
   detailView.hidden = true;
   listView.hidden = false;
   detail.replaceChildren();
+  // Re-render so a notification opened in the detail view loses its "new" mark.
+  renderList();
   document.documentElement.scrollTop = listScrollTop;
 }
 

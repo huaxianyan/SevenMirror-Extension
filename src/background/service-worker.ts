@@ -429,8 +429,8 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
       );
       return true;
 
-    case 'mark-popup-notifications-viewed':
-      void markPopupNotificationsViewed(message).then(
+    case 'mark-notifications-viewed':
+      void markNotificationsViewed(message).then(
         () => sendResponse({ marked: true }),
         () => sendResponse({ marked: false }),
       );
@@ -960,7 +960,12 @@ async function getPopupNotifications(): Promise<{
   }
 }
 
-async function markPopupNotificationsViewed(message: Record<string, unknown>): Promise<void> {
+/**
+ * Marks the notifications the user actually opened as viewed. The Popup list reports nothing
+ * here, so listing notifications does not clear their badge count. A reference whose revision
+ * no longer matches is dropped instead of marking a version the user has not seen.
+ */
+async function markNotificationsViewed(message: Record<string, unknown>): Promise<void> {
   if (!Array.isArray(message.notifications) || message.notifications.length > 1_000) return;
   const entries: Array<{ tuple: string; revision: string }> = [];
   for (const value of message.notifications) {

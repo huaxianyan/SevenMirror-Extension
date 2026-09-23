@@ -194,7 +194,7 @@
   "deviceAuthorized": { "message": "Authorized" },
   "deviceAccessExpired": { "message": "Access needs updating" },
   "optionsBadgeTitle": { "message": "New notification badge" },
-  "optionsBadgeBody": { "message": "Show how many notifications have not been viewed in the SevenMirror window." },
+  "optionsBadgeBody": { "message": "Show how many notifications you have not opened yet." },
   "optionsSourcesTitle": { "message": "Android sources" },
   "optionsSourcesBody": { "message": "Choose which authorized Android devices appear on this Chrome device." },
   "optionsSourcesEmpty": { "message": "No authorized Android source is available." },
