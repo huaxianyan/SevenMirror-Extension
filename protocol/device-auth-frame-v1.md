@@ -1,6 +1,6 @@
 # Device WebSocket Authentication Frame v1
 
-Status: provisional (`0.1.0-dev`)
+Status: provisional (`0.1.0`)
 
 A client connects to `GET /v1/relay` over TLS and MUST send this frame as the
 first WebSocket binary message within 5 seconds. Authentication secrets MUST

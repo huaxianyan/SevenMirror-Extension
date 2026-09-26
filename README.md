@@ -1,10 +1,31 @@
-# Notification Mirroring Chrome Extension
+# SevenMirror Chrome Extension
 
-Manifest V3 extension for private, end-to-end encrypted Android notification mirroring. This is one of three independent repositories.
+Browser side of SevenMirror: it receives the notifications the user's phone mirrors and presents them as native desktop notifications. This is one of three independent repositories.
 
 Repository: <https://github.com/huaxianyan/SevenMirror-Extension>
 
-> Status: cryptographic, replay, durable action invoke/result reconciliation, code-gated registration, Chrome recoverable credential rotation, textual trusted-device approval, and authenticated WebSocket lifecycle are implemented. Real notification synchronization is implemented and carries third-party content only for packages the phone user explicitly selects, through the mandatory per-recipient E2EE and authority-authorized recipient chain. No reviewed release approves it: released behavior keeps it gated until the security findings and the two-real-Android OEM/network validation are complete and a reviewed release explicitly changes the gate.
+> Status: cryptographic, replay, durable action invoke/result reconciliation, code-gated registration, Chrome recoverable credential rotation, textual trusted-device approval, and authenticated WebSocket lifecycle are implemented. Real notification synchronization carries third-party content only for packages the phone user explicitly selects, through the mandatory per-recipient E2EE and authority-authorized recipient chain. No reviewed release approves it: released behavior keeps it gated until the security findings and the two-real-Android OEM/network validation are complete and a reviewed release explicitly changes the gate. The toolbar badge counts notifications whose detail has not been opened, shortcut rules can be shared across every browser in the workspace behind a passphrase, and a refused remote clear is reported instead of being swallowed.
+
+## What this is
+
+SevenMirror shows Android notifications on a desktop browser. This extension is the
+receiving side: it asks the browser to display a native notification for each one
+the phone sends, and it can invoke an action, send a reply, or clear that
+notification remotely. It never asks for notification access on the desktop — the
+phone decides what is shared, and every mirrored payload arrives as ciphertext that
+this extension decrypts with a key the relay never sees.
+
+To use it:
+
+1. Load `dist/` from `chrome://extensions` (see below), or install the packaged build.
+2. Register against your relay's origin with the joining code the operator issued.
+3. Approve the phone the first time it connects, comparing the safety code both sides display.
+4. Set the notification and shortcut preferences in the Options page.
+
+Clicking a notification's body opens the interaction page beside the notification
+that was clicked, where an action or a reply can be submitted. The toolbar badge
+counts the notifications whose detail has not been opened yet; opening the Popup
+alone does not clear it.
 
 ## Requirements
 
@@ -37,6 +58,11 @@ Release-candidate ZIP provenance, offline verification, the Chrome Web Store sig
 - Provisional vendored protocol assets with SHA-256 verification
 - Extension-origin IndexedDB Workspace Membership store with an immutable authority pin, exact signed local certificate, canonical highest roster bytes/digest, and fail-closed rollback/fork/epoch-gap handling
 - Strict provisional ADR-005 register/prove/state HTTP client with real Base HPKE proof generation, an extension-origin durable pending-enrollment journal, ambiguous-proof recovery, bounded no-redirect responses, sequential roster paging, Worker-start recovery before transport credential loading, and recoverable write-once transport promotion only after the durable active certificate is present
+- Toolbar badge counting the notifications whose detail has not been opened; opening the Popup alone does not clear it, and the count is capped at `999+`
+- Native notification presentation that puts the source device on the context line and leads the title with the application name
+- Shortcut-rule sharing across every browser in the workspace: the rules travel as an opaque versioned blob sealed with AES-GCM under a PBKDF2-SHA256 key derived from a user passphrase, merged under optimistic concurrency, pushed on save, and pulled on Worker start and on a timer
+- Brand icons for the extension entry and the toolbar action button
+- A remote clear that the phone refuses is reported on the interaction page instead of leaving the user to wait
 
 ## Protocol
 
@@ -46,7 +72,7 @@ The server repository is the canonical protocol source. This repository vendors 
 node protocol/verify-schema.mjs
 ```
 
-The current `0.1.0-dev` schema is unreleased and provisional.
+The schema is at `0.1.0` and stays provisional — a version number is not a compatibility promise until protocol v1 is frozen.
 
 ## Security status
 
@@ -55,6 +81,8 @@ provider database timestamp are documented in
 [`docs/vulnerability-evidence.md`](docs/vulnerability-evidence.md).
 
 The transport core accepts only HTTPS origins outside loopback, never puts credentials in URLs or `chrome.storage.sync`, rejects silent credential replacement, and refuses to send the first authentication frame if the WebSocket endpoint changes. The bearer credential must remain available as bytes for the browser WebSocket API, so extension-origin IndexedDB and a minimal in-memory lifetime are the practical Chrome boundary; the HPKE private identity remains non-extractable.
+
+Shortcut-rule sharing keeps the relay blind. The extension derives a 256-bit AES-GCM key from a passphrase with PBKDF2-SHA256 at 600,000 iterations and a fresh 16-byte salt, seals the rules locally, and stores only the sealed envelope under a single server preference key; neither the passphrase nor the derived key leaves the browser. The derived key is kept beside the local rules, which are already stored in the clear. Merging uses the server revision, so a stale push is rejected rather than overwriting a newer edit, and a pull replaces local rules only when the server revision is higher.
 
 Version `0.1.14` adds a durable recipient cursor for Relay Delivery v1. After exact `SNO1`, the Worker resumes from its highest committed delivery ID; it advances and cumulatively ACKs only after authenticated business reconciliation and presentation complete. Exact relay redelivery may reuse an already consumed replay tuple only when the existing durable business binding reconciles successfully. A history gap is persisted as snapshot-required and is never skipped automatically. The Android durable sender and snapshot-required recovery handshake remain incomplete.
 
@@ -70,7 +98,7 @@ Outbound `action.invoke` now persists the exact canonical invoke payload, Androi
 
 The Worker retries network/socket failures with jittered exponential backoff from 1 second up to 60 seconds. A single connection generation suppresses duplicate error/close retries, successful `SNO1` authentication resets the sequence, explicit connect/disconnect cancels pending work, and `chrome.alarms` preserves scheduled wakeups across MV3 Worker suspension. Persistent local identity or encrypted-delivery failures stop fail-closed rather than being retried as network failures.
 
-Server directory data can never populate the pin store implicitly. Textual trusted-device approval and Chrome transport-credential rotation are implemented, but camera QR UX, Android dual-slot rotation, E2EE identity rotation, lost-device recovery, snapshot-required recovery, Android durable submission, multi-device offline convergence, and independent security review remain incomplete. No reviewed release has approved real notification content yet, and the gate only changes with the security findings and the two-real-Android OEM/network validation.
+Server directory data can never populate the pin store implicitly. Textual trusted-device approval and Chrome transport-credential rotation are implemented, but camera QR UX, E2EE identity rotation, lost-device recovery, multi-device offline convergence, and independent security review remain incomplete. No reviewed release has approved real notification content yet, and the gate only changes with the security findings and the two-real-Android OEM/network validation.
 
 ## License
 

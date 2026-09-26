@@ -6,3 +6,7 @@
 *.css text eol=lf
 *.proto text eol=lf
 *.yml text eol=lf
+protocol/*.md text eol=lf
+protocol/PROTOCOL_VERSION text eol=lf
+protocol/UPSTREAM_REF text eol=lf
+protocol/*_SHA256 text eol=lf

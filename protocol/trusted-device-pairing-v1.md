@@ -1,6 +1,6 @@
 # Trusted Device Pairing v1
 
-Status: provisional (`0.1.0-dev`)
+Status: provisional (`0.1.0`)
 
 This protocol establishes local E2EE peer pins. It is independent of server admission and transport authentication. A server directory, registration response, or transport credential MUST NOT call the approved-peer store directly.
 
