@@ -122,12 +122,16 @@ export class NotificationPresenter {
     });
     await this.saveButtonBindings?.(state.chromeNotificationId, state.revision, buttons);
     const applicationName = state.sourceApplicationName ?? 'Android';
+    const deviceName = sourceName?.trim();
     const options: chrome.notifications.NotificationOptions<true> = {
       type: 'basic',
       iconUrl: presentation.showImages
         ? await this.resolveIconUrl(state.avatar, state.appIcon)
         : this.notificationIconUrl(),
-      title: [state.title ?? 'Notification', applicationName, sourceName]
+      // Chromium prints the extension name on the line above the title. A context message takes
+      // that slot over, so the source device gets its own line instead of sharing the title line.
+      ...(deviceName ? { contextMessage: deviceName } : {}),
+      title: [applicationName, state.title ?? 'Notification']
         .filter((value) => value !== undefined && value.length > 0).join(' · '),
       message: presentation.showBody ? state.body ?? '' : '',
       priority: 0,

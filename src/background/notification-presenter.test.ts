@@ -96,12 +96,15 @@ describe('Notification presentation', () => {
     expect(events).toEqual(['bind:7:action,dismiss', 'create']);
     expect(nativeOptions[0]?.buttons).toEqual([{ title: 'Reply' }, { title: 'Clear' }]);
     expect(nativeOptions[0]).toMatchObject({
-      title: 'New message · Example Chat · Bedroom phone',
+      title: 'Example Chat · New message',
+      contextMessage: 'Bedroom phone',
       message: '',
       iconUrl: 'extension://icon',
       silent: true,
     });
     expect(nativeOptions[0]?.title).not.toMatch(/[0-9a-f]{12}/);
+    // The source device belongs to the context line, not the title line.
+    expect(nativeOptions[0]?.title).not.toContain('Bedroom phone');
   });
 
   it('hides a notification for the interaction window without dismissing the phone one', async () => {
