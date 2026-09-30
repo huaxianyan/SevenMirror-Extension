@@ -76,6 +76,28 @@ in `-dev`; that output is not a published release.
 The workflow uploads the exact set under a name containing the full source
 commit with 30-day retention. Durable release retention is still undecided.
 
+## Published release
+
+The `publish-release` job runs only for a tag and only after the build job
+succeeds. It downloads the verified three-file artifact set, assembles the
+release body from `docs/release-notes/<tag>.md` plus a generated `## 构建信息`
+table, and creates the GitHub Release with `gh release create --verify-tag`.
+Assets are the ZIP, `release-manifest.json` and `SHA256SUMS`.
+
+`docs/release-notes/<tag>.md` is short by design: one summary paragraph, a
+`## 主要更新` section, and a link to this document under the tag. Usage,
+validation evidence and build ranges belong here or in the README, not in the
+release body. `scripts/verify_release_notes.py` enforces that shape, and
+`scripts/test_verify_release_notes.py` runs it as part of CI.
+
+The release title is the tag alone. A product-name prefix turns the Release list
+into a column of identical truncated names and hides which version each entry is.
+
+The ZIP published here is the same artifact prepared for Chrome Web Store
+submission. Publishing it as a Release does **not** close the Chrome Web Store
+boundary above: store publication, the store-served CRX identity and the
+publisher-account evidence remain separate and still open.
+
 ## Chrome Web Store boundary
 
 The ZIP is the source submission package. GitHub provenance does **not** prove

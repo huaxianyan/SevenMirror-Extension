@@ -59,6 +59,8 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - name: Verify release note format
+        run: python3 scripts/test_verify_release_notes.py
       - name: Build and verify deterministic submission package
         run: |
           python3 scripts/test_build_release_package.py

@@ -7,7 +7,7 @@ on:
       - 'v*'
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
   attestations: write
   artifact-metadata: write
@@ -26,6 +26,9 @@ jobs:
             echo 'Every external GitHub Action must use an immutable 40-character commit.' >&2
             exit 1
           fi
+      - name: Verify release notes
+        if: github.ref_type == 'tag'
+        run: python3 scripts/verify_release_notes.py --tag "$GITHUB_REF_NAME"
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '20'
@@ -86,3 +89,37 @@ jobs:
           path: '${{ runner.temp }}/sevenmirror-security-evidence/'
           if-no-files-found: error
           retention-days: 30
+
+  publish-release:
+    if: github.ref_type == 'tag'
+    needs: build-and-attest
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: sevenmirror-extension-${{ github.sha }}
+          path: release
+      - name: Assemble and publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          notes_out="$RUNNER_TEMP/release-notes.md"
+          {
+            cat "docs/release-notes/${GITHUB_REF_NAME}.md"
+            printf '\n## 构建信息\n\n'
+            printf '| 项目 | 值 |\n'
+            printf '| --- | --- |\n'
+            printf '| 版本 | `%s` |\n' "$GITHUB_REF_NAME"
+            for asset in release/*; do
+              printf '| %s SHA-256 | `%s` |\n' "${asset##*/}" "$(sha256sum "$asset" | cut -d' ' -f1)"
+            done
+          } > "$notes_out"
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file "$notes_out" \
+            --verify-tag \
+            release/*
