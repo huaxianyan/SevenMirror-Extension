@@ -1,39 +1,40 @@
-# SevenMirror Chrome Extension
+# SevenMirror Chrome 扩展
 
-Browser side of SevenMirror: it receives the notifications the user's phone mirrors and presents them as native desktop notifications. This is one of three independent repositories.
+在电脑上接收手机的通知。本扩展是接收端：手机发来的每条通知都以系统通知的形式弹出，你可以直接处理、回复或清除。三个独立仓库之一。
 
-Repository: <https://github.com/huaxianyan/SevenMirror-Extension>
+仓库地址：<https://github.com/huaxianyan/SevenMirror-Extension>
 
-> Status: cryptographic, replay, durable action invoke/result reconciliation, code-gated registration, Chrome recoverable credential rotation, textual trusted-device approval, and authenticated WebSocket lifecycle are implemented. Real notification synchronization carries third-party content only for packages the phone user explicitly selects, through the mandatory per-recipient E2EE and authority-authorized recipient chain. No reviewed release approves it: released behavior keeps it gated until the security findings and the two-real-Android OEM/network validation are complete and a reviewed release explicitly changes the gate. The toolbar badge counts notifications whose detail has not been opened, shortcut rules can be shared across every browser in the workspace behind a passphrase, and a refused remote clear is reported instead of being swallowed.
+> 状态：日常使用已经可用。通知接收与呈现、远程操作与回复、快捷操作规则、跨浏览器规则同步、独立交互窗口都已实现。上架 Chrome Web Store 与独立安全评审尚未完成。
 
-## What this is
+## 能做什么
 
-SevenMirror shows Android notifications on a desktop browser. This extension is the
-receiving side: it asks the browser to display a native notification for each one
-the phone sends, and it can invoke an action, send a reply, or clear that
-notification remotely. It never asks for notification access on the desktop — the
-phone decides what is shared, and every mirrored payload arrives as ciphertext that
-this extension decrypts with a key the relay never sees.
+- **接收手机通知**：手机选中的应用发来的通知会在电脑上弹出，和本机通知一样。
+- **在电脑上处理**：标记完成、发送回复，或清除这条通知。
+- **点通知主体打开小窗口**：在独立的小窗口里查看详情与回复，不占用浏览器标签页，也不会打断你当前在做的事。
+- **角标只算真正看过的**：工具栏角标统计还没点开详情的通知。只打开弹窗看一眼不会清零。
+- **来源筛选**：按来源设备过滤通知列表。
+- **快捷操作规则**：给特定应用配置优先规则与快捷动作，不必每次都手动点开。
+- **规则跨浏览器同步**：用一句口令把规则同步到你工作区里的每台浏览器。规则以密文存放，中继服务器看不到内容。
+- **清除失败会说明原因**：手机拒绝远程清除时会明确告诉你，不会让你干等。
 
-To use it:
+## 怎么用
 
-1. Load `dist/` from `chrome://extensions` (see below), or install the packaged build.
-2. Register against your relay's origin with the joining code the operator issued.
-3. Approve the phone the first time it connects, comparing the safety code both sides display.
-4. Set the notification and shortcut preferences in the Options page.
+SevenMirror 是自托管项目，你需要先有一台运行中继服务的服务器。服务器可以自己搭建，搭建方式见服务端仓库。
 
-Clicking a notification's body opens the interaction page beside the notification
-that was clicked, where an action or a reply can be submitted. The toolbar badge
-counts the notifications whose detail has not been opened yet; opening the Popup
-alone does not clear it.
+1. 安装扩展。可以从本仓库的 Releases 下载打包产物，也可以自行构建后加载。
+2. 在设置页填入中继服务器地址，再用运维者签发的一次性加入码注册。
+3. 手机第一次连接时在设置页批准它，并比对两端显示的校验码。
+4. 在设置页配置通知呈现方式与快捷操作规则。
 
-## Requirements
+扩展不会申请读取你电脑上的通知。手机决定共享什么，每条内容到达时都已加密，密钥只有本扩展持有。
 
-- Node.js 20 or newer
-- npm
-- Current stable Chrome
+## 运行要求
 
-## Develop
+- Node.js 20 或更高版本（仅自行构建时需要）
+- 当前稳定版 Chrome
+- 一个已经搭好的 SevenMirror 中继服务
+
+## 自行构建
 
 ```sh
 npm install
@@ -41,65 +42,26 @@ npm test
 npm run build
 ```
 
-Load `dist/` as an unpacked extension from `chrome://extensions` after building. The Options page displays the current manifest version; user-visible extension iterations increment it so a reload can be verified.
+构建完成后，在 `chrome://extensions` 里以「加载已解压的扩展程序」的方式载入 `dist/` 目录。设置页会显示当前版本号，方便确认是否已重新载入。
 
-Release-candidate ZIP provenance, offline verification, the Chrome Web Store signing boundary and monotonic-version rollback rules are documented in [`docs/release-provenance.md`](docs/release-provenance.md). The pinned release Actions and their permissions are reviewed in [`docs/release-actions.md`](docs/release-actions.md).
+## 发布
 
-## Current functionality
+推送形如 `v0.1.21` 的标签即触发发布。标签必须等于 `public/manifest.json` 里的版本号，且 `package.json` 必须与它一致。
 
-- MV3 service worker, Popup, and a code-gated registration Options page
-- Authenticated HPKE identity with non-extractable WebCrypto private key persistence
-- Persistent replay, durable action-invoke delivery, and pending-result reconciliation ledgers
-- Canonical encrypted action sender/result receiver with persistent per-recipient sequence allocation
-- Strict code-gated registration and recoverable transport-credential rotation clients with an extension-origin-only dual-slot credential store
-- Device Auth Frame v1, mandatory `SNO1` server confirmation, and bounded authentication acknowledgement timeout
-- Explicit optional-host permission grant during registration
-- Worker-start connection restoration with HPKE identity/transport credential binding verification
-- Provisional vendored protocol assets with SHA-256 verification
-- Extension-origin IndexedDB Workspace Membership store with an immutable authority pin, exact signed local certificate, canonical highest roster bytes/digest, and fail-closed rollback/fork/epoch-gap handling
-- Strict provisional ADR-005 register/prove/state HTTP client with real Base HPKE proof generation, an extension-origin durable pending-enrollment journal, ambiguous-proof recovery, bounded no-redirect responses, sequential roster paging, Worker-start recovery before transport credential loading, and recoverable write-once transport promotion only after the durable active certificate is present
-- Toolbar badge counting the notifications whose detail has not been opened; opening the Popup alone does not clear it, and the count is capped at `999+`
-- Native notification presentation that puts the source device on the context line and leads the title with the application name
-- Shortcut-rule sharing across every browser in the workspace: the rules travel as an opaque versioned blob sealed with AES-GCM under a PBKDF2-SHA256 key derived from a user passphrase, merged under optimistic concurrency, pushed on save, and pulled on Worker start and on a timer
-- Brand icons for the extension entry and the toolbar action button
-- A remote clear that the phone refuses is reported on the interaction page instead of leaving the user to wait
+发布产物是确定性打包的 ZIP，同时也作为 Chrome Web Store 的提交包。发布 ZIP 不等于完成商店上架，商店签名、上架后的产物身份与发布者账号证据仍各自独立。完整规则见 [发布溯源](docs/release-provenance.md)。
 
-## Protocol
+## 更多文档
 
-The server repository is the canonical protocol source. This repository vendors a fixed copy under `protocol/vendor` and records its version, upstream reference and SHA-256. Run:
+面向开发与运维的细节拆到独立文档，不放在这里。
 
-```sh
-node protocol/verify-schema.mjs
-```
+| 主题 | 文档 |
+| --- | --- |
+| 发布产物、离线校验与商店边界 | [发布溯源](docs/release-provenance.md) |
+| 发布流程用到的 Action 与权限 | [发布 Action](docs/release-actions.md) |
+| 本地敏感数据清单与审计 | [敏感数据](docs/SENSITIVE_DATA.md) |
+| 依赖漏洞证据与查询时口径 | [漏洞证据](docs/vulnerability-evidence.md) |
+| 协议资产、版本与校验方式 | [协议资产](protocol/README.md) |
 
-The schema is at `0.1.0` and stays provisional — a version number is not a compatibility promise until protocol v1 is frozen.
+## 许可证
 
-## Security status
-
-Locked npm audit query-time evidence and its distinction from an unavailable
-provider database timestamp are documented in
-[`docs/vulnerability-evidence.md`](docs/vulnerability-evidence.md).
-
-The transport core accepts only HTTPS origins outside loopback, never puts credentials in URLs or `chrome.storage.sync`, rejects silent credential replacement, and refuses to send the first authentication frame if the WebSocket endpoint changes. The bearer credential must remain available as bytes for the browser WebSocket API, so extension-origin IndexedDB and a minimal in-memory lifetime are the practical Chrome boundary; the HPKE private identity remains non-extractable.
-
-Shortcut-rule sharing keeps the relay blind. The extension derives a 256-bit AES-GCM key from a passphrase with PBKDF2-SHA256 at 600,000 iterations and a fresh 16-byte salt, seals the rules locally, and stores only the sealed envelope under a single server preference key; neither the passphrase nor the derived key leaves the browser. The derived key is kept beside the local rules, which are already stored in the clear. Merging uses the server revision, so a stale push is rejected rather than overwriting a newer edit, and a pull replaces local rules only when the server revision is higher.
-
-Version `0.1.14` adds a durable recipient cursor for Relay Delivery v1. After exact `SNO1`, the Worker resumes from its highest committed delivery ID; it advances and cumulatively ACKs only after authenticated business reconciliation and presentation complete. Exact relay redelivery may reuse an already consumed replay tuple only when the existing durable business binding reconciles successfully. A history gap is persisted as snapshot-required and is never skipped automatically. The Android durable sender and snapshot-required recovery handshake remain incomplete.
-
-Version `0.1.12` adds one atomic `{current, pending, phase}` rotation record. Options durably prepares one client-generated pending credential and marks it attempted before the strict no-redirect HTTPS request can leave the extension. HTTP 200 never replaces current. After interruption or Worker reconstruction, transport probes pending, falls back to current after pre-authentication denial, and retains the exact pending secret for request retry. Only exact pending `SNO1` permits an atomic promotion that removes old current and pending metadata. Device/workspace and HPKE identity bindings remain unchanged.
-
-The Options page can consume an administrator-issued Chrome pairing code, request only the selected server's optional host access, persist the returned credential, and start a connection. `online` is reported only after `SNO1`; a socket open or local `SNA1` enqueue is not sufficient. Missing/replaced HPKE identity state fails closed.
-
-A native-notification body click opens the existing interaction page in a focused 440 × 680 popup window anchored to the bottom-right corner of the primary display work area, so it appears next to the notification that was just clicked. The Worker reads that work area through the `system.display` permission and passes the bounds to window creation, which is what keeps the window from appearing in the browser's default top-left cascade and moving afterwards; when no display list is available the window opens at the default position and the page anchors itself instead. After an interaction is submitted, that window checks the authoritative local notification state for up to the bounded operation-delivery window. It closes itself when the corresponding notification is removed, retains itself while the notification still exists, and ignores transient lookup failures rather than treating them as removal.
-
-Authenticated inbound binary frames enter a serialized `action.result` dispatcher. It strictly decodes `SNE1`, checks the credential workspace/recipient route, resolves the exact sender device/key ID only from a local immutable approved-peer pin, performs Auth HPKE opening, consumes the persistent replay tuple, validates canonical payload bytes, and reconciles the pending action atomically. Unapproved senders and every decoding/authentication/reconciliation failure close the socket without logging payload or identity data.
-
-Outbound `action.invoke` now persists the exact canonical invoke payload, Android device/key binding, operation digest, idempotency key, retry state, and per-recipient sequence before/around authenticated WebSocket delivery. Only a `SNO1`-authenticated connection generation can send. Fresh delivery attempts use new envelope message IDs/sequences but retain the same business idempotency key and exact operation bytes. Named `chrome.alarms` wake bounded 1/2/4/8-second retries across MV3 Worker suspension; a terminal authenticated result stops delivery, and removing the approved peer stops subsequent encryption. Local `WebSocket.send` acceptance is not treated as Android execution or result acknowledgement.
-
-The Worker retries network/socket failures with jittered exponential backoff from 1 second up to 60 seconds. A single connection generation suppresses duplicate error/close retries, successful `SNO1` authentication resets the sequence, explicit connect/disconnect cancels pending work, and `chrome.alarms` preserves scheduled wakeups across MV3 Worker suspension. Persistent local identity or encrypted-delivery failures stop fail-closed rather than being retried as network failures.
-
-Server directory data can never populate the pin store implicitly. Textual trusted-device approval and Chrome transport-credential rotation are implemented, but camera QR UX, E2EE identity rotation, lost-device recovery, multi-device offline convergence, and independent security review remain incomplete. No reviewed release has approved real notification content yet, and the gate only changes with the security findings and the two-real-Android OEM/network validation.
-
-## License
-
-Current revisions are licensed under [`GPL-3.0-only`](LICENSE). Commercial use is permitted subject to GPLv3. See [`LICENSE-TRANSITION.md`](LICENSE-TRANSITION.md) for the exact non-retroactive MIT-to-GPL boundary; the boundary revision and its ancestors remain available under MIT.
+当前修订版使用 [`GPL-3.0-only`](LICENSE)。允许商业使用，但分发时必须遵守 GPLv3。此前已经发布的 MIT 版本不受追溯影响，精确的 MIT 到 GPL 边界见 [`LICENSE-TRANSITION.md`](LICENSE-TRANSITION.md)，该边界修订及其祖先仍按 MIT 提供。
