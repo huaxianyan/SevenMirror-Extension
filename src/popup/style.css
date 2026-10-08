@@ -11,6 +11,9 @@
   --primary-hover: #2e4f94;
   --on-primary: #ffffff;
   --border: #dfe2eb;
+  --card-border: #c5ccdb;
+  --new-surface: #eaf1ff;
+  --card-shadow: 0 2px 6px rgb(27 39 65 / 10%);
   --focus: #6f9cff;
 }
 
@@ -24,6 +27,9 @@
     --primary-hover: #b3cbff;
     --on-primary: #102044;
     --border: #3b3f49;
+    --card-border: #505969;
+    --new-surface: #23324c;
+    --card-shadow: 0 2px 6px rgb(0 0 0 / 24%);
     --focus: #9bbcff;
   }
 }
@@ -43,12 +49,11 @@ section { margin-top: 16px; }
 .list-toolbar label, .count { color: var(--muted); font-size: 12px; }
 select { min-height: 36px; min-width: 0; padding: 6px 30px 6px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--text); font: inherit; }
 select:disabled { opacity: .72; }
-/* Only the top edge: with `border-block` the last row also had a line under it, which
-   reads as "there is more below" even though every row already carries its own divider. */
-.notification-list { margin-top: 10px; border-top: 1px solid var(--border); }
-.notification-item { width: 100%; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 13px 4px; border: 0; border-bottom: 1px solid var(--border); background: transparent; color: var(--text); text-align: start; cursor: pointer; }
-.notification-item:last-child { border-bottom: 0; }
-.notification-item:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+.notification-list { display: grid; gap: 12px; margin-top: 12px; }
+.notification-item { width: 100%; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 14px; border: 1px solid var(--card-border); border-inline-start-width: 4px; border-radius: 14px; background: var(--surface); box-shadow: var(--card-shadow); color: var(--text); font: inherit; font-size: 14px; line-height: 1.45; text-align: start; cursor: pointer; }
+.notification-item:has(.new-indicator:not(.viewed)) { border-color: var(--primary); background: var(--new-surface); }
+.notification-item:hover { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--surface)); }
+.notification-item:has(.new-indicator:not(.viewed)):hover { background: color-mix(in srgb, var(--primary) 8%, var(--new-surface)); }
 .notification-heading { display: grid; gap: 4px; min-width: 0; }
 .notification-heading strong, .notification-meta, .notification-excerpt { overflow-wrap: anywhere; }
 .notification-meta { color: var(--muted); font-size: 12px; font-weight: 400; }
