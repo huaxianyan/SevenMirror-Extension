@@ -30,7 +30,7 @@ SevenMirror 是自托管项目，你需要先有一台运行中继服务的服�
 
 ## 运行要求
 
-- Node.js 20 或更高版本（仅自行构建时需要）
+- 自行构建使用 `.nvmrc` 指定的 Node.js LTS 版本
 - 当前稳定版 Chrome
 - 一个已经搭好的 SevenMirror 中继服务
 
