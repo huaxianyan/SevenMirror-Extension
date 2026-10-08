@@ -1,20 +1,25 @@
 # Chrome Extension release provenance and rollback
 
-Status: **protected release-candidate baseline; independent review and Chrome Web Store publication evidence remain required**
+Status: **protected release-candidate baseline; independent review remains open and Chrome Web Store publication is not yet complete**
 
 ## Release authority
 
-The release job targets the GitHub `release-candidate` environment. That
-environment accepts only protected branches and requires explicit approval from
-the repository administrator before attestation permissions become available.
-The `main` branch separately requires a pull request and the Extension CI check,
-blocks force-push and deletion, and applies those rules to administrators.
+The release job targets the GitHub `release-candidate` environment. It accepts
+only `v*` version tags, with no required reviewer or wait timer. Only version-tag
+pushes trigger release; `main` pushes and manual dispatch do not publish.
+The `main` branch separately requires the Extension CI check, blocks force-push
+and deletion, and applies those rules to administrators. Development uses topic
+branches without pull requests; checked commits are fast-forwarded to `main`.
 
-Only `huaxianyan` currently has repository access, so this approval is a second
-step by the same identity rather than independent review. Before production
-release, add a second trusted reviewer, require approval by someone other than
-the last pusher, enable environment self-review prevention, and retain the
-publisher-account boundary as a separate control.
+Code acceptance and required CI precede the fast-forward to `main`. The checked
+source is then tagged to start the automatic build, audit, attestation and
+publication pipeline. Main-branch protection and all artifact checks remain in
+place; removing the approval step does not remove these checks.
+
+External independent review and a second release approver have been deferred as
+acceptance gates. That decision does not close their risks, and an automatic
+release is not independent approval. Store privacy disclosures and
+publisher-account controls remain separate requirements.
 
 ## Deterministic submission package
 
@@ -69,20 +74,21 @@ done
 ```
 
 A version-tag run requires the tag to equal `v<public/manifest.json version>` and
-requires `package.json` to carry that same non-development version. Manual runs
-may produce attested release-candidate evidence while `package.json` still ends
-in `-dev`; that output is not a published release.
+requires `package.json` to carry that same non-development version. The workflow
+has no manual release-candidate dispatch path.
 
 The workflow uploads the exact set under a name containing the full source
 commit with 30-day retention. Durable release retention is still undecided.
 
 ## Published release
 
-The `publish-release` job runs only for a tag and only after the build job
-succeeds. It downloads the verified three-file artifact set, assembles the
-release body from `docs/release-notes/<tag>.md` plus a generated `## 构建信息`
-table, and creates the GitHub Release with `gh release create --verify-tag`.
-Assets are the ZIP, `release-manifest.json` and `SHA256SUMS`.
+The automatic `publish-release` job runs only for a version tag and only after
+the build-and-attest job succeeds. It downloads the verified three-file artifact
+set, assembles the release body from `docs/release-notes/<tag>.md` plus a generated
+`## 构建信息` table, and creates the GitHub Release with
+`gh release create --verify-tag`.
+
+Assets are exactly the ZIP, `release-manifest.json` and `SHA256SUMS`.
 
 `docs/release-notes/<tag>.md` is short by design: one summary paragraph, a
 `## 主要更新` section, and a link to this document under the tag. Usage,
@@ -134,4 +140,6 @@ good” label alone.
 
 GitHub/Sigstore provenance is not Chrome Web Store signing and is not an
 independent security review. Store publication, served-package verification,
-publisher-account recovery and long-term retention remain release blockers.
+publisher-account recovery and long-term retention remain open risks and
+publication evidence requirements; deferred external review is not reported as
+completed.

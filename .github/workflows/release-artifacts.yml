@@ -1,7 +1,6 @@
 name: Release artifacts
 
 on:
-  workflow_dispatch:
   push:
     tags:
       - 'v*'
