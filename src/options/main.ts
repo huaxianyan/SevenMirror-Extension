@@ -7,6 +7,7 @@ import {
   normalizeServerOrigin,
 } from '../transport/indexeddb-transport-credential-store';
 import { localizeDocument, message } from '../shared/i18n';
+import { PREVIEW_NOTIFICATION_SOUND } from '../shared/notification-sound';
 import { CONNECTION_STATE_STORAGE_KEY } from '../shared/status';
 import { resolveSettingsPage } from './settings-navigation';
 import { initShortcutSettings } from './shortcut-settings';
@@ -70,6 +71,7 @@ const nativeNotificationsEnabled = requireElement<HTMLInputElement>('native-noti
 const showBody = requireElement<HTMLInputElement>('show-body');
 const showImages = requireElement<HTMLInputElement>('show-images');
 const silentNotifications = requireElement<HTMLInputElement>('silent-notifications');
+const previewSound = requireElement<HTMLButtonElement>('preview-notification-sound');
 const notificationSettingsStatus = requireElement<HTMLElement>('notification-settings-status');
 const clearLocalNotifications = requireElement<HTMLButtonElement>('clear-local-notifications');
 const clearConfirmation = requireElement<HTMLDialogElement>('clear-confirmation');
@@ -145,6 +147,16 @@ silentNotifications.addEventListener('change', () => {
     ...savedPreferences,
     silentNotifications: silentNotifications.checked,
   });
+});
+
+previewSound.addEventListener('click', () => {
+  previewSound.disabled = true;
+  void chrome.runtime.sendMessage({ type: PREVIEW_NOTIFICATION_SOUND })
+    .then((response: { played?: boolean }) => {
+      notificationSettingsStatus.textContent = message(response?.played ? 'optionsSoundPlayed' : 'optionsSoundFailed');
+    })
+    .catch(() => { notificationSettingsStatus.textContent = message('optionsSoundFailed'); })
+    .finally(() => { previewSound.disabled = false; });
 });
 
 clearLocalNotifications.addEventListener('click', () => clearConfirmation.showModal());

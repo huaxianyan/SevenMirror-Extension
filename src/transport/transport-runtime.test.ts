@@ -102,6 +102,7 @@ describe('TransportRuntime', () => {
     observer?.('authenticated');
     await waitFor(() => runtime.hasAuthenticatedConnection());
     expect(toHex(socket.sent[0]!)).toBe(relayDeliveryVector.resumeZeroHex);
+    expect(runtime.hasCaughtUpConnection()).toBe(false);
 
     const delivery = fromHex(relayDeliveryVector.deliveryHex);
     new DataView(delivery.buffer).setBigUint64(4, 1n, false);
@@ -116,6 +117,11 @@ describe('TransportRuntime', () => {
     expect((await cursorStore.load(credential.workspaceId, credential.deviceId)).committedDeliveryId)
       .toBe(1n);
     expect(toHex(socket.sent[1]!)).toBe('534e43320000000000000001');
+    socket.dispatchEvent(new MessageEvent('message', {
+      data: fromHex('534e44320000000000000001').buffer,
+    }));
+    await waitFor(() => runtime.hasCaughtUpConnection());
+    expect(runtime.hasCaughtUpConnection()).toBe(true);
   });
 
   it('runs promotion recovery before reading any transport credential', async () => {

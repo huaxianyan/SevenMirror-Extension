@@ -3,6 +3,7 @@ import {
   markProgrammaticClose,
 } from './lifecycle-spike';
 import type { NotificationReceipt } from '../crypto/notification-receiver';
+import { playNotificationSound } from './notification-sound';
 import type {
   MirroredNotificationMedia,
   MirroredNotificationState,
@@ -38,6 +39,7 @@ export interface NotificationsApi {
 
 export interface NotificationPresenterOptions {
   notifications?: NotificationsApi;
+  playSound?: () => Promise<boolean>;
   markProgrammatic?: typeof markProgrammaticClose;
   consumeProgrammatic?: typeof consumeProgrammaticCloseMarker;
   notificationIconUrl?: () => string;
@@ -56,6 +58,7 @@ export interface NotificationPresenterOptions {
 
 export class NotificationPresenter {
   private readonly notifications: NotificationsApi;
+  private readonly playSound: () => Promise<boolean>;
   private readonly markProgrammatic: typeof markProgrammaticClose;
   private readonly consumeProgrammatic: typeof consumeProgrammaticCloseMarker;
   private readonly notificationIconUrl: () => string;
@@ -69,6 +72,7 @@ export class NotificationPresenter {
 
   constructor(options: NotificationPresenterOptions = {}) {
     this.notifications = options.notifications ?? chrome.notifications;
+    this.playSound = options.playSound ?? playNotificationSound;
     this.markProgrammatic = options.markProgrammatic ?? markProgrammaticClose;
     this.consumeProgrammatic = options.consumeProgrammatic ?? consumeProgrammaticCloseMarker;
     this.notificationIconUrl = options.notificationIconUrl ??
@@ -86,7 +90,7 @@ export class NotificationPresenter {
     this.removeButtonBindings = options.removeButtonBindings;
   }
 
-  async present(receipt: NotificationReceipt, sourceName?: string): Promise<void> {
+  async present(receipt: NotificationReceipt, sourceName?: string, audible = true): Promise<void> {
     if (receipt.kind === 'snapshot') {
       for (const state of receipt.reconciliation.closedStates) {
         await this.removeButtonBindings?.(state.chromeNotificationId);
@@ -102,10 +106,10 @@ export class NotificationPresenter {
       await this.closeProgrammatically(state.chromeNotificationId, 'source-notification-removed');
       return;
     }
-    await this.presentState(state, sourceName);
+    await this.presentState(state, sourceName, audible && disposition === 'applied');
   }
 
-  async presentState(state: MirroredNotificationState, sourceName?: string): Promise<void> {
+  async presentState(state: MirroredNotificationState, sourceName?: string, audible = false): Promise<void> {
     if (state.phase !== 'visible') return;
     const presentation = await this.loadPresentationPreferences()
       .catch(() => FAIL_CLOSED_NOTIFICATION_PRESENTATION_PREFERENCES);
@@ -135,17 +139,19 @@ export class NotificationPresenter {
         .filter((value) => value !== undefined && value.length > 0).join(' · '),
       message: presentation.showBody ? state.body ?? '' : '',
       priority: 0,
-      silent: presentation.silentNotifications,
+      silent: true,
       requireInteraction: true,
       buttons: buttons.map((button) => ({ title: button.title })),
     };
     const existing = await this.getAll();
+    let shown: boolean;
     if (existing[state.chromeNotificationId]) {
-      const updated = await this.update(state.chromeNotificationId, options);
-      if (!updated) await this.create(state.chromeNotificationId, options);
+      shown = await this.update(state.chromeNotificationId, options);
+      if (!shown) shown = await this.create(state.chromeNotificationId, options);
     } else {
-      await this.create(state.chromeNotificationId, options);
+      shown = await this.create(state.chromeNotificationId, options);
     }
+    if (shown && audible && !presentation.silentNotifications) await this.playSound();
   }
 
   /**
@@ -195,9 +201,9 @@ export class NotificationPresenter {
   private create(
     notificationId: string,
     options: chrome.notifications.NotificationOptions<true>,
-  ): Promise<void> {
+  ): Promise<boolean> {
     return new Promise((resolve) => {
-      this.notifications.create(notificationId, options, () => resolve());
+      this.notifications.create(notificationId, options, (createdId) => resolve(Boolean(createdId)));
     });
   }
 

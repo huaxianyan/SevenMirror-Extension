@@ -8,6 +8,8 @@ import {
   recordWorkerStart,
 } from './lifecycle-spike';
 import { message } from '../shared/i18n';
+import { PREVIEW_NOTIFICATION_SOUND } from '../shared/notification-sound';
+import { playNotificationSound } from './notification-sound';
 import { notificationActionFailureKey } from '../shared/notification-action-failure';
 import {
   CONNECTION_STATE_STORAGE_KEY as CONNECTION_STATE_KEY,
@@ -158,7 +160,8 @@ transportRuntime = new TransportRuntime(
       const sourceName = result.receipt.kind === 'item'
         ? await resolvePresentationSourceName(result.receipt.reconciliation.state)
         : undefined;
-      await notificationPresenter.present(result.receipt, sourceName);
+      const audible = transportRuntime.hasCaughtUpConnection() && !await snapshotRecoveryCoordinator.isActive();
+      await notificationPresenter.present(result.receipt, sourceName, audible);
       await updateToolbarBadge();
       if (result.receipt.kind === 'snapshot' &&
           result.receipt.recoveryRequestId !== undefined) {
@@ -406,6 +409,10 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
         (reset) => sendResponse({ reset }),
         () => sendResponse({ reset: false }),
       );
+      return true;
+
+    case PREVIEW_NOTIFICATION_SOUND:
+      void playNotificationSound().then((played) => sendResponse({ played }));
       return true;
 
     case 'save-notification-presentation-preferences':

@@ -102,6 +102,7 @@ export class TransportRuntime {
   private reconnectTimer?: TimerHandle;
   private reconnectAttempt = 0;
   private authenticatedGeneration?: number;
+  private caughtUpGeneration?: number;
   private sno1Generation?: number;
   private preferCurrentFallback = false;
   private readonly onAuthenticated: () => void;
@@ -157,6 +158,12 @@ export class TransportRuntime {
 
   hasAuthenticatedConnection(): boolean {
     return this.isAuthenticated();
+  }
+
+  /** Alerts start after this socket's durable backlog has been consumed. */
+  hasCaughtUpConnection(): boolean {
+    return this.isAuthenticated() &&
+      (this.deliveryCursorStore === undefined || this.caughtUpGeneration === this.generation);
   }
 
   /**
@@ -373,8 +380,10 @@ export class TransportRuntime {
           state.committedDeliveryId !== message.highWater) {
         throw new Error('Relay caught-up marker does not match the committed cursor');
       }
+      if (generation === this.generation && this.socket === socket) this.caughtUpGeneration = generation;
       return;
     }
+    this.caughtUpGeneration = undefined;
     await cursorStore.requireSnapshot(
       credential.workspaceId,
       credential.deviceId,
