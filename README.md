@@ -1,8 +1,12 @@
-# SevenMirror Chrome 扩展
+<div align="center">
+  <img src="docs/images/icon.png" width="120" alt="SevenMirror 图标">
 
-在电脑上接收手机的通知。本扩展是接收端：手机发来的每条通知都以系统通知的形式弹出，你可以直接处理、回复或清除。三个独立仓库之一。
+  # SevenMirror Chrome 扩展
 
-仓库地址：<https://github.com/huaxianyan/SevenMirror-Extension>
+  [项目总仓库](https://github.com/huaxianyan/SevenMirror-Project) · [Android 应用](https://github.com/huaxianyan/SevenMirror-Android) · 本仓库 · [服务端](https://github.com/huaxianyan/SevenMirror-Server)
+</div>
+
+在电脑上接收手机的通知。本扩展是接收端：手机发来的每条通知都以系统通知的形式弹出，你可以直接处理、回复或清除。
 
 > 状态：日常使用已经可用。通知接收与呈现、远程操作与回复、快捷操作规则、跨浏览器规则同步、独立交互窗口都已实现。用户已反馈通过 Chrome Web Store 审核，商店安装与来源尚未独立核验。独立安全评审仍未完成。
 
