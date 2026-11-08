@@ -3,7 +3,7 @@
 
   # SevenMirror Chrome 扩展
 
-  [项目总仓库](https://github.com/huaxianyan/SevenMirror-Project) · [Android 应用](https://github.com/huaxianyan/SevenMirror-Android) · 本仓库 · [服务端](https://github.com/huaxianyan/SevenMirror-Server)
+[项目总仓库](https://github.com/huaxianyan/SevenMirror-Project) · [Android 应用](https://github.com/huaxianyan/SevenMirror-Android) · 浏览器扩展 · [服务端](https://github.com/huaxianyan/SevenMirror-Server)
 </div>
 
 在电脑上接收手机的通知。本扩展是接收端：手机发来的每条通知都以系统通知的形式弹出，你可以直接处理、回复或清除。
