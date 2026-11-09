@@ -52,6 +52,7 @@ const openOptions = requireElement<HTMLButtonElement>('open-options');
 const markAllRead = requireElement<HTMLButtonElement>('mark-all-read');
 const clearHistory = requireElement<HTMLButtonElement>('clear-history');
 const tabUnread = requireElement<HTMLButtonElement>('tab-unread');
+const tabbar = requireElement<HTMLElement>('tabbar');
 const tabHistory = requireElement<HTMLButtonElement>('tab-history');
 
 let live: PopupResponse = { state: 'connecting', notifications: [] };
@@ -103,6 +104,9 @@ async function runAction(type: string): Promise<void> {
 }
 
 async function switchTab(next: Tab): Promise<void> {
+  // The tab bar stays on the detail view's sibling level, so switching tabs has to leave that
+  // view first; otherwise the highlight moves while the detail stays on screen.
+  if (!detailView.hidden) showList();
   tab = next;
   tabUnread.setAttribute('aria-current', next === 'unread' ? 'page' : 'false');
   tabHistory.setAttribute('aria-current', next === 'history' ? 'page' : 'false');
@@ -246,6 +250,7 @@ function openDetail(entry: HistoryEntry): void {
   mountNotificationDetail(detail, notification);
   listView.hidden = true;
   detailView.hidden = false;
+  tabbar.hidden = true;
   document.documentElement.scrollTop = 0;
   backToList.focus();
   void markViewed(notification);
@@ -254,6 +259,7 @@ function openDetail(entry: HistoryEntry): void {
 function showList(): void {
   detailView.hidden = true;
   listView.hidden = false;
+  tabbar.hidden = false;
   document.documentElement.scrollTop = listScrollTop;
   void reload();
 }

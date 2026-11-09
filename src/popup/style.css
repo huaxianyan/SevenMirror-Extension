@@ -196,6 +196,7 @@ h1, h2, p { margin: 0; }
 .back-button-icon { width: 18px; height: 18px; fill: currentColor; }
 
 /* Bottom tabs switch pages inside the popup; settings lives in the header instead. */
+.tabbar[hidden] { display: none; }
 .tabbar {
   margin-top: auto;
   display: grid; grid-template-columns: 1fr 1fr;
