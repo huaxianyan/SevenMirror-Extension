@@ -2,7 +2,8 @@
 """检查版本化的发布说明是否够短，并链接到详细记录。
 
 GitHub Release 的正文由 ``docs/release-notes/v<版本>.md`` 加上工作流追加的
-「## 构建信息」一节拼成。正文必须保持简短：一段概述、主要更新，以及指向详细记录的链接。
+「## 构建信息」一节拼成。正文必须保持简短：一段概述、按新功能／问题修复分开的条目，
+以及指向详细记录的链接。
 使用方式、真机验收和构建范围的细节属于 ``docs/architecture.md`` 等长期文档，不写进发布说明。
 
 用法：
@@ -18,7 +19,8 @@ import re
 import sys
 from pathlib import Path
 
-DEFAULT_SUMMARY_HEADING = "## 主要更新"
+DEFAULT_FEATURE_HEADINGS = ("## 新功能", "## 新特性", "## 新增功能")
+DEFAULT_FIX_HEADINGS = ("## 问题修复", "## 修复", "## Bug 修复", "## 缺陷修复")
 DEFAULT_FORBIDDEN_HEADINGS = (
     "## 使用说明",
     "## 真机验收",
@@ -33,7 +35,32 @@ DEFAULT_NOTES_DIR = "docs/release-notes"
 DEFAULT_MAX_LINES = 40
 
 
-def check(path, summary_heading, forbidden, identity, link_re, max_lines):
+def section_items(lines, headings):
+    """Return the bullet count under each matching section, stopping at the next heading.
+
+    Fenced blocks are skipped so an example snippet cannot stand in for real entries.
+    """
+    counts = []
+    fenced = False
+    current = None
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            fenced = not fenced
+            continue
+        if fenced:
+            continue
+        if stripped.startswith("#"):
+            current = stripped if stripped in headings else None
+            if current is not None:
+                counts.append([current, 0])
+            continue
+        if current is not None and (stripped.startswith("- ") or stripped.startswith("* ")):
+            counts[-1][1] += 1
+    return counts
+
+
+def check(path, feature_headings, fix_headings, forbidden, identity, link_re, max_lines):
     errors = []
     try:
         text = path.read_text(encoding="utf-8")
@@ -57,8 +84,16 @@ def check(path, summary_heading, forbidden, identity, link_re, max_lines):
         errors.append(
             "%s: keep only one version/build identity section, found %r"
             % (path, identity_hits))
-    if summary_heading not in text:
-        errors.append("%s: missing the summary section %r" % (path, summary_heading))
+    sections = section_items(lines, tuple(feature_headings) + tuple(fix_headings))
+    if not sections:
+        errors.append(
+            "%s: needs a %r or %r section; readers must see what is new and what got fixed"
+            % (path, feature_headings[0], fix_headings[0]))
+    for heading, count in sections:
+        if count == 0:
+            errors.append(
+                "%s: section %r has no entries; drop it or list what changed"
+                % (path, heading))
     if not link_re.search(text):
         errors.append(
             "%s: missing a link to the detailed record (expected a /blob/v<tag>/ URL)" % path)
@@ -77,8 +112,10 @@ def main():
                         help="release notes directory (default: %(default)s)")
     parser.add_argument("--max-lines", type=int, default=DEFAULT_MAX_LINES,
                         help="line limit (default: %(default)s)")
-    parser.add_argument("--summary-heading", default=DEFAULT_SUMMARY_HEADING,
-                        help="required summary section (default: %(default)s)")
+    parser.add_argument("--feature-heading", action="append", default=[],
+                        help="extra new-feature section heading, repeatable")
+    parser.add_argument("--fix-heading", action="append", default=[],
+                        help="extra fixed-issue section heading, repeatable")
     parser.add_argument("--link-pattern", default=DEFAULT_LINK_PATTERN,
                         help="regex the detail link must match (default: %(default)s)")
     parser.add_argument("--forbidden", action="append", default=[],
@@ -98,6 +135,9 @@ def main():
         print("invalid --link-pattern: %s" % exc, file=sys.stderr)
         return 2
 
+    feature_headings = list(DEFAULT_FEATURE_HEADINGS) +         [item for item in args.feature_heading if item not in DEFAULT_FEATURE_HEADINGS]
+    fix_headings = list(DEFAULT_FIX_HEADINGS) +         [item for item in args.fix_heading if item not in DEFAULT_FIX_HEADINGS]
+
     forbidden = list(DEFAULT_FORBIDDEN_HEADINGS)
     for item in args.forbidden:
         if item not in forbidden:
@@ -108,7 +148,7 @@ def main():
         if not path.is_file():
             errors.append("%s: file does not exist" % path)
             continue
-        errors.extend(check(path, args.summary_heading, forbidden,
+        errors.extend(check(path, feature_headings, fix_headings, forbidden,
                             IDENTITY_HEADINGS, link_re, args.max_lines))
 
     if errors:

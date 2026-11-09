@@ -61,10 +61,12 @@ npm run build
 
 | 主题 | 文档 |
 | --- | --- |
+| 未读、历史与搜索的规则 | [通知历史与搜索](docs/notification-history.md) |
 | 发布产物、离线校验与商店边界 | [发布溯源](docs/release-provenance.md) |
 | 发布流程用到的 Action 与权限 | [发布 Action](docs/release-actions.md) |
 | 本地敏感数据清单与审计 | [敏感数据](docs/SENSITIVE_DATA.md) |
 | 依赖漏洞证据与查询时口径 | [漏洞证据](docs/vulnerability-evidence.md) |
+| 通知提示音的来源与开关 | [通知提示音](docs/notification-sound.md) |
 | 协议资产、版本与校验方式 | [协议资产](protocol/README.md) |
 
 ## 许可证
