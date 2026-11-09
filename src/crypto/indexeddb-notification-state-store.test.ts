@@ -118,6 +118,95 @@ describe('Notification source applications', () => {
   });
 });
 
+describe('Notification history', () => {
+  it('moves a read notification into history and keeps the unread count separate', async () => {
+    const databaseName = `history-${Date.now()}-${Math.random()}`;
+    databaseNames.add(databaseName);
+    let now = 5_000;
+    const store = new IndexedDbNotificationStateStore(databaseName, () => now);
+    const sourceDeviceId = new Uint8Array(16).fill(2);
+
+    const first = upsert(1n, 'Dinner tonight?', { notificationId: 'a' });
+    await store.reconcileUpsert(sourceDeviceId, first.value, first.canonical);
+    now = 6_000;
+    const second = upsert(1n, 'Build finished', { notificationId: 'b' });
+    await store.reconcileUpsert(sourceDeviceId, second.value, second.canonical);
+
+    const unread = (await store.listHistory(200)).filter((entry) => !entry.read);
+    expect(unread.map((entry) => entry.body)).toEqual(['Build finished', 'Dinner tonight?']);
+
+    expect(await store.markAllViewed()).toBe(2);
+    expect((await store.listHistory(200)).filter((entry) => !entry.read)).toEqual([]);
+  });
+
+  it('keeps only the newest 200 records', async () => {
+    const databaseName = `history-cap-${Date.now()}-${Math.random()}`;
+    databaseNames.add(databaseName);
+    let now = 1_000;
+    const store = new IndexedDbNotificationStateStore(databaseName, () => now);
+    const sourceDeviceId = new Uint8Array(16).fill(3);
+
+    for (let index = 0; index < 205; index += 1) {
+      now += 1_000;
+      const entry = upsert(1n, `Body ${index}`, { notificationId: `n${index}` });
+      await store.reconcileUpsert(sourceDeviceId, entry.value, entry.canonical);
+    }
+
+    const history = await store.listHistory(1_000);
+    expect(history).toHaveLength(200);
+    expect(history[0].body).toBe('Body 204');
+    expect(history.at(-1)?.body).toBe('Body 5');
+  });
+
+  it('drops removed records when history is switched off, keeping live ones', async () => {
+    const databaseName = `history-off-${Date.now()}-${Math.random()}`;
+    databaseNames.add(databaseName);
+    const store = new IndexedDbNotificationStateStore(databaseName, () => 1_000);
+    const sourceDeviceId = new Uint8Array(16).fill(4);
+
+    const live = upsert(1n, 'Still on the phone', { notificationId: 'live' });
+    await store.reconcileUpsert(sourceDeviceId, live.value, live.canonical);
+    const gone = upsert(1n, 'Already cleared', { notificationId: 'gone' });
+    await store.reconcileUpsert(sourceDeviceId, gone.value, gone.canonical);
+    await remove(store, sourceDeviceId, 'gone', 2n);
+
+    await store.pruneHistory(200, false);
+    const history = await store.listHistory(200);
+    expect(history.map((entry) => entry.body)).toEqual(['Still on the phone']);
+  });
+
+  it('treats a notification the phone removed as history rather than unread', async () => {
+    const databaseName = `history-removed-${Date.now()}-${Math.random()}`;
+    databaseNames.add(databaseName);
+    const store = new IndexedDbNotificationStateStore(databaseName, () => 1_000);
+    const sourceDeviceId = new Uint8Array(16).fill(5);
+
+    const entry = upsert(1n, 'Never opened', { notificationId: 'x' });
+    await store.reconcileUpsert(sourceDeviceId, entry.value, entry.canonical);
+    await remove(store, sourceDeviceId, 'x', 2n);
+
+    const history = await store.listHistory(200);
+    expect(history).toHaveLength(1);
+    expect(history[0]).toMatchObject({ read: true, live: false });
+  });
+
+  it('clears history without dropping a notification that is still on the phone', async () => {
+    const databaseName = `history-clear-${Date.now()}-${Math.random()}`;
+    databaseNames.add(databaseName);
+    const store = new IndexedDbNotificationStateStore(databaseName, () => 1_000);
+    const sourceDeviceId = new Uint8Array(16).fill(6);
+
+    const live = upsert(1n, 'Still here', { notificationId: 'keep' });
+    await store.reconcileUpsert(sourceDeviceId, live.value, live.canonical);
+    const gone = upsert(1n, 'Gone', { notificationId: 'drop' });
+    await store.reconcileUpsert(sourceDeviceId, gone.value, gone.canonical);
+    await remove(store, sourceDeviceId, 'drop', 2n);
+
+    expect(await store.clearRemovedHistory()).toBe(1);
+    expect((await store.listHistory(200)).map((entry) => entry.body)).toEqual(['Still here']);
+  });
+});
+
 function remove(
   store: IndexedDbNotificationStateStore,
   sourceDeviceId: Uint8Array,

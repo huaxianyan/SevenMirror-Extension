@@ -826,7 +826,9 @@ function toHistoryEntry(state: MirroredNotificationState): NotificationHistoryEn
       ? {}
       : { applicationName: state.sourceApplicationName }),
     receivedAtUnixMs: state.receivedAtUnixMs ?? 0,
-    read: state.viewedRevision === state.revision,
+    // A notification the phone already cleared cannot be opened any more, so it never counts as
+    // unread: the unread list only holds rows the user can still act on.
+    read: state.viewedRevision === state.revision || state.phase !== 'visible',
     live: state.phase === 'visible',
   };
 }

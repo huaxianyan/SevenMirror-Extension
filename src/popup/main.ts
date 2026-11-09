@@ -1,10 +1,9 @@
-import type { ConnectionState } from '../shared/status';
+import { connectionLabel, type ConnectionState } from '../shared/status';
 import type { NotificationInteractionSummary } from '../background/notification-interaction';
 import { localizeDocument, message } from '../shared/i18n';
 import { mountNotificationDetail } from '../shared/notification-detail';
 import { formatClockTime } from '../shared/time';
 import { MARK_NOTIFICATIONS_VIEWED, notificationsToMarkViewed } from '../shared/viewed-notifications';
-import { filterBySource, sourceChoices } from './source-filter';
 
 interface PopupNotification extends NotificationInteractionSummary {
   sourceKey: string;
@@ -17,9 +16,30 @@ interface PopupResponse {
   notifications: PopupNotification[];
 }
 
+interface HistoryEntry {
+  chromeNotificationId: string;
+  revision: string;
+  sourceKey: string;
+  sourceName: string;
+  title?: string;
+  body?: string;
+  applicationName?: string;
+  receivedAtUnixMs: number;
+  read: boolean;
+  live: boolean;
+}
+
+interface HistoryResponse {
+  history: HistoryEntry[];
+  keepReadHistory: boolean;
+}
+
+type Tab = 'unread' | 'history';
+
 const connectionStatus = requireElement<HTMLParagraphElement>('connection-status');
-const count = requireElement<HTMLSpanElement>('notification-count');
-const sourceFilter = requireElement<HTMLSelectElement>('source-filter');
+const searchInput = requireElement<HTMLInputElement>('search-input');
+const searchClear = requireElement<HTMLButtonElement>('search-clear');
+const resultSummary = requireElement<HTMLParagraphElement>('result-summary');
 const listView = requireElement<HTMLElement>('list-view');
 const list = requireElement<HTMLDivElement>('notification-list');
 const empty = requireElement<HTMLDivElement>('empty');
@@ -29,71 +49,199 @@ const detailView = requireElement<HTMLElement>('detail-view');
 const detail = requireElement<HTMLDivElement>('notification-detail');
 const backToList = requireElement<HTMLButtonElement>('back-to-list');
 const openOptions = requireElement<HTMLButtonElement>('open-options');
-let current: PopupResponse = { state: 'connecting', notifications: [] };
+const markAllRead = requireElement<HTMLButtonElement>('mark-all-read');
+const clearHistory = requireElement<HTMLButtonElement>('clear-history');
+const tabUnread = requireElement<HTMLButtonElement>('tab-unread');
+const tabHistory = requireElement<HTMLButtonElement>('tab-history');
+
+let live: PopupResponse = { state: 'connecting', notifications: [] };
+let history: HistoryEntry[] = [];
+let tab: Tab = 'unread';
+let query = '';
 let listScrollTop = 0;
 
 localizeDocument();
-// 图标按钮没有可见文字，悬停提示补上它去哪，和 aria-label 用同一个键。
 backToList.title = message('popupBackToNotifications');
-openOptions.addEventListener('click', () => chrome.runtime.openOptionsPage());
-sourceFilter.addEventListener('change', renderList);
-backToList.addEventListener('click', showList);
-void render();
+tabUnread.title = message('popupTabUnread');
+tabHistory.title = message('popupTabHistory');
+openOptions.title = message('popupTabSettings');
 
-async function render(): Promise<void> {
-  current = await chrome.runtime.sendMessage({ type: 'get-popup-notifications' }) as PopupResponse;
-  connectionStatus.textContent = connectionStateLabel(current.state);
-  renderSourceFilter(current.notifications);
+openOptions.addEventListener('click', () => chrome.runtime.openOptionsPage());
+backToList.addEventListener('click', showList);
+tabUnread.addEventListener('click', () => void switchTab('unread'));
+tabHistory.addEventListener('click', () => void switchTab('history'));
+searchInput.addEventListener('input', () => {
+  query = searchInput.value.trim();
+  searchClear.hidden = query.length === 0;
+  renderList();
+});
+searchClear.addEventListener('click', () => {
+  searchInput.value = '';
+  query = '';
+  searchClear.hidden = true;
+  searchInput.focus();
+  renderList();
+});
+markAllRead.addEventListener('click', () => void runAction('mark-all-notifications-read'));
+clearHistory.addEventListener('click', () => void runAction('clear-notification-history'));
+void reload();
+
+async function reload(): Promise<void> {
+  const [popup, stored] = await Promise.all([
+    chrome.runtime.sendMessage({ type: 'get-popup-notifications' }) as Promise<PopupResponse>,
+    chrome.runtime.sendMessage({ type: 'get-popup-history' }) as Promise<HistoryResponse>,
+  ]);
+  live = popup;
+  history = stored.history;
+  connectionStatus.textContent = connectionStateLabel(live.state);
   renderList();
 }
 
-function renderSourceFilter(notifications: PopupNotification[]): void {
-  const previous = sourceFilter.value;
-  const sources = sourceChoices(notifications);
-  sourceFilter.replaceChildren(option('all', message('popupAllSources')),
-    ...sources.map((source) => option(source.key, source.name)));
-  sourceFilter.value = sources.some((source) => source.key === previous) ? previous : 'all';
-  sourceFilter.disabled = sources.length < 2;
+async function runAction(type: string): Promise<void> {
+  await chrome.runtime.sendMessage({ type });
+  await reload();
+}
+
+async function switchTab(next: Tab): Promise<void> {
+  tab = next;
+  tabUnread.setAttribute('aria-current', next === 'unread' ? 'page' : 'false');
+  tabHistory.setAttribute('aria-current', next === 'history' ? 'page' : 'false');
+  renderList();
 }
 
 function renderList(): void {
-  const notifications = filterBySource(current.notifications, sourceFilter.value);
-  count.textContent = message('popupNotificationCount', notifications.length.toString());
-  list.replaceChildren(...notifications.map(renderNotification));
-  list.hidden = notifications.length === 0;
-  empty.hidden = notifications.length !== 0;
-  if (notifications.length === 0) renderEmpty(current.state, current.notifications.length > 0);
+  const matches = query.length === 0 ? history : searchHistory(history, query);
+  const unread = matches.filter((entry) => !entry.read);
+  const read = matches.filter((entry) => entry.read);
+
+  markAllRead.hidden = !(tab === 'unread' && query.length === 0 && unread.length > 0);
+  clearHistory.hidden = !(tab === 'history' && query.length === 0 && read.length > 0);
+  resultSummary.hidden = query.length === 0;
+  resultSummary.textContent = query.length === 0
+    ? ''
+    : message('popupSearchSummary', [String(matches.length), String(unread.length)]);
+
+  const sections = query.length > 0
+    ? [
+        ...(unread.length === 0 ? [] : [section(message('popupTabUnread'), unread)]),
+        ...groupByDay(read).map(([label, entries]) =>
+          section(message('popupSearchHistoryGroup', label), entries)),
+      ]
+    : tab === 'unread'
+      ? (unread.length === 0 ? [] : [section(message('popupTabUnread'), unread)])
+      : groupByDay(read).map(([label, entries]) => section(label, entries));
+
+  const nodes = sections.flatMap(({ heading, entries }) => [
+    groupHeading(heading, message('popupHistoryCount', String(entries.length))),
+    ...entries.map((entry) => renderEntry(entry)),
+  ]);
+  list.replaceChildren(...nodes);
+  list.hidden = nodes.length === 0;
+  empty.hidden = nodes.length !== 0;
+  if (nodes.length === 0) renderEmpty();
 }
 
-function renderNotification(notification: PopupNotification): HTMLElement {
-  const item = document.createElement('button');
-  item.className = 'notification-item';
-  item.type = 'button';
-  const heading = document.createElement('span');
-  heading.className = 'notification-heading';
-  const title = document.createElement('strong');
-  title.textContent = notification.title || message('interactionUntitledNotification');
+function section(heading: string, entries: HistoryEntry[]): { heading: string; entries: HistoryEntry[] } {
+  return { heading, entries };
+}
+
+function groupByDay(entries: HistoryEntry[]): Array<[string, HistoryEntry[]]> {
+  const groups = new Map<string, HistoryEntry[]>();
+  for (const entry of entries) {
+    const label = dayLabel(entry.receivedAtUnixMs);
+    const bucket = groups.get(label);
+    if (bucket === undefined) groups.set(label, [entry]);
+    else bucket.push(entry);
+  }
+  return [...groups.entries()];
+}
+
+function dayLabel(timestamp: number): string {
+  const date = new Date(timestamp);
+  const today = new Date();
+  const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+  const sameDay = (left: Date, right: Date): boolean => left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() && left.getDate() === right.getDate();
+  if (sameDay(date, today)) return message('popupDayToday');
+  if (sameDay(date, yesterday)) return message('popupDayYesterday');
+  return new Intl.DateTimeFormat(chrome.i18n.getUILanguage(), {
+    month: 'short',
+    day: 'numeric',
+  }).format(date);
+}
+
+function groupHeading(heading: string, count: string): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'group-head';
+  const name = document.createElement('span');
+  name.textContent = heading;
+  const total = document.createElement('span');
+  total.textContent = count;
+  row.append(name, total);
+  return row;
+}
+
+function renderEntry(entry: HistoryEntry): HTMLElement {
+  const card = document.createElement('button');
+  card.className = entry.read ? 'card' : 'card unread';
+  card.type = 'button';
+  card.disabled = !entry.live;
+
+  const app = document.createElement('span');
+  app.className = 'app';
+  app.textContent = appInitial(entry);
+
+  const body = document.createElement('div');
+  body.className = 'card-body';
+  const title = document.createElement('div');
+  title.className = 'title';
+  title.textContent = entry.title || message('interactionUntitledNotification');
+  body.append(title);
+  if ((entry.body ?? '').length > 0) {
+    const preview = document.createElement('div');
+    preview.className = 'preview';
+    preview.textContent = entry.body ?? '';
+    body.append(preview);
+  }
+
   const meta = document.createElement('span');
-  meta.className = 'notification-meta';
-  meta.textContent = [
-    notification.sourceName,
-    notification.sourceApplicationName,
-    formatClockTime(notification.updatedAtUnixMs),
-  ].filter((value) => value.length > 0).join(' · ');
-  const excerpt = document.createElement('span');
-  excerpt.className = 'notification-excerpt';
-  excerpt.textContent = notification.body;
-  excerpt.hidden = notification.body.length === 0;
-  heading.append(meta, title, excerpt);
-  const indicator = document.createElement('span');
-  indicator.className = notification.isNew ? 'new-indicator' : 'new-indicator viewed';
-  indicator.textContent = notification.isNew ? message('popupNewNotification') : '';
-  item.append(heading, indicator);
-  item.addEventListener('click', () => showDetail(notification));
-  return item;
+  meta.className = 'meta';
+  meta.textContent = formatClockTime(entry.receivedAtUnixMs);
+
+  card.append(app, body, meta);
+  if (entry.live) card.addEventListener('click', () => openDetail(entry));
+  return card;
 }
 
-function showDetail(notification: PopupNotification): void {
+function appInitial(entry: HistoryEntry): string {
+  const name = entry.applicationName ?? entry.sourceName;
+  return [...name].slice(0, 1).join('').toUpperCase();
+}
+
+function renderEmpty(): void {
+  if (live.state === 'not-configured') {
+    emptyTitle.textContent = message('popupSetupRequiredTitle');
+    emptyBody.textContent = message('popupSetupRequiredBody');
+    return;
+  }
+  if (query.length > 0) {
+    emptyTitle.textContent = message('popupSearchEmptyTitle');
+    emptyBody.textContent = message('popupSearchEmptyBody');
+    return;
+  }
+  if (tab === 'history') {
+    emptyTitle.textContent = message('popupHistoryEmptyTitle');
+    emptyBody.textContent = message('popupHistoryEmptyBody');
+    return;
+  }
+  emptyTitle.textContent = message('popupUnreadEmptyTitle');
+  emptyBody.textContent = message('popupUnreadEmptyBody');
+}
+
+function openDetail(entry: HistoryEntry): void {
+  const notification = live.notifications.find((candidate) =>
+    candidate.chromeNotificationId === entry.chromeNotificationId);
+  if (notification === undefined) return;
   listScrollTop = document.documentElement.scrollTop;
   mountNotificationDetail(detail, notification);
   listView.hidden = true;
@@ -103,70 +251,41 @@ function showDetail(notification: PopupNotification): void {
   void markViewed(notification);
 }
 
-/**
- * Opening a notification is what marks it viewed. Listing the Popup deliberately does not, so
- * the badge keeps counting the rows the user never opened.
- */
-async function markViewed(notification: PopupNotification): Promise<void> {
-  const notifications = notificationsToMarkViewed(
-    current.notifications,
-    notification.chromeNotificationId,
-  );
-  if (notifications.length === 0) return;
-  // Clear the row first so its "new" mark is already gone when the user returns to the list.
-  notification.isNew = false;
-  await chrome.runtime.sendMessage({ type: MARK_NOTIFICATIONS_VIEWED, notifications });
-}
-
 function showList(): void {
   detailView.hidden = true;
   listView.hidden = false;
-  detail.replaceChildren();
-  // Re-render so a notification opened in the detail view loses its "new" mark.
-  renderList();
   document.documentElement.scrollTop = listScrollTop;
+  void reload();
 }
 
-function renderEmpty(state: ConnectionState, filtered: boolean): void {
-  if (filtered) {
-    emptyTitle.textContent = message('popupNoMatchingNotificationsTitle');
-    emptyBody.textContent = message('popupNoMatchingNotificationsBody');
-    return;
-  }
-  if (state === 'not-configured') {
-    emptyTitle.textContent = message('popupSetupRequiredTitle');
-    emptyBody.textContent = message('popupSetupRequiredBody');
-    return;
-  }
-  if (state === 'offline') {
-    emptyTitle.textContent = message('popupConnectionUnavailableTitle');
-    emptyBody.textContent = message('popupConnectionUnavailableBody');
-    return;
-  }
-  emptyTitle.textContent = message('popupNoNotificationsTitle');
-  emptyBody.textContent = message(
-    state === 'connecting' ? 'popupConnectingBody' : 'popupNoNotificationsBody',
+/**
+ * Opening a notification is what marks it read, and a read notification moves out of the unread
+ * list into history. The badge keeps counting what is still unread.
+ */
+async function markViewed(notification: PopupNotification): Promise<void> {
+  const notifications = notificationsToMarkViewed(
+    live.notifications,
+    notification.chromeNotificationId,
   );
+  if (notifications.length === 0) return;
+  notification.isNew = false;
+  await chrome.runtime.sendMessage({ type: MARK_NOTIFICATIONS_VIEWED, notifications });
+  await reload();
+}
+
+function searchHistory(entries: HistoryEntry[], needle: string): HistoryEntry[] {
+  const lowered = needle.toLocaleLowerCase();
+  return entries.filter((entry) =>
+    (entry.title ?? '').toLocaleLowerCase().includes(lowered) ||
+    (entry.body ?? '').toLocaleLowerCase().includes(lowered));
 }
 
 function connectionStateLabel(state: ConnectionState): string {
-  switch (state) {
-    case 'not-configured': return message('connectionNotConfigured');
-    case 'offline': return message('connectionOffline');
-    case 'connecting': return message('connectionConnecting');
-    case 'online': return message('connectionOnline');
-  }
-}
-
-function option(value: string, label: string): HTMLOptionElement {
-  const result = document.createElement('option');
-  result.value = value;
-  result.textContent = label;
-  return result;
+  return connectionLabel(state);
 }
 
 function requireElement<T extends HTMLElement>(id: string): T {
   const element = document.getElementById(id);
-  if (element === null) throw new Error(`Missing popup element: ${id}`);
+  if (element === null) throw new Error(`Missing element: ${id}`);
   return element as T;
 }

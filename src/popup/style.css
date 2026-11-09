@@ -1,71 +1,205 @@
 @import "../shared/notification-detail.css";
 
+/*
+ * Popup surface. The token block is the same palette the options page uses, re-stated here
+ * because each entry point loads its own stylesheet; the old variable names stay as aliases so
+ * the shared detail stylesheet keeps working unchanged.
+ */
 :root {
   color-scheme: light dark;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --background: #f7f8fc;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+  font-synthesis: none;
+
+  --brand-soft: #67a1d4;
+  --action: #2f6fa8;
+  --action-hover: #26598a;
+  --on-action: #ffffff;
+  --link: #2b6495;
+  --brand-tint: #edf3f9;
+
+  --bg: #f4f6f8;
   --surface: #ffffff;
-  --text: #1b1b1f;
-  --muted: #5f6368;
-  --primary: #385ca8;
-  --primary-hover: #2e4f94;
-  --on-primary: #ffffff;
-  --border: #dfe2eb;
-  --card-border: #c5ccdb;
-  --new-surface: #eaf1ff;
-  --card-shadow: 0 2px 6px rgb(27 39 65 / 10%);
-  --focus: #6f9cff;
+  --card: #ffffff;
+  --ink: #16202b;
+  --ink-muted: #5b6673;
+  --line: #dfe4ea;
+  --line-strong: #c3cbd5;
+  --ok: #1f7a4d;
+  --danger: #a3352f;
+
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-lg: 10px;
+  --radius-pill: 999px;
+
+  /* Aliases used by the shared notification detail stylesheet. */
+  --background: var(--bg);
+  --text: var(--ink);
+  --muted: var(--ink-muted);
+  --border: var(--line);
+  --primary: var(--action);
+  --primary-hover: var(--action-hover);
+
+  background: var(--bg);
+  color: var(--ink);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #111318;
-    --surface: #1b1d23;
-    --text: #e5e7ef;
-    --muted: #aeb3c0;
-    --primary: #9bbcff;
-    --primary-hover: #b3cbff;
-    --on-primary: #102044;
-    --border: #3b3f49;
-    --card-border: #505969;
-    --new-surface: #23324c;
-    --card-shadow: 0 2px 6px rgb(0 0 0 / 24%);
-    --focus: #9bbcff;
+    --brand-soft: #7ab0dd;
+    --action: #7ab0dd;
+    --action-hover: #94c1e6;
+    --on-action: #0b1a26;
+    --link: #9ac2e6;
+    --brand-tint: #1b2836;
+
+    --bg: #0e1216;
+    --surface: #171c22;
+    --card: #171c22;
+    --ink: #e6eaf0;
+    --ink-muted: #9aa4b1;
+    --line: #2b333c;
+    --line-strong: #3d4753;
+    --ok: #5fc08d;
+    --danger: #e58b84;
   }
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; width: 400px; max-height: 600px; background: var(--background); color: var(--text); }
-main { min-height: 180px; padding: 16px; }
-.popup-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-h1 { margin: 0; font-size: 20px; }
-h2 { margin: 0; font-size: 16px; }
-.connection-status { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
-.icon-button { width: 44px; height: 44px; border: 0; border-radius: 12px; background: transparent; color: var(--text); font-size: 20px; cursor: pointer; }
-.icon-button:hover { background: color-mix(in srgb, var(--text) 8%, transparent); }
-button:focus-visible, select:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
-section { margin-top: 16px; }
-.list-toolbar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; }
-.list-toolbar label, .count { color: var(--muted); font-size: 12px; }
-select { min-height: 36px; min-width: 0; padding: 6px 30px 6px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--text); font: inherit; }
-select:disabled { opacity: .72; }
-.notification-list { display: grid; gap: 12px; margin-top: 12px; }
-.notification-item { width: 100%; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 14px; border: 1px solid var(--card-border); border-inline-start-width: 4px; border-radius: 14px; background: var(--surface); box-shadow: var(--card-shadow); color: var(--text); font: inherit; font-size: 14px; line-height: 1.45; text-align: start; cursor: pointer; }
-.notification-item:has(.new-indicator:not(.viewed)) { border-color: var(--primary); background: var(--new-surface); }
-.notification-item:hover { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--surface)); }
-.notification-item:has(.new-indicator:not(.viewed)):hover { background: color-mix(in srgb, var(--primary) 8%, var(--new-surface)); }
-.notification-heading { display: grid; gap: 4px; min-width: 0; }
-.notification-heading strong, .notification-meta, .notification-excerpt { overflow-wrap: anywhere; }
-.notification-meta { color: var(--muted); font-size: 12px; font-weight: 400; }
-.notification-excerpt { color: var(--muted); font-size: 13px; line-height: 1.4; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; white-space: pre-wrap; }
-.new-indicator { flex: none; padding: 3px 7px; border-radius: 999px; background: var(--primary); color: var(--on-primary); font-size: 11px; font-weight: 700; }
-.new-indicator.viewed { display: none; }
-.empty { margin-top: 12px; padding: 24px 18px; border: 1px dashed var(--border); border-radius: 14px; text-align: center; }
-.empty h2 { font-size: 16px; }
-.empty p { margin: 8px 0 0; color: var(--muted); line-height: 1.45; }
-.detail-view { margin-top: 14px; }
-.back-button { width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 14px; padding: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); cursor: pointer; }
-.back-button:hover { border-color: var(--primary); color: var(--primary); }
-.back-button-icon { width: 20px; height: 20px; fill: currentColor; }
-.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-[hidden] { display: none !important; }
+html, body { margin: 0; width: 400px; }
+body { background: var(--bg); color: var(--ink); font-size: 0.875rem; line-height: 1.5; }
+h1, h2, p { margin: 0; }
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+
+/* Header: title on the left, one action on the right. */
+.popup-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+  padding: 1rem 1rem 0.75rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.popup-header h1 { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.01em; }
+.header-actions { display: flex; align-items: center; gap: 0.5rem; }
+
+.pill {
+  min-height: 32px; padding: 0 0.75rem;
+  border: 1px solid var(--action); border-radius: var(--radius-pill);
+  background: var(--action); color: var(--on-action);
+  font: inherit; font-size: 0.75rem; font-weight: 600; cursor: pointer;
+}
+.pill:hover { background: var(--action-hover); border-color: var(--action-hover); }
+.pill[hidden] { display: none; }
+
+.connection-status {
+  padding: 0.5rem 1rem;
+  color: var(--ink-muted); font-size: 0.75rem;
+  background: var(--surface);
+}
+
+/* Search sits above the list and filters both tabs at once. */
+.search-row {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.search {
+  flex: 1; display: flex; align-items: center; gap: 0.5rem;
+  height: 40px; padding: 0 0.75rem;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-lg);
+  background: var(--surface); color: var(--ink-muted);
+}
+.search-icon { width: 16px; height: 16px; flex: none; }
+.search input {
+  flex: 1; min-width: 0; border: 0; outline: 0; background: transparent;
+  color: var(--ink); font: inherit;
+}
+.search input::placeholder { color: var(--ink-muted); }
+.search .clear {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; padding: 0; min-height: 0;
+  border: 0; border-radius: 50%; background: var(--line);
+  color: var(--ink-muted); cursor: pointer;
+}
+.search .clear svg { width: 12px; height: 12px; }
+.search .clear[hidden] { display: none; }
+
+.result-line { padding: 0.5rem 1rem 0; color: var(--ink-muted); font-size: 0.75rem; }
+.result-line strong { color: var(--ink); font-weight: 600; }
+
+.notification-list { padding: 0.5rem 1rem 1rem; }
+
+.group-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem;
+  padding: 0.75rem 0 0.5rem;
+  font-size: 0.875rem; font-weight: 600;
+}
+.group-head span:last-child { color: var(--ink-muted); font-weight: 400; font-size: 0.75rem; }
+
+/* One card per notification: the layering the list needs to stay readable. */
+.card {
+  display: grid; grid-template-columns: 30px minmax(0, 1fr) auto;
+  gap: 0.75rem; align-items: start;
+  width: 100%; padding: 0.75rem; margin-bottom: 0.5rem;
+  border: 1px solid var(--line); border-radius: var(--radius-lg);
+  background: var(--card); color: var(--ink);
+  text-align: left; font: inherit; cursor: pointer;
+}
+.card:hover:enabled { border-color: var(--line-strong); }
+.card:disabled { cursor: default; opacity: 0.92; }
+.card.unread { border-color: var(--line-strong); }
+.card.unread .title { font-weight: 700; }
+
+.app {
+  width: 30px; height: 30px; border-radius: var(--radius);
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--brand-tint); color: var(--action);
+  font-size: 0.75rem; font-weight: 600;
+}
+.card-body { min-width: 0; }
+.title { font-size: 0.875rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview {
+  margin-top: 2px; color: var(--ink-muted); font-size: 0.75rem; line-height: 1.45;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.meta { color: var(--ink-muted); font-size: 0.75rem; white-space: nowrap; padding-top: 1px; }
+
+.empty {
+  margin: 0.5rem 1rem 1rem; padding: 1.5rem 1rem;
+  border: 1px dashed var(--line-strong); border-radius: var(--radius-lg);
+  background: var(--surface); text-align: center;
+}
+.empty h2 { font-size: 0.875rem; font-weight: 600; }
+.empty p { margin-top: 0.25rem; color: var(--ink-muted); font-size: 0.75rem; }
+
+/* Detail view keeps its own stylesheet; only the wrapper and back button live here. */
+.detail-view { padding: 0.75rem 1rem 1rem; }
+.back-button {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; padding: 0; margin-bottom: 0.5rem;
+  border: 1px solid transparent; border-radius: var(--radius-lg);
+  background: transparent; color: var(--ink-muted); cursor: pointer;
+}
+.back-button:hover { background: var(--brand-tint); color: var(--ink); }
+.back-button-icon { width: 18px; height: 18px; fill: currentColor; }
+
+/* Bottom tabs: unread, history, and the way into options. */
+.tabbar {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+.tab {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  min-height: 56px; padding: 0.5rem 0;
+  border: 0; border-radius: 0; background: transparent;
+  color: var(--ink-muted); font: inherit; font-size: 0.75rem; font-weight: 500; cursor: pointer;
+}
+.tab svg { width: 20px; height: 20px; }
+.tab:hover { background: var(--brand-tint); }
+.tab[aria-current="page"] { color: var(--action); font-weight: 600; }
+
+:focus-visible { outline: 2px solid var(--action); outline-offset: 2px; }
