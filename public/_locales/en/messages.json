@@ -815,5 +815,11 @@
         "content": "$1"
       }
     }
+  },
+  "optionsKeepHistoryTitle": {
+    "message": "Keep notification history"
+  },
+  "optionsKeepHistoryBody": {
+    "message": "Keep read notifications so the Popup can search them. Turning this off drops notifications your phone already cleared."
   }
 }

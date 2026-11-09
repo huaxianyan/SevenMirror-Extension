@@ -3,30 +3,37 @@
 :root {
   color-scheme: light dark;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --background: #f7f8fc;
+  /* Same palette as the Popup: the icon blue carries white text only in its darker step. */
+  --background: #f4f6f8;
   --surface: #ffffff;
-  --text: #1b1b1f;
-  --muted: #5f6368;
-  --primary: #385ca8;
-  --primary-hover: #2e4f94;
+  --text: #16202b;
+  --muted: #5b6673;
+  --primary: #2f6fa8;
+  --primary-hover: #26598a;
   --on-primary: #ffffff;
-  --border: #dfe2eb;
-  --focus: #6f9cff;
-  --danger: #a52a2a;
+  --border: #dfe4ea;
+  --border-strong: #c3cbd5;
+  --tint: #edf3f9;
+  --focus: #2f6fa8;
+  --danger: #a3352f;
+  --radius: 6px;
+  --radius-lg: 10px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #111318;
-    --surface: #1b1d23;
-    --text: #e5e7ef;
-    --muted: #aeb3c0;
-    --primary: #9bbcff;
-    --primary-hover: #b3cbff;
-    --on-primary: #102044;
-    --border: #3b3f49;
-    --focus: #9bbcff;
-    --danger: #ffb4ab;
+    --background: #0e1216;
+    --surface: #171c22;
+    --text: #e6eaf0;
+    --muted: #9aa4b1;
+    --primary: #7ab0dd;
+    --primary-hover: #94c1e6;
+    --on-primary: #0b1a26;
+    --border: #2b333c;
+    --border-strong: #3d4753;
+    --tint: #1b2836;
+    --focus: #7ab0dd;
+    --danger: #e58b84;
   }
 }
 
@@ -38,12 +45,12 @@ body { margin: 0; background: var(--background); color: var(--text); }
 .top-bar span { color: var(--muted); font-size: 13px; }
 .layout { display: grid; grid-template-columns: 220px minmax(0, 760px); gap: 40px; width: min(1100px, calc(100% - 40px)); margin: 0 auto; padding: 32px 0 72px; }
 nav { position: sticky; top: 88px; align-self: start; display: grid; gap: 4px; }
-nav a { min-height: 44px; display: flex; align-items: center; padding: 8px 12px; border-radius: 10px; color: var(--text); text-decoration: none; font-weight: 600; }
-nav a:hover { background: color-mix(in srgb, var(--text) 8%, transparent); }
+nav a { min-height: 40px; display: flex; align-items: center; padding: 8px 12px; border-left: 3px solid transparent; color: var(--text); text-decoration: none; font-weight: 500; }
+nav a:hover { background: var(--tint); }
 /* Body links had no rule at all, so the About page fell back to the browser's default
    purple underline, while the shortcuts page already styled its own link. */
 a { color: var(--primary); }
-nav a[aria-current="page"] { background: color-mix(in srgb, var(--primary) 14%, transparent); color: var(--primary); }
+nav a[aria-current="page"] { border-left-color: var(--primary); font-weight: 600; }
 main { min-width: 0; }
 .settings-page > section { padding: 8px 0 40px; }
 .settings-page > section + section { padding-top: 32px; border-top: 1px solid var(--border); }
@@ -51,13 +58,13 @@ main { min-width: 0; }
 h1 { margin: 0 0 10px; font-size: 28px; }
 h2 { margin: 0 0 8px; font-size: 17px; }
 p { line-height: 1.5; }
-.card { margin-top: 16px; padding: 20px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); }
+.card { margin-top: 16px; padding: 20px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
 .supporting { color: var(--muted); }
 form.card { display: grid; gap: 16px; }
 label:not(.switch-row) { display: grid; gap: 6px; font-weight: 650; }
 input, button { font: inherit; }
-input[type="url"], input[type="password"], input[type="text"] { width: 100%; min-height: 44px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--background); color: var(--text); }
-button, .button-link { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 10px 16px; border: 0; border-radius: 11px; background: var(--primary); color: var(--on-primary); font-weight: 700; text-decoration: none; cursor: pointer; }
+input[type="url"], input[type="password"], input[type="text"] { width: 100%; min-height: 40px; padding: 8px 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); color: var(--text); }
+button, .button-link { min-height: 36px; display: inline-flex; align-items: center; justify-content: center; padding: 6px 12px; border: 1px solid var(--primary); border-radius: var(--radius); background: var(--primary); color: var(--on-primary); font-weight: 600; text-decoration: none; cursor: pointer; }
 button:hover:not(:disabled), .button-link:hover { background: var(--primary-hover); }
 button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 button:disabled { cursor: default; opacity: .58; }

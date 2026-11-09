@@ -29,12 +29,13 @@ interface OptionsOverview {
   showBody: boolean;
   showImages: boolean;
   silentNotifications: boolean;
+  keepReadHistory: boolean;
   mutedSourceDeviceIds: string[];
 }
 
 type PresentationPreferences = Pick<OptionsOverview,
   'badgeEnabled' | 'nativeNotificationsEnabled' | 'showBody' | 'showImages' |
-  'silentNotifications' | 'mutedSourceDeviceIds'>;
+  'silentNotifications' | 'keepReadHistory' | 'mutedSourceDeviceIds'>;
 
 const settingsPages = Array.from(document.querySelectorAll<HTMLElement>('.settings-page'));
 const settingsPageLinks = Array.from(document.querySelectorAll<HTMLAnchorElement>('[data-settings-page]'));
@@ -71,6 +72,7 @@ const nativeNotificationsEnabled = requireElement<HTMLInputElement>('native-noti
 const showBody = requireElement<HTMLInputElement>('show-body');
 const showImages = requireElement<HTMLInputElement>('show-images');
 const silentNotifications = requireElement<HTMLInputElement>('silent-notifications');
+const keepHistory = requireElement<HTMLInputElement>('keep-history');
 const previewSound = requireElement<HTMLButtonElement>('preview-notification-sound');
 const notificationSettingsStatus = requireElement<HTMLElement>('notification-settings-status');
 const clearLocalNotifications = requireElement<HTMLButtonElement>('clear-local-notifications');
@@ -82,6 +84,7 @@ let savedPreferences: PresentationPreferences = {
   showBody: true,
   showImages: true,
   silentNotifications: false,
+  keepReadHistory: true,
   mutedSourceDeviceIds: [],
 };
 
@@ -146,6 +149,12 @@ silentNotifications.addEventListener('change', () => {
   void savePresentationPreferences({
     ...savedPreferences,
     silentNotifications: silentNotifications.checked,
+  });
+});
+keepHistory.addEventListener('change', () => {
+  void savePresentationPreferences({
+    ...savedPreferences,
+    keepReadHistory: keepHistory.checked,
   });
 });
 
@@ -285,6 +294,7 @@ function renderDevices(overview: OptionsOverview): void {
 function preferencesFromOverview(overview: OptionsOverview): PresentationPreferences {
   return {
     badgeEnabled: overview.badgeEnabled,
+    keepReadHistory: overview.keepReadHistory,
     nativeNotificationsEnabled: overview.nativeNotificationsEnabled,
     showBody: overview.showBody,
     showImages: overview.showImages,
@@ -299,6 +309,7 @@ function applyPreferenceInputs(preferences: PresentationPreferences): void {
   showBody.checked = preferences.showBody;
   showImages.checked = preferences.showImages;
   silentNotifications.checked = preferences.silentNotifications;
+  keepHistory.checked = preferences.keepReadHistory;
 }
 
 async function savePresentationPreferences(next: PresentationPreferences): Promise<void> {

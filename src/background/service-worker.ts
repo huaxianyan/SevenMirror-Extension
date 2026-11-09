@@ -841,6 +841,7 @@ async function getOptionsOverview(): Promise<{
   showBody: boolean;
   showImages: boolean;
   silentNotifications: boolean;
+  keepReadHistory: boolean;
   mutedSourceDeviceIds: string[];
 }> {
   if (await certifiedReEnrollmentResetStore.isPending()) {
