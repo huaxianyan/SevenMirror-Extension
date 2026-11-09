@@ -115,6 +115,9 @@ export function initShortcutSettings(): void {
     // so the section reports the failure instead of offering the enable form.
     syncEnableFields.hidden = status === undefined || status.enabled;
     syncActions.hidden = status === undefined || !status.enabled;
+    // The enable and pull buttons sit in the section heading, outside the containers above.
+    syncEnable.hidden = status === undefined || status.enabled;
+    syncPull.hidden = status === undefined || !status.enabled;
     syncEnable.disabled = status === undefined || syncPassphrase.value.length === 0;
     if (status === undefined) {
       syncState.textContent = message('shortcutSyncUnavailable');

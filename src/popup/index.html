@@ -9,7 +9,7 @@
   <body>
     <main class="popup">
       <header class="popup-header">
-        <h1 data-i18n="appName">SevenMirror</h1>
+        <h1 class="brand"><img class="brand-mark" src="/icons/icon-32.png" width="22" height="22" alt="" /><span data-i18n="appName">SevenMirror</span></h1>
         <div class="header-actions">
           <button id="mark-all-read" class="pill" type="button" data-i18n="popupMarkAllRead" hidden>Mark all read</button>
           <button id="clear-history" class="pill" type="button" data-i18n="popupClearHistory" hidden>Clear history</button>
@@ -48,13 +48,6 @@
       </section>
 
       <section id="detail-view" class="detail-view" hidden>
-        <button id="back-to-list" class="back-button" type="button" data-i18n-aria-label="popupBackToNotifications" aria-label="Back to notifications">
-          <!-- 图标按钮：文案只留作无障碍名，所以这里不能带 data-i18n——localizeDocument 会把
-               data-i18n 元素的值写进 textContent，那会把这段 SVG 一起擦掉。 -->
-          <svg class="back-button-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
-          </svg>
-        </button>
         <div id="notification-detail"></div>
       </section>
 

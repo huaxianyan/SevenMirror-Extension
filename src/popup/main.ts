@@ -47,7 +47,6 @@ const emptyTitle = requireElement<HTMLHeadingElement>('empty-title');
 const emptyBody = requireElement<HTMLParagraphElement>('empty-body');
 const detailView = requireElement<HTMLElement>('detail-view');
 const detail = requireElement<HTMLDivElement>('notification-detail');
-const backToList = requireElement<HTMLButtonElement>('back-to-list');
 const openOptions = requireElement<HTMLButtonElement>('open-options');
 const markAllRead = requireElement<HTMLButtonElement>('mark-all-read');
 const clearHistory = requireElement<HTMLButtonElement>('clear-history');
@@ -62,13 +61,11 @@ let query = '';
 let listScrollTop = 0;
 
 localizeDocument();
-backToList.title = message('popupBackToNotifications');
 tabUnread.title = message('popupTabUnread');
 tabHistory.title = message('popupTabHistory');
 openOptions.title = message('popupTabSettings');
 
 openOptions.addEventListener('click', () => chrome.runtime.openOptionsPage());
-backToList.addEventListener('click', showList);
 tabUnread.addEventListener('click', () => void switchTab('unread'));
 tabHistory.addEventListener('click', () => void switchTab('history'));
 searchInput.addEventListener('input', () => {
@@ -189,7 +186,6 @@ function renderEntry(entry: HistoryEntry): HTMLElement {
   const card = document.createElement('button');
   card.className = entry.read ? 'card' : 'card unread';
   card.type = 'button';
-  card.disabled = !entry.live;
 
   const app = document.createElement('span');
   app.className = 'app';
@@ -213,7 +209,7 @@ function renderEntry(entry: HistoryEntry): HTMLElement {
   meta.textContent = formatClockTime(entry.receivedAtUnixMs);
 
   card.append(app, body, meta);
-  if (entry.live) card.addEventListener('click', () => openDetail(entry));
+  card.addEventListener('click', () => openDetail(entry));
   return card;
 }
 
@@ -245,14 +241,26 @@ function renderEmpty(): void {
 function openDetail(entry: HistoryEntry): void {
   const notification = live.notifications.find((candidate) =>
     candidate.chromeNotificationId === entry.chromeNotificationId);
-  if (notification === undefined) return;
   listScrollTop = document.documentElement.scrollTop;
-  mountNotificationDetail(detail, notification);
-  listView.hidden = true;
   detailView.hidden = false;
+  listView.hidden = true;
   tabbar.hidden = true;
   document.documentElement.scrollTop = 0;
-  backToList.focus();
+  if (notification === undefined) {
+    // The phone already dropped this one: show what we stored, without reply or dismiss.
+    mountNotificationDetail(detail, {
+      chromeNotificationId: entry.chromeNotificationId,
+      revision: entry.revision,
+      sourceName: entry.sourceName,
+      sourceApplicationName: entry.applicationName ?? '',
+      title: entry.title ?? '',
+      body: entry.body ?? '',
+      updatedAtUnixMs: entry.receivedAtUnixMs,
+      actions: [],
+    }, { readOnly: true, onBack: showList });
+    return;
+  }
+  mountNotificationDetail(detail, notification, { onBack: showList });
   void markViewed(notification);
 }
 

@@ -2,7 +2,9 @@
 
 :root {
   color-scheme: light dark;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* Console stack, and no synthesised bold: without this Chrome fakes a heavier face. */
+  font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans SC", sans-serif;
+  font-synthesis: none;
   /* Same palette as the Popup: the icon blue carries white text only in its darker step. */
   --background: #f4f6f8;
   --surface: #ffffff;
@@ -39,13 +41,15 @@
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
-body { margin: 0; background: var(--background); color: var(--text); }
+body { margin: 0; background: var(--background); color: var(--text); font-size: 1rem; }
 .top-bar { position: sticky; top: 0; z-index: 2; display: flex; justify-content: space-between; gap: 24px; padding: 16px 24px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--background) 92%, transparent); backdrop-filter: blur(12px); }
-.top-bar strong { font-size: 18px; }
-.top-bar span { color: var(--muted); font-size: 13px; }
+.brand { display: flex; align-items: center; gap: 8px; }
+.brand-mark { width: 22px; height: 22px; border-radius: 5px; flex: none; }
+.top-bar strong { font-size: 1.125rem; font-weight: 700; }
+.top-bar span { color: var(--muted); font-size: .85rem; }
 .layout { display: grid; grid-template-columns: 220px minmax(0, 760px); gap: 40px; width: min(1100px, calc(100% - 40px)); margin: 0 auto; padding: 32px 0 72px; }
 nav { position: sticky; top: 88px; align-self: start; display: grid; gap: 4px; }
-nav a { min-height: 40px; display: flex; align-items: center; padding: 8px 12px; border-left: 3px solid transparent; color: var(--text); text-decoration: none; font-weight: 500; }
+nav a { min-height: 40px; display: flex; align-items: center; padding: 8px 12px; border-left: 3px solid transparent; color: var(--text); text-decoration: none; font-size: 1rem; font-weight: 500; }
 nav a:hover { background: var(--tint); }
 /* Body links had no rule at all, so the About page fell back to the browser's default
    purple underline, while the shortcuts page already styled its own link. */
@@ -55,10 +59,10 @@ main { min-width: 0; }
 .settings-page > section { padding: 8px 0 40px; }
 .settings-page > section + section { padding-top: 32px; border-top: 1px solid var(--border); }
 .settings-page[hidden] { display: none; }
-h1 { margin: 0 0 10px; font-size: 28px; }
-h2 { margin: 0 0 8px; font-size: 17px; }
-p { line-height: 1.5; }
-.card { margin-top: 16px; padding: 20px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+h1 { margin: 0 0 .4rem; font-size: clamp(1.5rem, 4vw, 2rem); }
+h2 { margin: 0 0 .5rem; font-size: 1.1rem; }
+p { font-size: 1rem; line-height: 1.5; }
+.card { margin-top: 16px; padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--tint); }
 .supporting { color: var(--muted); }
 form.card { display: grid; gap: 16px; }
 label:not(.switch-row) { display: grid; gap: 6px; font-weight: 650; }
@@ -71,15 +75,15 @@ button:disabled { cursor: default; opacity: .58; }
 .secondary, .danger-secondary { border: 1px solid var(--border); background: transparent; color: var(--text); }
 .danger-secondary { color: var(--danger); border-color: var(--danger); }
 .danger { background: var(--danger); color: var(--background); }
-.status-card h2 { font-size: 20px; }
+.status-card h2 { font-size: 1.1rem; }
 dl { display: grid; gap: 12px; margin: 16px 0; }
 dl div { display: grid; grid-template-columns: 150px 1fr; gap: 16px; }
 dt { color: var(--muted); }
 dd { margin: 0; overflow-wrap: anywhere; }
-.summary { color: var(--muted); font-weight: 650; }
+.summary { color: var(--muted); }
 .device-list, .compact-list { display: grid; gap: 10px; margin-top: 16px; }
 .device { display: grid; gap: 5px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
-.device-meta { color: var(--muted); font-size: 13px; }
+.device-meta { color: var(--muted); font-size: .85rem; }
 /* A device whose access lapsed looked identical to an authorized one; the only difference
    was the words "needs access renewed" inside the same grey meta line. */
 .device.access-expired { border-color: color-mix(in srgb, var(--danger) 38%, var(--border)); }
@@ -106,19 +110,21 @@ dd { margin: 0; overflow-wrap: anywhere; }
 #shortcut-sync-enable-fields { display: grid; gap: 10px; }
 #shortcut-sync-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 #shortcut-sync-status { min-height: 24px; color: var(--muted); }
-.section-heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; }
+.section-heading { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.section-actions { display: flex; gap: 8px; flex: none; padding-top: 4px; }
+.section-actions button { min-height: 32px; padding: 0 12px; font-size: .85rem; }
 .section-heading p { margin: 0; color: var(--muted); }
 .rules { display: grid; margin: 20px 0 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); overflow: hidden; }
 .rules:empty { display: none; }
 .rule { display: grid; gap: 12px; padding: 18px; }
 .rule + .rule { border-top: 1px solid var(--border); }
-.rule-title { margin: 0; font-size: 15px; }
+.rule-title { margin: 0; font-size: 1rem; font-weight: 600; }
 /* The move and remove buttons belong to the rule body, not to the card: aligning them with the
    whole card floated them between the title and the fields. They sit in the last column of the
    field grid, bottom-aligned, and their own height matches the controls' 44px, so the row reads
    as one line rather than three controls at three heights. */
 .rule-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: 12px; align-items: end; }
-.rule-fields label { color: var(--muted); font-size: 14px; }
+.rule-fields label { color: var(--muted); font-size: .85rem; }
 /* "Needs a reply" hides the action text field without giving up its column: removing it from the
    grid slid the application picker left and pulled that rule's buttons out of the shared column. */
 .title-field.field-inert { visibility: hidden; }

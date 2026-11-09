@@ -27,28 +27,34 @@ interface InteractionLookupResponse {
   lookupFailed?: boolean;
 }
 
+export interface NotificationDetailOptions {
+  /** A record the phone no longer holds: no actions, no dismiss, only the text and a way back. */
+  readOnly?: boolean;
+  /** The popup passes its return-to-list handler; the standalone window has no list. */
+  onBack?: () => void;
+}
+
 export function mountNotificationDetail(
   container: HTMLElement,
   notification: NotificationInteractionSummary,
+  options: NotificationDetailOptions = {},
 ): void {
   container.classList.add('notification-detail');
-  const source = element('p', 'notification-detail-source');
-  source.textContent = message('interactionSource', notification.sourceName);
-  // Application and arrival time share one line. The row is otherwise empty for a mirror
-  // with neither, and a third grey line above the title was too much.
-  const application = element('p', 'notification-detail-application');
-  const meta = [
+  // Application, source and arrival share one line: three grey rows above the title left the
+  // top of the sheet mostly empty.
+  const source = element('p', 'notification-detail-meta');
+  source.textContent = [
     notification.sourceApplicationName,
+    `来自 ${notification.sourceName}`,
     formatClockTime(notification.updatedAtUnixMs),
-  ].filter((part) => part.length > 0);
-  application.textContent = meta.join(' · ');
-  application.hidden = meta.length === 0;
+  ].filter((part) => part.length > 0).join(' · ');
   const title = element('h2', 'notification-detail-title');
   title.textContent = notification.title || message('interactionUntitledNotification');
   const body = element('p', 'notification-detail-body');
   body.textContent = notification.body;
   body.hidden = notification.body.length === 0;
   const actions = element('div', 'notification-detail-actions');
+  actions.hidden = options.readOnly === true;
   const status = element('p', 'notification-detail-status');
   status.setAttribute('role', 'status');
   status.setAttribute('aria-live', 'polite');
@@ -151,8 +157,12 @@ export function mountNotificationDetail(
 
   for (const action of notification.actions) {
     if (action.requiresTextInput) {
+      const trigger = document.createElement('button');
+      trigger.type = 'button';
+      trigger.textContent = action.title;
       const form = document.createElement('form');
       form.className = 'notification-detail-reply';
+      form.hidden = true;
       const label = document.createElement('label');
       label.textContent = action.title;
       const input = document.createElement('textarea');
@@ -186,7 +196,13 @@ export function mountNotificationDetail(
         void invoke({ operation: 'reply', actionId: action.actionId, replyText });
       });
       form.append(label, hint, submit);
-      actions.append(form);
+      trigger.addEventListener('click', () => {
+        trigger.hidden = true;
+        form.hidden = false;
+        input.focus();
+      });
+      controls.push(trigger);
+      actions.append(trigger, form);
       continue;
     }
     const button = document.createElement('button');
@@ -204,14 +220,26 @@ export function mountNotificationDetail(
     empty.textContent = message('interactionNoSourceActions');
     actions.append(empty);
   }
-  const dismiss = document.createElement('button');
-  dismiss.type = 'button';
-  dismiss.className = 'notification-detail-dismiss';
-  dismiss.textContent = message('notificationDismissButton');
-  dismiss.addEventListener('click', () => void invoke({ operation: 'dismiss' }));
-  controls.push(dismiss);
+  const footer = element('div', 'notification-detail-footer');
+  if (options.onBack !== undefined) {
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'notification-detail-back';
+    back.textContent = message('popupBackToNotifications');
+    back.addEventListener('click', options.onBack);
+    footer.append(back);
+  }
+  if (options.readOnly !== true) {
+    const dismiss = document.createElement('button');
+    dismiss.type = 'button';
+    dismiss.className = 'notification-detail-dismiss';
+    dismiss.textContent = message('notificationDismissButton');
+    dismiss.addEventListener('click', () => void invoke({ operation: 'dismiss' }));
+    controls.push(dismiss);
+    footer.append(dismiss);
+  }
 
-  container.replaceChildren(source, application, title, body, actions, dismiss, status);
+  container.replaceChildren(source, title, body, actions, status, footer);
 }
 
 async function waitForReplyResult(idempotencyKey: string): Promise<string> {

@@ -21,7 +21,7 @@
     "message": "全部来源"
   },
   "popupBackToNotifications": {
-    "message": "返回通知列表"
+    "message": "返回列表"
   },
   "popupNoMatchingNotificationsTitle": {
     "message": "此来源当前没有通知"
@@ -203,7 +203,7 @@
     "message": "无法读取已保存的注册状态。请重新打开此页面；如果问题仍然存在，请重新注册。"
   },
   "notificationDismissButton": {
-    "message": "清除"
+    "message": "清除通知"
   },
   "notificationMoreButton": {
     "message": "更多"
