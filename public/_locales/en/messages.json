@@ -821,5 +821,17 @@
   },
   "optionsKeepHistoryBody": {
     "message": "Keep read notifications so the Popup can search them. Turning this off drops notifications your phone already cleared."
+  },
+  "statusNotConfigured": {
+    "message": "Not set up"
+  },
+  "statusOffline": {
+    "message": "Offline"
+  },
+  "statusConnecting": {
+    "message": "Connecting"
+  },
+  "statusOnline": {
+    "message": "Connected"
   }
 }

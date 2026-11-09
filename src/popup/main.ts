@@ -1,4 +1,4 @@
-import { connectionLabel, type ConnectionState } from '../shared/status';
+import type { ConnectionState } from '../shared/status';
 import type { NotificationInteractionSummary } from '../background/notification-interaction';
 import { localizeDocument, message } from '../shared/i18n';
 import { mountNotificationDetail } from '../shared/notification-detail';
@@ -281,7 +281,12 @@ function searchHistory(entries: HistoryEntry[], needle: string): HistoryEntry[] 
 }
 
 function connectionStateLabel(state: ConnectionState): string {
-  return connectionLabel(state);
+  switch (state) {
+    case 'online': return message('statusOnline');
+    case 'connecting': return message('statusConnecting');
+    case 'offline': return message('statusOffline');
+    default: return message('statusNotConfigured');
+  }
 }
 
 function requireElement<T extends HTMLElement>(id: string): T {

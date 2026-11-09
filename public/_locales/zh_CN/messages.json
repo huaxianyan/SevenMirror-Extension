@@ -821,5 +821,17 @@
   },
   "optionsKeepHistoryBody": {
     "message": "保留下来的通知可以在弹窗里搜索。关掉后只清理手机已经移除的那些记录。"
+  },
+  "statusNotConfigured": {
+    "message": "未完成设置"
+  },
+  "statusOffline": {
+    "message": "未连接"
+  },
+  "statusConnecting": {
+    "message": "连接中"
+  },
+  "statusOnline": {
+    "message": "已连接"
   }
 }

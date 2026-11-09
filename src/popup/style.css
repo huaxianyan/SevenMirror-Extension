@@ -67,7 +67,8 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; width: 400px; }
-body { background: var(--bg); color: var(--ink); font-size: 0.875rem; line-height: 1.5; }
+body { display: flex; flex-direction: column; min-height: 100vh; background: var(--bg); color: var(--ink); font-size: 0.875rem; line-height: 1.5; }
+.popup { display: flex; flex-direction: column; flex: 1; }
 h1, h2, p { margin: 0; }
 .visually-hidden {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
@@ -188,6 +189,7 @@ h1, h2, p { margin: 0; }
 
 /* Bottom tabs: unread, history, and the way into options. */
 .tabbar {
+  margin-top: auto;
   display: grid; grid-template-columns: 1fr 1fr 1fr;
   border-top: 1px solid var(--line);
   background: var(--surface);
