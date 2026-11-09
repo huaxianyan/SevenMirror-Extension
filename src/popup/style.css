@@ -84,6 +84,14 @@ h1, h2, p { margin: 0; }
 }
 .popup-header h1 { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.01em; }
 .header-actions { display: flex; align-items: center; gap: 0.5rem; }
+.icon-button {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; padding: 0; min-height: 0;
+  border: 1px solid transparent; border-radius: var(--radius-lg);
+  background: transparent; color: var(--ink-muted); cursor: pointer;
+}
+.icon-button:hover { background: var(--brand-tint); color: var(--ink); }
+.icon-button svg { width: 20px; height: 20px; }
 
 .pill {
   min-height: 32px; padding: 0 0.75rem;
@@ -187,10 +195,10 @@ h1, h2, p { margin: 0; }
 .back-button:hover { background: var(--brand-tint); color: var(--ink); }
 .back-button-icon { width: 18px; height: 18px; fill: currentColor; }
 
-/* Bottom tabs: unread, history, and the way into options. */
+/* Bottom tabs switch pages inside the popup; settings lives in the header instead. */
 .tabbar {
   margin-top: auto;
-  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  display: grid; grid-template-columns: 1fr 1fr;
   border-top: 1px solid var(--line);
   background: var(--surface);
 }
