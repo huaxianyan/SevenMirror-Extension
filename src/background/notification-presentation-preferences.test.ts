@@ -11,6 +11,7 @@ const defaults = {
   showBody: true,
   showImages: true,
   silentNotifications: false,
+  keepReadHistory: true,
   mutedSourceDeviceIds: [],
 };
 
@@ -29,6 +30,7 @@ describe('NotificationPresentationPreferencesStore', () => {
     const muted = '01010101010101010101010101010101';
     const preferences = {
       badgeEnabled: false,
+    keepReadHistory: true,
       nativeNotificationsEnabled: false,
       showBody: false,
       showImages: false,

@@ -58,6 +58,19 @@ export interface MirroredNotificationPresentation {
   updatedAtUnixMs: number;
 }
 
+export interface NotificationHistoryEntry {
+  tuple: string;
+  chromeNotificationId: string;
+  revision: string;
+  sourceKey: string;
+  title?: string;
+  body?: string;
+  applicationName?: string;
+  receivedAtUnixMs: number;
+  read: boolean;
+  live: boolean;
+}
+
 export interface NotificationStateReconciliation {
   disposition: 'applied' | 'already-applied' | 'stale';
   state: MirroredNotificationState;
@@ -75,6 +88,9 @@ interface StoredNotificationSnapshot {
   manifestSha256: Uint8Array;
 }
 
+/** Records kept for the popup's history and search; older ones are dropped on write. */
+export const HISTORY_LIMIT = 200;
+
 export class IndexedDbNotificationStateStore {
   constructor(
     private readonly databaseName = 'syncnotifications-notification-state-v1',
@@ -86,7 +102,7 @@ export class IndexedDbNotificationStateStore {
     notification: NotificationUpsert,
     canonicalPayload: Uint8Array,
   ): Promise<NotificationStateReconciliation> {
-    return this.reconcile(sourceDeviceId, {
+    const result = await this.reconcile(sourceDeviceId, {
       notificationId: notification.notificationId,
       revision: notification.notificationRevision,
       phase: 'visible',
@@ -104,6 +120,8 @@ export class IndexedDbNotificationStateStore {
       ...(notification.appIcon === undefined ? {} : { appIcon: storeMedia(notification.appIcon) }),
       ...(notification.avatar === undefined ? {} : { avatar: storeMedia(notification.avatar) }),
     });
+    await this.pruneHistory(HISTORY_LIMIT, true);
+    return result;
   }
 
   async reconcileRemoved(
@@ -321,6 +339,116 @@ export class IndexedDbNotificationStateStore {
         }
       }
       await completed;
+    } finally {
+      database.close();
+    }
+  }
+
+  /**
+   * Every notification this browser has received, newest first, regardless of whether the
+   * phone still shows it. The Popup uses it for the unread list, the history page and search,
+   * so one query feeds all three instead of three different notions of "a notification".
+   */
+  async listHistory(limit: number): Promise<NotificationHistoryEntry[]> {
+    const states = await this.listAll();
+    return states
+      .filter((state) => state.locallyHiddenRevision !== state.revision)
+      .map(toHistoryEntry)
+      .sort((left, right) => {
+        const timeOrder = right.receivedAtUnixMs - left.receivedAtUnixMs;
+        if (timeOrder !== 0) return timeOrder;
+        const leftRevision = BigInt(left.revision);
+        const rightRevision = BigInt(right.revision);
+        return leftRevision === rightRevision ? 0 : rightRevision > leftRevision ? 1 : -1;
+      })
+      .slice(0, limit);
+  }
+
+  /**
+   * Keeps the newest `limit` records. With history switched off the removed ones go too: a
+   * notification the phone cleared has nothing left to act on, so keeping its text would only
+   * leave readable content behind.
+   */
+  async pruneHistory(limit: number, keepReadHistory: boolean): Promise<void> {
+    const states = await this.listAll();
+    const ordered = states
+      .slice()
+      .sort((left, right) => (right.receivedAtUnixMs ?? 0) - (left.receivedAtUnixMs ?? 0));
+    const doomed = ordered.filter((state, index) => index >= limit ||
+      (!keepReadHistory && state.phase === 'removed'));
+    if (doomed.length === 0) return;
+    const database = await this.openDatabase();
+    try {
+      const transaction = database.transaction(STORE_NAME, 'readwrite');
+      const completed = transactionCompleted(transaction);
+      const store = transaction.objectStore(STORE_NAME);
+      for (const state of doomed) {
+        await requestResult(store.delete(state.tuple));
+      }
+      await completed;
+    } finally {
+      database.close();
+    }
+  }
+
+  /** Marks every unread notification read, which is what the Popup's "mark all read" means. */
+  async markAllViewed(): Promise<number> {
+    const states = await this.listAll();
+    const unread = states.filter((state) => state.phase === 'visible' &&
+      state.locallyHiddenRevision !== state.revision &&
+      state.viewedRevision !== state.revision);
+    if (unread.length === 0) return 0;
+    const database = await this.openDatabase();
+    try {
+      const transaction = database.transaction(STORE_NAME, 'readwrite');
+      const completed = transactionCompleted(transaction);
+      const store = transaction.objectStore(STORE_NAME);
+      for (const state of unread) {
+        await requestResult(store.put({ ...state, viewedRevision: state.revision }));
+      }
+      await completed;
+    } finally {
+      database.close();
+    }
+    return unread.length;
+  }
+
+  /**
+   * Drops history the user asked to clear: records whose notification the phone no longer shows.
+   * Live ones stay because clearing them here would also drop reply and dismiss for a
+   * notification that is still on the phone.
+   */
+  async clearRemovedHistory(): Promise<number> {
+    const states = await this.listAll();
+    const doomed = states.filter((state) => state.phase === 'removed' &&
+      state.locallyHiddenRevision !== state.revision);
+    if (doomed.length === 0) return 0;
+    const database = await this.openDatabase();
+    try {
+      const transaction = database.transaction(STORE_NAME, 'readwrite');
+      const completed = transactionCompleted(transaction);
+      const store = transaction.objectStore(STORE_NAME);
+      for (const state of doomed) {
+        await requestResult(store.delete(state.tuple));
+      }
+      await completed;
+    } finally {
+      database.close();
+    }
+    return doomed.length;
+  }
+
+  /** Reads every stored record, including ones the phone already removed. */
+  async listAll(): Promise<MirroredNotificationState[]> {
+    const database = await this.openDatabase();
+    try {
+      const transaction = database.transaction(STORE_NAME, 'readonly');
+      const completed = transactionCompleted(transaction);
+      const store = transaction.objectStore(STORE_NAME);
+      const states = await requestResult<MirroredNotificationState[]>(store.getAll());
+      await completed;
+      for (const state of states) validateStored(state);
+      return states;
     } finally {
       database.close();
     }
@@ -684,6 +812,23 @@ function validateDeviceId(value: Uint8Array): void {
 function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
   return left.byteLength === right.byteLength &&
     left.every((value, index) => value === right[index]);
+}
+
+function toHistoryEntry(state: MirroredNotificationState): NotificationHistoryEntry {
+  return {
+    tuple: state.tuple,
+    chromeNotificationId: state.chromeNotificationId,
+    revision: state.revision,
+    sourceKey: toHex(state.sourceDeviceId),
+    ...(state.title === undefined ? {} : { title: state.title }),
+    ...(state.body === undefined ? {} : { body: state.body }),
+    ...(state.sourceApplicationName === undefined
+      ? {}
+      : { applicationName: state.sourceApplicationName }),
+    receivedAtUnixMs: state.receivedAtUnixMs ?? 0,
+    read: state.viewedRevision === state.revision,
+    live: state.phase === 'visible',
+  };
 }
 
 function toHex(value: Uint8Array): string {

@@ -3,6 +3,8 @@ const MAX_MUTED_SOURCES = 256;
 
 export interface NotificationPresentationPreferences {
   badgeEnabled: boolean;
+  /** When off, records the phone already cleared are pruned instead of kept for search. */
+  keepReadHistory: boolean;
   nativeNotificationsEnabled: boolean;
   showBody: boolean;
   showImages: boolean;
@@ -12,6 +14,7 @@ export interface NotificationPresentationPreferences {
 
 export const DEFAULT_NOTIFICATION_PRESENTATION_PREFERENCES: NotificationPresentationPreferences = {
   badgeEnabled: true,
+  keepReadHistory: true,
   nativeNotificationsEnabled: true,
   showBody: true,
   showImages: true,
@@ -21,6 +24,7 @@ export const DEFAULT_NOTIFICATION_PRESENTATION_PREFERENCES: NotificationPresenta
 
 export const FAIL_CLOSED_NOTIFICATION_PRESENTATION_PREFERENCES: NotificationPresentationPreferences = {
   badgeEnabled: false,
+  keepReadHistory: false,
   nativeNotificationsEnabled: false,
   showBody: false,
   showImages: false,
@@ -67,6 +71,7 @@ export function validateNotificationPresentationPreferences(
   const showBody = optionalBoolean(value.showBody, true);
   const showImages = optionalBoolean(value.showImages, true);
   const silentNotifications = optionalBoolean(value.silentNotifications, false);
+  const keepReadHistory = optionalBoolean(value.keepReadHistory, true);
   const rawMuted = value.mutedSourceDeviceIds ?? [];
   if (!Array.isArray(rawMuted) || rawMuted.length > MAX_MUTED_SOURCES ||
       rawMuted.some((entry) => typeof entry !== 'string' || !/^[0-9a-f]{32}$/.test(entry))) {
@@ -78,6 +83,7 @@ export function validateNotificationPresentationPreferences(
     showBody,
     showImages,
     silentNotifications,
+    keepReadHistory,
     mutedSourceDeviceIds: [...new Set(rawMuted)].sort(),
   };
 }

@@ -24,8 +24,10 @@ import { IndexedDbPendingActionStore } from '../crypto/indexeddb-pending-action-
 import { IndexedDbReplayLedger } from '../crypto/indexeddb-replay-ledger';
 import { ActionResultDispatcher } from '../crypto/action-result-dispatcher';
 import {
+  HISTORY_LIMIT,
   IndexedDbNotificationStateStore,
   type MirroredNotificationState,
+  type NotificationHistoryEntry,
 } from '../crypto/indexeddb-notification-state-store';
 import { NotificationPresenter } from './notification-presenter';
 import { NotificationButtonBindingStore } from './notification-button-binding-store';
@@ -433,6 +435,27 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
       void getPopupNotifications().then(
         (result) => sendResponse(result),
         () => sendResponse({ state: DEFAULT_CONNECTION_STATE, notifications: [] }),
+      );
+      return true;
+
+    case 'get-popup-history':
+      void getPopupHistory().then(
+        (result) => sendResponse(result),
+        () => sendResponse({ history: [], keepReadHistory: true }),
+      );
+      return true;
+
+    case 'mark-all-notifications-read':
+      void markAllNotificationsRead().then(
+        (marked) => sendResponse({ marked }),
+        () => sendResponse({ marked: 0 }),
+      );
+      return true;
+
+    case 'clear-notification-history':
+      void clearNotificationHistory().then(
+        (cleared) => sendResponse({ cleared }),
+        () => sendResponse({ cleared: 0 }),
       );
       return true;
 
@@ -989,6 +1012,59 @@ async function markNotificationsViewed(message: Record<string, unknown>): Promis
   }
   await notificationStateStore.markViewed(entries);
   await updateToolbarBadge();
+}
+
+/**
+ * The Popup needs one payload for three views: unread, history and search. Source names are
+ * resolved once per source rather than once per record, because a workspace has few sources and
+ * up to a couple of hundred records.
+ */
+async function getPopupHistory(): Promise<{
+  history: Array<NotificationHistoryEntry & { sourceName: string }>;
+  keepReadHistory: boolean;
+}> {
+  const [credential, preferences] = await Promise.all([
+    credentialStore.load(),
+    notificationPresentationPreferencesStore.load(),
+  ]);
+  const keepReadHistory = preferences.keepReadHistory;
+  if (credential === undefined) return { history: [], keepReadHistory };
+  await notificationStateStore.pruneHistory(HISTORY_LIMIT, keepReadHistory);
+  const entries = await notificationStateStore.listHistory(HISTORY_LIMIT);
+  const sourceNames = new Map<string, string | undefined>();
+  for (const entry of entries) {
+    if (sourceNames.has(entry.sourceKey)) continue;
+    sourceNames.set(entry.sourceKey, await businessPeerResolver.resolveNotificationSourceName(
+      credential.workspaceId,
+      credential.deviceId,
+      hexToBytes(entry.sourceKey),
+      Date.now(),
+    ));
+  }
+  const history = entries.flatMap((entry) => {
+    const sourceName = sourceNames.get(entry.sourceKey);
+    return sourceName === undefined ? [] : [{ ...entry, sourceName }];
+  });
+  return { history, keepReadHistory };
+}
+
+async function markAllNotificationsRead(): Promise<number> {
+  const marked = await notificationStateStore.markAllViewed();
+  if (marked > 0) await updateToolbarBadge();
+  return marked;
+}
+
+async function clearNotificationHistory(): Promise<number> {
+  const cleared = await notificationStateStore.clearRemovedHistory();
+  return cleared;
+}
+
+function hexToBytes(value: string): Uint8Array {
+  const bytes = new Uint8Array(value.length / 2);
+  for (let index = 0; index < bytes.length; index += 1) {
+    bytes[index] = Number.parseInt(value.slice(index * 2, index * 2 + 2), 16);
+  }
+  return bytes;
 }
 
 async function updateToolbarBadge(): Promise<void> {

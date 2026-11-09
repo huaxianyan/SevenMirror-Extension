@@ -74,6 +74,7 @@ describe('Notification presentation', () => {
         showBody: false,
         showImages: false,
         silentNotifications: true,
+        keepReadHistory: true,
         mutedSourceDeviceIds: [],
       }),
       loadShortcutPreferences: async () => ({
