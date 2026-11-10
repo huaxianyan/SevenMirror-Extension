@@ -11,12 +11,28 @@
 .layout > nav a:hover { background: var(--surface-subtle); }
 .layout > nav a[aria-current="page"] { border-left-color: var(--primary); font-weight: 600; }
 main { min-width: 0; }
-.settings-page { display: grid; gap: 1.25rem; }
+/* One rhythm, taken from the console: panels sit 1.25rem apart, a block heading sits
+   1.25rem above its content, and stacked helper lines close up to .5rem. Blocks never
+   touch, and nothing relies on the UA paragraph margin. */
+.settings-page { display: grid; gap: 1.25rem; scroll-margin-top: 4.5rem; }
 .settings-page > section { padding: 0; }
 .settings-page > section + section { padding: 0; border: 0; }
+.settings-page > section > * { margin: 0; }
+.settings-page > section > * + * { margin-top: 1.25rem; }
+.settings-page > section > h1 + p { margin-top: .4rem; }
+.settings-page > section > p + p { margin-top: .5rem; }
+.settings-page > section > .sync-section { margin-top: 2rem; }
+.settings-page > section > h1 { font-size: clamp(1.5rem, 4vw, 2rem); }
+/* An empty status line still reserved its height and left a dead gap under the last card. */
+.settings-page p[role="status"]:empty, #shortcut-status:empty { display: none; }
 .supporting { color: var(--muted); font-size: .85rem; }
-form.card { display: grid; gap: 1rem; }
+form.card { display: grid; gap: .9rem; }
+/* The grid gap already separates rows, so the shared paragraph margin would double it. */
+form.card > h2, form.card > p { margin: 0; }
 .card > button, .card > .button-link { justify-self: start; }
+/* A field belongs to its label: the console's standalone field margin would otherwise stack
+   on top of the container gap and open a gap inside every label. */
+.card input:not([type="checkbox"]), .card select { margin: 0; }
 label:not(.switch-row) { display: grid; gap: .35rem; font-weight: 650; }
 .device { display: grid; gap: 5px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
 .status-card h2 { font-size: 1.1rem; }
@@ -26,6 +42,8 @@ dt { color: var(--muted); }
 dd { margin: 0; overflow-wrap: anywhere; }
 .summary { color: var(--muted); }
 .device-list, .compact-list { display: grid; gap: 10px; margin-top: 16px; }
+/* An empty list held its own top margin, so the two surrounding lines read as unrelated. */
+.device-list:empty, .compact-list:empty { display: none; }
 .device-meta { color: var(--muted); font-size: .85rem; }
 /* A device whose access lapsed looked identical to an authorized one; the only difference
    was the words "needs access renewed" inside the same grey meta line. */
@@ -37,27 +55,28 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .switch-row small { color: var(--muted); line-height: 1.4; }
 .switch-row input { flex: none; }
 .option-list { padding-block: 4px; }
-.option-list .switch-row { min-height: 68px; padding-block: 12px; }
+.option-list .switch-row { min-height: 68px; padding-block: .9rem; }
 .option-list .switch-row + .switch-row { border-top: 1px solid var(--border); }
 .source-toggle { margin: 0; padding: 12px 0; }
 .source-toggle + .source-toggle { border-top: 1px solid var(--border); }
-.button-link { margin-top: 16px; }
-#registration-status, #notification-settings-status { min-height: 24px; }
+.button-link { margin-top: 0; }
+#registration-status, #notification-settings-status { min-height: 0; }
 /* Shortcut settings render inside this document now, so their controls follow the page's card,
    field and button rules instead of a second stylesheet that could drift from them. */
 #shortcut-form { display: grid; }
-.rules-section { margin-top: 32px; }
-.sync-section { margin-top: 32px; }
-.sync-section .card { display: grid; gap: 12px; }
+.rules-section { margin-top: 1.75rem; }
+.sync-section { margin-top: 2rem; }
+.sync-section .card { display: grid; gap: .75rem; }
 .sync-section .card p { margin: 0; }
-#shortcut-sync-enable-fields { display: grid; gap: 10px; }
-#shortcut-sync-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+#shortcut-sync-enable-fields { display: grid; gap: .6rem; }
+#shortcut-sync-actions { display: flex; flex-wrap: wrap; gap: .6rem; }
 #shortcut-sync-status { min-height: 24px; color: var(--muted); }
-.section-heading { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.section-heading { display: flex; align-items: start; justify-content: space-between; gap: 1rem; margin-bottom: 1.25rem; }
+.section-heading h2 { margin: 0 0 .25rem; }
+.section-heading p { margin: 0; color: var(--muted); line-height: 1.55; }
 .section-actions { display: flex; gap: 8px; flex: none; padding-top: 4px; }
 .section-actions button { min-height: 32px; padding: 0 12px; font-size: .85rem; }
-.section-heading p { margin: 0; color: var(--muted); }
-.rules { display: grid; margin: 20px 0 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); overflow: hidden; }
+.rules { display: grid; margin: 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); overflow: hidden; }
 .rules:empty { display: none; }
 .rule { display: grid; gap: 12px; padding: 1rem; }
 .rule + .rule { border-top: 1px solid var(--border); }
@@ -84,8 +103,8 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .move-buttons button + button { border-top: 1px solid var(--border); }
 .move-icon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .remove { min-height: 36px; padding: 0 14px; }
-#empty-rules { margin: 20px 0 0; }
-.form-actions { display: flex; align-items: center; gap: 16px; margin-top: 28px; }
+#empty-rules { margin: 0; }
+.form-actions { display: flex; align-items: center; gap: 16px; margin-top: 1.5rem; }
 #shortcut-status { min-height: 24px; color: var(--muted); }
 dialog { width: min(480px, calc(100% - 32px)); padding: 24px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); color: var(--text); }
 dialog::backdrop { background: rgb(22 32 43 / 45%); }
