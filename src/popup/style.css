@@ -17,6 +17,10 @@
   --link: var(--primary);
   --radius-sm: 4px;
   --radius-pill: 999px;
+  /* Hover tints for rows and quiet buttons. They shift the surface by a few percent instead of
+     filling with the primary color, which would erase the text. */
+  --tint-hover: color-mix(in srgb, var(--primary) 8%, var(--surface));
+  --card-hover: color-mix(in srgb, var(--primary) 6%, var(--card));
 }
 
 * { box-sizing: border-box; }
@@ -44,7 +48,7 @@ h1, h2, p { margin: 0; }
   border: 1px solid transparent; border-radius: var(--radius-lg);
   background: transparent; color: var(--ink-muted); cursor: pointer;
 }
-.icon-button:hover { background: var(--brand-tint); color: var(--ink); }
+.icon-button:hover:not(:disabled) { background: var(--tint-hover); color: var(--ink); }
 .icon-button svg { width: 20px; height: 20px; }
 
 /* Same button shape as the console: 36 tall, 6px corners, one fill. */
@@ -113,7 +117,9 @@ h1, h2, p { margin: 0; }
   background: var(--card); color: var(--ink);
   text-align: left; font: inherit; cursor: pointer;
 }
-.card:hover:enabled { border-color: var(--line-strong); }
+/* Rows are not primary actions: the shared theme fills a plain button with the primary color on
+   hover, which turned the whole row blue and hid its text. */
+.card:hover:enabled { background: var(--card-hover); border-color: var(--line-strong); }
 .card:disabled { cursor: default; opacity: 0.92; }
 .card.unread { border-color: var(--line-strong); }
 .card.unread .title { font-weight: 700; }
@@ -148,7 +154,7 @@ h1, h2, p { margin: 0; }
   border: 1px solid transparent; border-radius: var(--radius-lg);
   background: transparent; color: var(--ink-muted); cursor: pointer;
 }
-.back-button:hover { background: var(--brand-tint); color: var(--ink); }
+.back-button:hover:not(:disabled) { background: var(--tint-hover); color: var(--ink); }
 .back-button-icon { width: 18px; height: 18px; fill: currentColor; }
 
 /* Bottom tabs switch pages inside the popup; settings lives in the header instead. */
@@ -166,7 +172,9 @@ h1, h2, p { margin: 0; }
   color: var(--ink-muted); font: inherit; font-size: 0.75rem; font-weight: 500; cursor: pointer;
 }
 .tab svg { width: 20px; height: 20px; }
-.tab:hover { background: var(--brand-tint); }
+/* Text and icon darken instead of filling the whole tab block. */
+.tab:hover:not(:disabled) { background: transparent; }
+.tab:not([aria-current="page"]):hover:not(:disabled) { color: var(--ink); }
 .tab[aria-current="page"] { color: var(--action); font-weight: 600; }
 
 :focus-visible { outline: 2px solid var(--action); outline-offset: 2px; }

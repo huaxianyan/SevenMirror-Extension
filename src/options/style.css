@@ -5,7 +5,9 @@
    shared/sevenmirror-theme.css so popup and settings cannot define competing palettes. */
 
 /* Console topbar, sidebar and page shell. The existing markup keeps its class names. */
-.layout { display: grid; grid-template-columns: minmax(10rem, 14rem) minmax(0, 1fr); align-items: start; gap: clamp(1rem, 3vw, 2rem); width: min(100%, 72rem); margin: 0 auto; padding: 2rem clamp(1rem, 4vw, 3rem) 4rem; }
+/* Tall enough that the sticky sidebar keeps its offset even on a short page; otherwise its
+   containing block ends early and the column jumps up when navigating to a short section. */
+.layout { display: grid; grid-template-columns: minmax(10rem, 14rem) minmax(0, 1fr); align-items: start; gap: clamp(1rem, 3vw, 2rem); width: min(100%, 72rem); min-height: calc(100vh - 4rem); margin: 0 auto; padding: 2rem clamp(1rem, 4vw, 3rem) 4rem; }
 .layout > nav { position: sticky; top: 5.5rem; align-self: start; display: grid; gap: .1rem; }
 .layout > nav a { min-height: 40px; display: flex; align-items: center; padding: .5rem .8rem; border-left: 3px solid transparent; color: var(--text); font-size: 1rem; font-weight: 500; text-decoration: none; }
 .layout > nav a:hover { background: var(--surface-subtle); }
