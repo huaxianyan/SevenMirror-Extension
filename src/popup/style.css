@@ -1,68 +1,22 @@
+@import "../shared/sevenmirror-theme.css";
 @import "../shared/notification-detail.css";
 
-/*
- * Popup surface. The token block is the same palette the options page uses, re-stated here
- * because each entry point loads its own stylesheet; the old variable names stay as aliases so
- * the shared detail stylesheet keeps working unchanged.
- */
+/* Popup-only density aliases. All actual colors and control shapes come from the shared
+   theme; the popup only changes the window layout and list rhythm. */
 :root {
-  color-scheme: light dark;
-  font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans SC", sans-serif;
-  font-synthesis: none;
-
-  --brand-soft: #67a1d4;
-  --action: #2f6fa8;
-  --action-hover: #26598a;
-  --on-action: #ffffff;
-  --link: #2b6495;
-  --brand-tint: #edf3f9;
-
-  --bg: #f4f6f8;
-  --surface: #ffffff;
-  --card: #ffffff;
-  --ink: #16202b;
-  --ink-muted: #5b6673;
-  --line: #dfe4ea;
-  --line-strong: #c3cbd5;
-  --ok: #1f7a4d;
-  --danger: #a3352f;
-
+  --brand-tint: var(--surface);
+  --bg: var(--background);
+  --card: var(--surface-subtle);
+  --ink: var(--text);
+  --ink-muted: var(--muted);
+  --line: var(--border);
+  --line-strong: var(--border-strong);
+  --action: var(--primary);
+  --action-hover: var(--primary-hover);
+  --on-action: var(--on-primary);
+  --link: var(--primary);
   --radius-sm: 4px;
-  --radius: 6px;
-  --radius-lg: 10px;
   --radius-pill: 999px;
-
-  /* Aliases used by the shared notification detail stylesheet. */
-  --background: var(--bg);
-  --text: var(--ink);
-  --muted: var(--ink-muted);
-  --border: var(--line);
-  --primary: var(--action);
-  --primary-hover: var(--action-hover);
-
-  background: var(--bg);
-  color: var(--ink);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --brand-soft: #7ab0dd;
-    --action: #7ab0dd;
-    --action-hover: #94c1e6;
-    --on-action: #0b1a26;
-    --link: #9ac2e6;
-    --brand-tint: #1b2836;
-
-    --bg: #0e1216;
-    --surface: #171c22;
-    --card: #171c22;
-    --ink: #e6eaf0;
-    --ink-muted: #9aa4b1;
-    --line: #2b333c;
-    --line-strong: #3d4753;
-    --ok: #5fc08d;
-    --danger: #e58b84;
-  }
 }
 
 * { box-sizing: border-box; }
@@ -78,12 +32,11 @@ h1, h2, p { margin: 0; }
 /* Header: title on the left, one action on the right. */
 .popup-header {
   display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
-  padding: 1rem 1rem 0.75rem;
+  padding: .8rem 1rem;
   background: var(--surface);
   border-bottom: 1px solid var(--line);
 }
-.popup-header h1 { display: flex; align-items: center; gap: 8px; font-size: 1.25rem; font-weight: 700; letter-spacing: -0.01em; }
-.popup-header h1 .brand-mark { width: 22px; height: 22px; border-radius: 5px; flex: none; }
+.popup-header h1 { display: flex; align-items: center; gap: .55rem; font-size: 1.125rem; font-weight: 700; letter-spacing: normal; }
 .header-actions { display: flex; align-items: center; gap: 0.5rem; }
 .icon-button {
   display: inline-flex; align-items: center; justify-content: center;
@@ -125,7 +78,8 @@ h1, h2, p { margin: 0; }
 }
 .search-icon { width: 16px; height: 16px; flex: none; }
 .search input {
-  flex: 1; min-width: 0; border: 0; outline: 0; background: transparent;
+  flex: 1; min-width: 0; min-height: 0; margin: 0; padding: 0;
+  border: 0; outline: 0; background: transparent;
   color: var(--ink); font: inherit;
 }
 .search input::placeholder { color: var(--ink-muted); }
@@ -168,7 +122,7 @@ h1, h2, p { margin: 0; }
   width: 30px; height: 30px; border-radius: var(--radius);
   display: inline-flex; align-items: center; justify-content: center;
   background: var(--brand-tint); color: var(--action);
-  font-size: 0.75rem; font-weight: 600;
+  font-size: 0.75rem; font-weight: 650;
 }
 .card-body { min-width: 0; }
 .title { font-size: 0.875rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -181,7 +135,7 @@ h1, h2, p { margin: 0; }
 .empty {
   margin: 0.5rem 1rem 1rem; padding: 1.5rem 1rem;
   border: 1px dashed var(--line-strong); border-radius: var(--radius-lg);
-  background: var(--surface); text-align: center;
+  text-align: center;
 }
 .empty h2 { font-size: 0.875rem; font-weight: 600; }
 .empty p { margin-top: 0.25rem; color: var(--ink-muted); font-size: 0.75rem; }

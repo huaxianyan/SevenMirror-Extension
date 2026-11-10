@@ -1,72 +1,25 @@
+@import "../shared/sevenmirror-theme.css";
 @import "../shared/notification-detail.css";
 
-:root {
-  color-scheme: light dark;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  /* Same palette as the Popup and the options page. */
-  --background: #f4f6f8;
-  --surface: #ffffff;
-  --text: #16202b;
-  --muted: #5b6673;
-  --primary: #2f6fa8;
-  --primary-hover: #26598a;
-  --on-primary: #ffffff;
-  --border: #dfe4ea;
-  --focus: #2f6fa8;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0e1216;
-    --surface: #171c22;
-    --text: #e6eaf0;
-    --muted: #9aa4b1;
-    --primary: #7ab0dd;
-    --primary-hover: #94c1e6;
-    --on-primary: #0b1a26;
-    --border: #2b333c;
-    --focus: #7ab0dd;
-  }
-}
-
-* { box-sizing: border-box; }
-
-body {
-  margin: 0;
-  min-height: 100vh;
-  background: var(--background);
-  color: var(--text);
-}
-
+/* The independent interaction window uses the same panel and typography as the console. */
 main {
   width: min(680px, calc(100% - 32px));
   margin: 0 auto;
-  padding: 40px 0 64px;
+  padding: 2rem 0 4rem;
 }
-
-.page-header { margin-bottom: 24px; }
-.brand { font-size: 14px; font-weight: 700; letter-spacing: 0.04em; }
-
+.page-header { margin-bottom: 1.25rem; }
+.brand { font-size: 1.125rem; font-weight: 700; letter-spacing: normal; }
 .notification-detail,
 .empty {
-  padding: 24px;
+  padding: 1rem;
   border: 1px solid var(--border);
-  border-radius: 18px;
-  background: var(--surface);
-  box-shadow: 0 8px 28px rgb(0 0 0 / 8%);
+  border-radius: var(--radius-lg);
+  background: var(--surface-subtle);
 }
-
-#status {
-  min-height: 24px;
-  margin: 18px 4px 0;
-  color: var(--muted);
-}
-
-.empty h1 { margin: 0; font-size: 24px; }
-.empty p { margin: 12px 0 0; color: var(--muted); line-height: 1.5; }
-[hidden] { display: none !important; }
+#status { min-height: 24px; margin: 18px 4px 0; color: var(--muted); }
+.empty h1 { margin: 0; font-size: 1.5rem; }
+.empty p { margin: .5rem 0 0; color: var(--muted); line-height: 1.55; }
 
 @media (max-width: 520px) {
-  main { width: min(100% - 20px, 680px); padding-top: 20px; }
-  .notification-detail, .empty { padding: 18px; border-radius: 14px; }
+  main { width: min(100% - 20px, 680px); padding-top: 1.25rem; }
 }

@@ -1,80 +1,24 @@
+@import "../shared/sevenmirror-theme.css";
 @import "../shared/switch.css";
 
-:root {
-  color-scheme: light dark;
-  /* Console stack, and no synthesised bold: without this Chrome fakes a heavier face. */
-  font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans SC", sans-serif;
-  font-synthesis: none;
-  /* Same palette as the Popup: the icon blue carries white text only in its darker step. */
-  --background: #f4f6f8;
-  --surface: #ffffff;
-  --text: #16202b;
-  --muted: #5b6673;
-  --primary: #2f6fa8;
-  --primary-hover: #26598a;
-  --on-primary: #ffffff;
-  --border: #dfe4ea;
-  --border-strong: #c3cbd5;
-  --tint: #edf3f9;
-  --focus: #2f6fa8;
-  --danger: #a3352f;
-  --radius: 6px;
-  --radius-lg: 10px;
-}
+/* Extension-specific layout only. Colors, typography, cards and controls live in
+   shared/sevenmirror-theme.css so popup and settings cannot define competing palettes. */
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0e1216;
-    --surface: #171c22;
-    --text: #e6eaf0;
-    --muted: #9aa4b1;
-    --primary: #7ab0dd;
-    --primary-hover: #94c1e6;
-    --on-primary: #0b1a26;
-    --border: #2b333c;
-    --border-strong: #3d4753;
-    --tint: #1b2836;
-    --focus: #7ab0dd;
-    --danger: #e58b84;
-  }
-}
-
-* { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
-body { margin: 0; background: var(--background); color: var(--text); font-size: 1rem; }
-.top-bar { position: sticky; top: 0; z-index: 2; display: flex; justify-content: space-between; gap: 24px; padding: 16px 24px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--background) 92%, transparent); backdrop-filter: blur(12px); }
-.brand { display: flex; align-items: center; gap: 8px; }
-.brand-mark { width: 22px; height: 22px; border-radius: 5px; flex: none; }
-.top-bar strong { font-size: 1.125rem; font-weight: 700; }
-.top-bar span { color: var(--muted); font-size: .85rem; }
-.layout { display: grid; grid-template-columns: 220px minmax(0, 760px); gap: 40px; width: min(1100px, calc(100% - 40px)); margin: 0 auto; padding: 32px 0 72px; }
-nav { position: sticky; top: 88px; align-self: start; display: grid; gap: 4px; }
-nav a { min-height: 40px; display: flex; align-items: center; padding: 8px 12px; border-left: 3px solid transparent; color: var(--text); text-decoration: none; font-size: 1rem; font-weight: 500; }
-nav a:hover { background: var(--tint); }
-/* Body links had no rule at all, so the About page fell back to the browser's default
-   purple underline, while the shortcuts page already styled its own link. */
-a { color: var(--primary); }
-nav a[aria-current="page"] { border-left-color: var(--primary); font-weight: 600; }
+/* Console topbar, sidebar and page shell. The existing markup keeps its class names. */
+.layout { display: grid; grid-template-columns: minmax(10rem, 14rem) minmax(0, 1fr); align-items: start; gap: clamp(1rem, 3vw, 2rem); width: min(100%, 72rem); margin: 0 auto; padding: 2rem clamp(1rem, 4vw, 3rem) 4rem; }
+.layout > nav { position: sticky; top: 5.5rem; align-self: start; display: grid; gap: .1rem; }
+.layout > nav a { min-height: 40px; display: flex; align-items: center; padding: .5rem .8rem; border-left: 3px solid transparent; color: var(--text); font-size: 1rem; font-weight: 500; text-decoration: none; }
+.layout > nav a:hover { background: var(--surface-subtle); }
+.layout > nav a[aria-current="page"] { border-left-color: var(--primary); font-weight: 600; }
 main { min-width: 0; }
-.settings-page > section { padding: 8px 0 40px; }
-.settings-page > section + section { padding-top: 32px; border-top: 1px solid var(--border); }
-.settings-page[hidden] { display: none; }
-h1 { margin: 0 0 .4rem; font-size: clamp(1.5rem, 4vw, 2rem); }
-h2 { margin: 0 0 .5rem; font-size: 1.1rem; }
-p { font-size: 1rem; line-height: 1.5; }
-.card { margin-top: 16px; padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--tint); }
-.supporting { color: var(--muted); }
-form.card { display: grid; gap: 16px; }
-label:not(.switch-row) { display: grid; gap: 6px; font-weight: 650; }
-input, button { font: inherit; }
-input[type="url"], input[type="password"], input[type="text"] { width: 100%; min-height: 40px; padding: 8px 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); color: var(--text); }
-button, .button-link { min-height: 36px; display: inline-flex; align-items: center; justify-content: center; padding: 6px 12px; border: 1px solid var(--primary); border-radius: var(--radius); background: var(--primary); color: var(--on-primary); font-weight: 600; text-decoration: none; cursor: pointer; }
-button:hover:not(:disabled), .button-link:hover { background: var(--primary-hover); }
-button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
-button:disabled { cursor: default; opacity: .58; }
-.secondary, .danger-secondary { border: 1px solid var(--border); background: transparent; color: var(--text); }
-.danger-secondary { color: var(--danger); border-color: var(--danger); }
-.danger { background: var(--danger); color: var(--background); }
+.settings-page { display: grid; gap: 1.25rem; }
+.settings-page > section { padding: 0; }
+.settings-page > section + section { padding: 0; border: 0; }
+.supporting { color: var(--muted); font-size: .85rem; }
+form.card { display: grid; gap: 1rem; }
+.card > button, .card > .button-link { justify-self: start; }
+label:not(.switch-row) { display: grid; gap: .35rem; font-weight: 650; }
+.device { display: grid; gap: 5px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
 .status-card h2 { font-size: 1.1rem; }
 dl { display: grid; gap: 12px; margin: 16px 0; }
 dl div { display: grid; grid-template-columns: 150px 1fr; gap: 16px; }
@@ -82,13 +26,12 @@ dt { color: var(--muted); }
 dd { margin: 0; overflow-wrap: anywhere; }
 .summary { color: var(--muted); }
 .device-list, .compact-list { display: grid; gap: 10px; margin-top: 16px; }
-.device { display: grid; gap: 5px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
 .device-meta { color: var(--muted); font-size: .85rem; }
 /* A device whose access lapsed looked identical to an authorized one; the only difference
    was the words "needs access renewed" inside the same grey meta line. */
 .device.access-expired { border-color: color-mix(in srgb, var(--danger) 38%, var(--border)); }
 .device.access-expired .device-meta { color: var(--danger); }
-.empty { padding: 20px; border: 1px dashed var(--border); border-radius: 12px; color: var(--muted); text-align: center; }
+.empty { padding: 20px; border: 1px dashed var(--border-strong); border-radius: var(--radius-lg); color: var(--muted); text-align: center; }
 .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 24px; cursor: pointer; }
 .switch-row span { display: grid; gap: 5px; }
 .switch-row small { color: var(--muted); line-height: 1.4; }
@@ -114,9 +57,9 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .section-actions { display: flex; gap: 8px; flex: none; padding-top: 4px; }
 .section-actions button { min-height: 32px; padding: 0 12px; font-size: .85rem; }
 .section-heading p { margin: 0; color: var(--muted); }
-.rules { display: grid; margin: 20px 0 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); overflow: hidden; }
+.rules { display: grid; margin: 20px 0 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); overflow: hidden; }
 .rules:empty { display: none; }
-.rule { display: grid; gap: 12px; padding: 18px; }
+.rule { display: grid; gap: 12px; padding: 1rem; }
 .rule + .rule { border-top: 1px solid var(--border); }
 .rule-title { margin: 0; font-size: 1rem; font-weight: 600; }
 /* The move and remove buttons belong to the rule body, not to the card: aligning them with the
@@ -128,29 +71,28 @@ dd { margin: 0; overflow-wrap: anywhere; }
 /* "Needs a reply" hides the action text field without giving up its column: removing it from the
    grid slid the application picker left and pulled that rule's buttons out of the shared column. */
 .title-field.field-inert { visibility: hidden; }
-.rule-fields select { width: 100%; min-height: 44px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--background); color: var(--text); }
+.rule-fields select { width: 100%; min-height: 40px; margin: 0; padding: .65rem .75rem; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); color: var(--text); }
 .rule-fields input[aria-invalid="true"] { border-color: var(--danger); }
 .field-error { color: var(--danger); }
 .rule-actions { display: flex; align-items: center; gap: 10px; }
 /* Chevron icons instead of the ↑ / ↓ characters, which rendered as whatever the platform font
    felt like and read as text rather than as a control. The pair is exactly as tall as a field so
    the whole column lines up on both edges. */
-.move-buttons { display: grid; grid-template-rows: 1fr 1fr; height: 44px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.move-buttons { display: grid; grid-template-rows: 1fr 1fr; height: 40px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
 .move-buttons button { display: flex; align-items: center; justify-content: center; width: 34px; height: 100%; min-height: 0; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--muted); }
 .move-buttons button:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 10%, var(--surface)); color: var(--text); }
 .move-buttons button + button { border-top: 1px solid var(--border); }
 .move-icon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
-.remove { min-height: 44px; padding: 8px 14px; }
+.remove { min-height: 36px; padding: 0 14px; }
 #empty-rules { margin: 20px 0 0; }
 .form-actions { display: flex; align-items: center; gap: 16px; margin-top: 28px; }
 #shortcut-status { min-height: 24px; color: var(--muted); }
-dialog { width: min(480px, calc(100% - 32px)); padding: 24px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); color: var(--text); }
-dialog::backdrop { background: rgb(0 0 0 / 45%); }
+dialog { width: min(480px, calc(100% - 32px)); padding: 24px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); color: var(--text); }
+dialog::backdrop { background: rgb(22 32 43 / 45%); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
-[hidden] { display: none !important; }
 
 @media (max-width: 760px) {
-  .top-bar { padding-inline: 16px; }
+  .topbar { padding-inline: 16px; }
   .layout { grid-template-columns: 1fr; width: min(100% - 32px, 760px); padding-top: 18px; }
   nav { position: static; grid-template-columns: repeat(5, max-content); overflow-x: auto; padding-bottom: 4px; }
   .settings-page > section { padding-top: 8px; }
@@ -159,7 +101,7 @@ dialog::backdrop { background: rgb(0 0 0 / 45%); }
 }
 
 @media (max-width: 520px) {
-  .top-bar { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .topbar { align-items: flex-start; flex-direction: column; gap: 4px; }
   dl div { grid-template-columns: 1fr; gap: 3px; }
   .dialog-actions { flex-direction: column-reverse; }
   .dialog-actions button { width: 100%; }
