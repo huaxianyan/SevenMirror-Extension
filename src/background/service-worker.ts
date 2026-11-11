@@ -29,7 +29,7 @@ import {
   type MirroredNotificationState,
   type NotificationHistoryEntry,
 } from '../crypto/indexeddb-notification-state-store';
-import { NotificationPresenter } from './notification-presenter';
+import { NotificationPresenter, notificationMediaDataUrl } from './notification-presenter';
 import { NotificationButtonBindingStore } from './notification-button-binding-store';
 import { NotificationShortcutPreferencesStore } from './notification-shortcuts';
 import { ShortcutSyncStore, WrongShortcutPassphraseError } from './shortcut-sync';
@@ -441,7 +441,7 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
     case 'get-popup-history':
       void getPopupHistory().then(
         (result) => sendResponse(result),
-        () => sendResponse({ history: [], keepReadHistory: true }),
+        () => sendResponse({ history: [], keepReadHistory: true, icons: {} }),
       );
       return true;
 
@@ -927,6 +927,9 @@ function presentationSummary(
 async function refreshNotificationPresentation(): Promise<void> {
   const states = await notificationStateStore.listVisible();
   for (const state of states) {
+    // A row the user already opened was closed on purpose; re-presenting it here would bring the
+    // toast back the next time any presentation preference changes.
+    if (state.viewedRevision === state.revision) continue;
     await notificationPresenter.presentState(state, await resolvePresentationSourceName(state));
   }
   await updateToolbarBadge();
@@ -999,6 +1002,7 @@ async function getPopupNotifications(): Promise<{
 async function markNotificationsViewed(message: Record<string, unknown>): Promise<void> {
   if (!Array.isArray(message.notifications) || message.notifications.length > 1_000) return;
   const entries: Array<{ tuple: string; revision: string }> = [];
+  const opened: MirroredNotificationState[] = [];
   for (const value of message.notifications) {
     if (typeof value !== 'object' || value === null ||
         !('chromeNotificationId' in value) || !('revision' in value) ||
@@ -1009,10 +1013,39 @@ async function markNotificationsViewed(message: Record<string, unknown>): Promis
     );
     if (state !== undefined && state.revision === value.revision) {
       entries.push({ tuple: state.tuple, revision: state.revision });
+      opened.push(state);
     }
   }
   await notificationStateStore.markViewed(entries);
+  // Opening a row is a local read, not the phone-side clear action, so the mirror notification is
+  // closed without reporting anything upstream: leaving it there meant the row already read as
+  // history while the toast still sat in the corner.
+  await dismissMirroredNotifications(
+    opened.map((state) => state.chromeNotificationId),
+    'opened-in-popup',
+  );
   await updateToolbarBadge();
+}
+
+/**
+ * Closes mirrored notifications the user has already seen, without turning that into a user
+ * dismissal upstream. `chrome.notifications.clear` reports whether anything was actually closed;
+ * when it was not, the marker has to be dropped again or the next genuine close would be read as
+ * a programmatic one.
+ */
+async function dismissMirroredNotifications(
+  notificationIds: readonly string[],
+  reason: string,
+): Promise<void> {
+  for (const notificationId of notificationIds) {
+    await markProgrammaticClose(notificationId, reason);
+    await new Promise<void>((resolve) => {
+      chrome.notifications.clear(notificationId, (cleared) => {
+        if (!cleared) void consumeProgrammaticCloseMarker(notificationId);
+        resolve();
+      });
+    });
+  }
 }
 
 /**
@@ -1021,15 +1054,19 @@ async function markNotificationsViewed(message: Record<string, unknown>): Promis
  * up to a couple of hundred records.
  */
 async function getPopupHistory(): Promise<{
-  history: Array<NotificationHistoryEntry & { sourceName: string }>;
+  history: Array<Omit<NotificationHistoryEntry, 'appIcon'> & {
+    sourceName: string;
+    iconKey?: string;
+  }>;
   keepReadHistory: boolean;
+  icons: Record<string, string>;
 }> {
   const [credential, preferences] = await Promise.all([
     credentialStore.load(),
     notificationPresentationPreferencesStore.load(),
   ]);
   const keepReadHistory = preferences.keepReadHistory;
-  if (credential === undefined) return { history: [], keepReadHistory };
+  if (credential === undefined) return { history: [], keepReadHistory, icons: {} };
   await notificationStateStore.pruneHistory(HISTORY_LIMIT, keepReadHistory);
   const entries = await notificationStateStore.listHistory(HISTORY_LIMIT);
   const sourceNames = new Map<string, string | undefined>();
@@ -1042,16 +1079,40 @@ async function getPopupHistory(): Promise<{
       Date.now(),
     ));
   }
-  const history = entries.flatMap((entry) => {
+  // Icons repeat across the notifications of one application, and a record may hold up to 128 KiB
+  // of them, so the list carries one copy per distinct icon instead of one per row.
+  const icons: Record<string, string> = {};
+  const history = [];
+  for (const entry of entries) {
     const sourceName = sourceNames.get(entry.sourceKey);
-    return sourceName === undefined ? [] : [{ ...entry, sourceName }];
-  });
-  return { history, keepReadHistory };
+    if (sourceName === undefined) continue;
+    const { appIcon, ...rest } = entry;
+    let iconKey: string | undefined;
+    if (appIcon !== undefined) {
+      const key = toHex(appIcon.contentSha256);
+      if (icons[key] === undefined) {
+        const dataUrl = await notificationMediaDataUrl(appIcon);
+        if (dataUrl !== undefined) icons[key] = dataUrl;
+      }
+      if (icons[key] !== undefined) iconKey = key;
+    }
+    history.push({ ...rest, sourceName, ...(iconKey === undefined ? {} : { iconKey }) });
+  }
+  return { history, keepReadHistory, icons };
 }
 
 async function markAllNotificationsRead(): Promise<number> {
+  const unread = (await notificationStateStore.listVisible()).filter(
+    (state) => state.viewedRevision !== state.revision,
+  );
   const marked = await notificationStateStore.markAllViewed();
-  if (marked > 0) await updateToolbarBadge();
+  if (marked > 0) {
+    await dismissMirroredNotifications(
+      unread.map((state) => state.chromeNotificationId),
+      'marked-all-read',
+    );
+    await updateToolbarBadge();
+  }
   return marked;
 }
 

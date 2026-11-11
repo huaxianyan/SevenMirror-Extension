@@ -1,4 +1,5 @@
 import 'fake-indexeddb/auto';
+import { sha256 } from '@noble/hashes/sha256';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   createNotificationRemovedPayload,
@@ -7,6 +8,7 @@ import {
   encodeEncryptedPayloadV1,
 } from '../protocol/encrypted-payload';
 import type { NotificationUpsert } from '../protocol/generated/notification/v1/payload_pb';
+import { NotificationMediaMimeType } from '../protocol/generated/notification/v1/payload_pb';
 import { IndexedDbNotificationStateStore } from './indexeddb-notification-state-store';
 
 const databaseNames = new Set<string>();
@@ -139,6 +141,35 @@ describe('Notification history', () => {
     expect((await store.listHistory(200)).filter((entry) => !entry.read)).toEqual([]);
   });
 
+  it('keeps the text and icon of a notification the phone already cleared', async () => {
+    const databaseName = `history-removed-${Date.now()}-${Math.random()}`;
+    databaseNames.add(databaseName);
+    let now = 7_000;
+    const store = new IndexedDbNotificationStateStore(databaseName, () => now);
+    const sourceDeviceId = new Uint8Array(16).fill(3);
+    const iconBytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+    const appIcon: NonNullable<NotificationUpsert['appIcon']> = {
+      $typeName: 'notification.mirroring.v1.NotificationMedia',
+      encodedBytes: iconBytes,
+      mimeType: NotificationMediaMimeType.PNG,
+      width: 1,
+      height: 1,
+      contentSha256: sha256(iconBytes),
+    };
+
+    const visible = upsert(1n, 'Dinner tonight?', { notificationId: 'a', appIcon });
+    await store.reconcileUpsert(sourceDeviceId, visible.value, visible.canonical);
+
+    now = 8_000;
+    await remove(store, sourceDeviceId, 'a', 2n);
+
+    const [entry] = await store.listHistory(200);
+    expect(entry).toMatchObject({ title: 'Title', body: 'Dinner tonight?', read: true, live: false });
+    expect(entry?.appIcon?.contentSha256).toEqual(appIcon.contentSha256);
+    // A removal states when the mirror ended, not when the notification arrived.
+    expect(entry?.receivedAtUnixMs).toBe(7_000);
+  });
+
   it('keeps only the newest 200 records', async () => {
     const databaseName = `history-cap-${Date.now()}-${Math.random()}`;
     databaseNames.add(databaseName);
@@ -229,6 +260,7 @@ function upsert(revision: bigint, body: string, overrides: {
   notificationId?: string;
   sourceApplicationId?: string;
   sourceApplicationName?: string;
+  appIcon?: NotificationUpsert['appIcon'];
 } = {}): {
   value: NotificationUpsert;
   canonical: Uint8Array;
@@ -240,6 +272,7 @@ function upsert(revision: bigint, body: string, overrides: {
     sourceApplicationName: overrides.sourceApplicationName ?? 'Example',
     title: 'Title',
     body,
+    ...(overrides.appIcon === undefined ? {} : { appIcon: overrides.appIcon }),
     containsContentImage: false,
     actions: [],
   });

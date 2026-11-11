@@ -66,6 +66,7 @@ export interface NotificationHistoryEntry {
   title?: string;
   body?: string;
   applicationName?: string;
+  appIcon?: MirroredNotificationMedia;
   receivedAtUnixMs: number;
   read: boolean;
   live: boolean;
@@ -557,6 +558,19 @@ export class IndexedDbNotificationStateStore {
             return { disposition: 'stale', state: copyState(existing) };
           }
           proposed.viewedRevision = existing.viewedRevision;
+          // A removal is the only event that carries no content of its own, so replacing the whole
+          // record with it erased the text the history view has to keep showing: the phone cleared
+          // the notification, but the local record is what the list and the search read.
+          if (proposed.phase === 'removed') {
+            if (existing.title !== undefined) proposed.title = existing.title;
+            if (existing.body !== undefined) proposed.body = existing.body;
+            if (existing.actions !== undefined) proposed.actions = existing.actions;
+            if (existing.appIcon !== undefined) proposed.appIcon = copyMedia(existing.appIcon);
+            if (existing.avatar !== undefined) proposed.avatar = copyMedia(existing.avatar);
+            if (existing.receivedAtUnixMs !== undefined) {
+              proposed.receivedAtUnixMs = existing.receivedAtUnixMs;
+            }
+          }
           // A removal carries no application identity of its own, but the shortcut rules are chosen
           // by application and outlive the notification they were picked from. Losing the identity
           // here emptied the application picker the next time the settings were opened.
@@ -825,6 +839,7 @@ function toHistoryEntry(state: MirroredNotificationState): NotificationHistoryEn
     ...(state.sourceApplicationName === undefined
       ? {}
       : { applicationName: state.sourceApplicationName }),
+    ...(state.appIcon === undefined ? {} : { appIcon: copyMedia(state.appIcon) }),
     receivedAtUnixMs: state.receivedAtUnixMs ?? 0,
     // A notification the phone already cleared cannot be opened any more, so it never counts as
     // unread: the unread list only holds rows the user can still act on.

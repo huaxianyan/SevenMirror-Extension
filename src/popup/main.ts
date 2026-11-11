@@ -24,6 +24,7 @@ interface HistoryEntry {
   title?: string;
   body?: string;
   applicationName?: string;
+  iconKey?: string;
   receivedAtUnixMs: number;
   read: boolean;
   live: boolean;
@@ -32,6 +33,7 @@ interface HistoryEntry {
 interface HistoryResponse {
   history: HistoryEntry[];
   keepReadHistory: boolean;
+  icons: Record<string, string>;
 }
 
 type Tab = 'unread' | 'history';
@@ -55,6 +57,7 @@ const tabbar = requireElement<HTMLElement>('tabbar');
 const tabHistory = requireElement<HTMLButtonElement>('tab-history');
 
 let live: PopupResponse = { state: 'connecting', notifications: [] };
+let icons: Record<string, string> = {};
 let history: HistoryEntry[] = [];
 let tab: Tab = 'unread';
 let query = '';
@@ -91,6 +94,7 @@ async function reload(): Promise<void> {
   ]);
   live = popup;
   history = stored.history;
+  icons = stored.icons ?? {};
   connectionStatus.textContent = connectionStateLabel(live.state);
   renderList();
 }
@@ -189,7 +193,18 @@ function renderEntry(entry: HistoryEntry): HTMLElement {
 
   const app = document.createElement('span');
   app.className = 'app';
-  app.textContent = appInitial(entry);
+  const iconUrl = entry.iconKey === undefined ? undefined : icons[entry.iconKey];
+  if (iconUrl === undefined) {
+    app.textContent = appInitial(entry);
+  } else {
+    // The application icon comes with the notification; the letter stays as the fallback for
+    // notifications that never carried one.
+    const image = document.createElement('img');
+    image.className = 'app-icon';
+    image.src = iconUrl;
+    image.alt = '';
+    app.append(image);
+  }
 
   const body = document.createElement('div');
   body.className = 'card-body';
