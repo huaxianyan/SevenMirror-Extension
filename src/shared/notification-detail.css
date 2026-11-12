@@ -1,5 +1,5 @@
-/* Detail sheet shared by the popup and the interaction window. Sizes follow the console:
-   title 18, body 14, meta 12, controls 36 tall with 6px corners. */
+/* Detail sheet shared by the popup and the interaction window. Type follows the theme's scale and
+   the buttons are the theme's own: this file only lays them out. */
 .notification-detail { display: grid; gap: 10px; }
 
 .notification-detail-meta,
@@ -7,13 +7,13 @@
 .notification-detail-hint {
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.75rem;
   overflow-wrap: anywhere;
 }
 
 .notification-detail-title {
   margin: 0;
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 600;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -21,7 +21,7 @@
 
 .notification-detail-body {
   margin: 0;
-  font-size: 14px;
+  font-size: 0.875rem;
   white-space: pre-wrap;
   line-height: 1.55;
   overflow-wrap: anywhere;
@@ -30,23 +30,6 @@
 .notification-detail-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .notification-detail-actions[hidden] { display: none; }
 
-.notification-detail button {
-  min-height: 36px;
-  padding: 0 12px;
-  border: 1px solid var(--primary);
-  border-radius: 6px;
-  background: var(--primary);
-  color: var(--on-primary, #fff);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  text-align: center;
-  cursor: pointer;
-}
-.notification-detail button:hover:not(:disabled) { background: var(--primary-hover); border-color: var(--primary-hover); }
-.notification-detail button:focus-visible,
-.notification-detail textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.notification-detail button:disabled { cursor: default; opacity: .58; }
 .notification-detail button[hidden] { display: none; }
 
 .notification-detail-reply {
@@ -55,21 +38,21 @@
   gap: 8px;
   padding: 10px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
 }
 .notification-detail-reply[hidden] { display: none; }
-.notification-detail-reply label { display: grid; gap: 6px; font-size: 13px; font-weight: 600; }
+.notification-detail-reply label { display: grid; gap: 6px; font-size: 0.8125rem; font-weight: 600; }
 .notification-detail-reply textarea {
   width: 100%;
   min-height: 72px;
   resize: vertical;
   padding: 8px 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius);
   background: var(--background);
   color: var(--text);
   font: inherit;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 400;
   line-height: 1.45;
 }

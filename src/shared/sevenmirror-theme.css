@@ -65,7 +65,7 @@ button, .button-link {
   text-decoration: none;
 }
 button:hover:not(:disabled), .button-link:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
-button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 button:disabled { cursor: default; opacity: .58; }
 button.secondary { background: var(--surface-subtle); color: var(--text); border-color: var(--border-strong); }
 button.secondary:hover:not(:disabled) { background: var(--surface-subtle); border-color: var(--primary); }

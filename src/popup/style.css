@@ -50,11 +50,11 @@ h1, h2, p { margin: 0; }
   background: var(--surface);
   border-bottom: 1px solid var(--line);
 }
-.popup-header h1 { display: flex; align-items: center; gap: .55rem; font-size: 1.125rem; font-weight: 700; letter-spacing: normal; }
+.popup-header h1 { display: flex; align-items: center; gap: .55rem; font-size: 1.125rem; font-weight: 600; letter-spacing: normal; }
 .header-actions { display: flex; align-items: center; gap: 0.5rem; min-height: 36px; }
 .icon-button {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 32px; height: 32px; padding: 0; min-height: 0;
+  width: 36px; height: 36px; padding: 0; min-height: 0;
   border: 1px solid transparent; border-radius: var(--radius-lg);
   background: transparent; color: var(--ink-muted); cursor: pointer;
 }
@@ -98,14 +98,18 @@ h1, h2, p { margin: 0; }
   border: 0; outline: 0; background: transparent;
   color: var(--ink); font: inherit;
 }
+/* The input drops the browser outline to keep the field one rounded shape, so the field itself takes
+   the theme's ring while it holds focus. */
+.search:focus-within { border-color: var(--focus);
+  outline: 3px solid var(--focus); outline-offset: 1px; }
 .search input::placeholder { color: var(--ink-muted); }
 .search .clear {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 20px; height: 20px; padding: 0; min-height: 0;
+  width: 24px; height: 24px; padding: 0; min-height: 0;
   border: 0; border-radius: 50%; background: var(--line);
   color: var(--ink-muted); cursor: pointer;
 }
-.search .clear svg { width: 12px; height: 12px; }
+.search .clear svg { width: 14px; height: 14px; }
 .search .clear[hidden] { display: none; }
 
 .result-line { padding: 0.5rem 1rem 0; color: var(--ink-muted); font-size: 0.75rem; }
@@ -134,14 +138,14 @@ h1, h2, p { margin: 0; }
 .card:hover:enabled { background: var(--card-hover); border-color: var(--line-strong); }
 .card:disabled { cursor: default; opacity: 0.92; }
 .card.unread { border-color: var(--line-strong); }
-.card.unread .title { font-weight: 700; }
+.card.unread .title { font-weight: 600; }
 
 .app {
   width: 30px; height: 30px; border-radius: var(--radius);
   display: inline-flex; align-items: center; justify-content: center;
   background: var(--brand-tint); color: var(--action);
   overflow: hidden;
-  font-size: 0.75rem; font-weight: 650;
+  font-size: 0.75rem; font-weight: 600;
 }
 /* The tint is a placeholder for the letter fallback. Behind real artwork it showed as a plate
    around the icon, so it is only painted when there is no image. */
@@ -175,7 +179,7 @@ h1, h2, p { margin: 0; }
 .detail-view { padding: 0.75rem 1rem 1rem; }
 .back-button {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 32px; height: 32px; padding: 0; margin-bottom: 0.5rem;
+  width: 36px; height: 36px; padding: 0; margin-bottom: 0.5rem;
   border: 1px solid transparent; border-radius: var(--radius-lg);
   background: transparent; color: var(--ink-muted); cursor: pointer;
 }
@@ -205,4 +209,3 @@ h1, h2, p { margin: 0; }
 .view-option:not([aria-pressed="true"]):hover:not(:disabled) { color: var(--ink); }
 .view-option[aria-pressed="true"]:hover:not(:disabled) { background: var(--surface); border-color: transparent; }
 
-:focus-visible { outline: 2px solid var(--action); outline-offset: 2px; }
