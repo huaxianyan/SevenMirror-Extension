@@ -270,14 +270,19 @@ function renderEmpty(): void {
 function prependDetailIcon(entry: HistoryEntry): void {
   const iconUrl = entry.iconKey === undefined ? undefined : icons[entry.iconKey];
   if (iconUrl === undefined) return;
-  const header = document.createElement('div');
-  header.className = 'detail-app';
   const image = document.createElement('img');
   image.className = 'app-icon';
   image.src = iconUrl;
   image.alt = '';
-  header.append(image);
-  detail.prepend(header);
+  // The sheet reads as one notification: icon on the left, and the application line, title and body
+  // stacked beside it. Left as separate blocks the icon drifted away from the text it belongs to.
+  const column = document.createElement('div');
+  column.className = 'detail-column';
+  for (const node of Array.from(detail.children).slice(0, 3)) column.append(node);
+  const head = document.createElement('div');
+  head.className = 'detail-head';
+  head.append(image, column);
+  detail.prepend(head);
 }
 
 function openDetail(entry: HistoryEntry): void {
