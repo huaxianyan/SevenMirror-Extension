@@ -690,5 +690,11 @@
   },
   "optionsCustomCssSaved": {
     "message": "已保存"
+  },
+  "optionsCustomCssRestore": {
+    "message": "恢复默认"
+  },
+  "optionsCustomCssClear": {
+    "message": "清空"
   }
 }

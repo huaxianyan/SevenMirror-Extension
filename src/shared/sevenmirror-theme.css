@@ -70,6 +70,8 @@ button:disabled { cursor: default; opacity: .58; }
 button.secondary { background: var(--surface-subtle); color: var(--text); border-color: var(--border-strong); }
 button.secondary:hover:not(:disabled) { background: var(--surface-subtle); border-color: var(--primary); }
 button.danger-secondary { background: transparent; color: var(--danger); border-color: var(--danger); }
+/* A destructive action turns into its own colour when armed, not into the primary blue. */
+button.danger-secondary:hover:not(:disabled) { background: var(--danger); color: var(--surface); border-color: var(--danger); }
 button.danger { background: var(--danger); border-color: var(--danger); color: var(--surface); }
 
 input, select {

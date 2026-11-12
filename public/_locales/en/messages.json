@@ -690,5 +690,11 @@
   },
   "optionsCustomCssSaved": {
     "message": "Saved"
+  },
+  "optionsCustomCssRestore": {
+    "message": "Restore default"
+  },
+  "optionsCustomCssClear": {
+    "message": "Clear"
   }
 }

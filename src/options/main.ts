@@ -7,6 +7,7 @@ import {
   normalizeServerOrigin,
 } from '../transport/indexeddb-transport-credential-store';
 import { applyCustomCss, loadCustomCss, saveCustomCss } from '../shared/custom-css';
+import { DEFAULT_CUSTOM_CSS } from '../shared/default-custom-css';
 import { localizeDocument, message } from '../shared/i18n';
 import { PREVIEW_NOTIFICATION_SOUND } from '../shared/notification-sound';
 import { CONNECTION_STATE_STORAGE_KEY } from '../shared/status';
@@ -459,7 +460,16 @@ const saveCustomCssButton = requireElement<HTMLButtonElement>('save-custom-css')
 
 void applyCustomCss();
 void loadCustomCss().then((css) => {
-  customCssInput.value = css;
+  // Nothing saved yet means the default sheet, not an empty box.
+  customCssInput.value = css.length === 0 ? DEFAULT_CUSTOM_CSS : css;
+});
+
+// Both buttons only change the box; the sheet goes live when it is saved.
+requireElement<HTMLButtonElement>('restore-custom-css').addEventListener('click', () => {
+  customCssInput.value = DEFAULT_CUSTOM_CSS;
+});
+requireElement<HTMLButtonElement>('clear-custom-css').addEventListener('click', () => {
+  customCssInput.value = '';
 });
 
 saveCustomCssButton.addEventListener('click', () => {
