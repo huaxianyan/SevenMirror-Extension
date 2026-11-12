@@ -143,6 +143,9 @@ h1, h2, p { margin: 0; }
   overflow: hidden;
   font-size: 0.75rem; font-weight: 650;
 }
+/* The tint is a placeholder for the letter fallback. Behind real artwork it showed as a plate
+   around the icon, so it is only painted when there is no image. */
+.app:has(.app-icon) { background: transparent; }
 .app-icon { width: 100%; height: 100%; object-fit: cover; }
 .card-body { min-width: 0; }
 .title { font-size: 0.875rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
