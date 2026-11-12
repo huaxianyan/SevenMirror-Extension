@@ -73,6 +73,8 @@ dd { margin: 0; overflow-wrap: anywhere; }
    field and button rules instead of a second stylesheet that could drift from them. */
 #shortcut-form { display: grid; }
 .rules-section { margin-top: 1.75rem; }
+.rules-section .section-heading { margin-bottom: .75rem; }
+.rules-section .form-actions { margin-top: 1rem; }
 .sync-section { margin-top: 2rem; }
 .sync-section .card { display: grid; gap: .75rem; }
 .sync-section .card p { margin: 0; }

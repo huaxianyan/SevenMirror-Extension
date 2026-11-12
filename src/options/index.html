@@ -39,7 +39,7 @@
 
           <form id="registration-form" class="card" autocomplete="off" hidden>
             <h2 data-i18n="optionsJoinTitle">Join your private service</h2>
-            <p class="supporting" data-i18n="optionsJoinBody">Generate a one-time Chrome joining code in the SevenMirror server administration page.</p>
+            <p class="supporting" data-i18n="optionsJoinBody">Generate a one-time join code in the SevenMirror server administration page.</p>
             <label>
               <span data-i18n="serverOrigin">Server address</span>
               <input id="server-origin" name="server-origin" type="url"
@@ -47,7 +47,7 @@
                      required spellcheck="false" />
             </label>
             <label>
-              <span data-i18n="oneTimePairingCode">One-time joining code</span>
+              <span data-i18n="oneTimePairingCode">One-time join code</span>
               <input id="pairing-code" name="pairing-code" type="password"
                      minlength="32" maxlength="32" required autocomplete="new-password" />
             </label>
@@ -66,7 +66,7 @@
           <div id="device-counts" class="summary"></div>
           <div id="device-list" class="device-list"></div>
           <p id="devices-empty" class="empty" data-i18n="optionsDevicesUnavailable">Device information will be available after approval.</p>
-          <p id="device-admin-boundary" class="supporting" data-i18n="optionsDeviceAdminBoundary">Approve, remove, or reject devices in the server administration page.</p>
+          <p id="device-admin-boundary" class="supporting" data-i18n="optionsDeviceAdminBoundary">Approving and removing devices happens in the server's admin pages.</p>
         </section>
         </div>
 
@@ -102,13 +102,13 @@
               <input id="silent-notifications" type="checkbox" role="switch" />
             </label>
             <label class="switch-row">
-              <span><strong data-i18n="optionsKeepHistoryTitle">Keep notification history</strong><small data-i18n="optionsKeepHistoryBody">Keep read notifications so the Popup can search them. Turning this off drops notifications your phone already cleared.</small></span>
+              <span><strong data-i18n="optionsKeepHistoryTitle">Keep notification history</strong><small data-i18n="optionsKeepHistoryBody">With this off, notifications your phone already cleared are not kept.</small></span>
               <input id="keep-history" type="checkbox" role="switch" />
             </label>
           </div>
           <div class="card">
             <button id="preview-notification-sound" type="button" data-i18n="optionsPreviewSound">Preview notification sound</button>
-            <p class="supporting" data-i18n="optionsSoundBody">Sound uses the browser's audio volume. Turn on silent notifications when you need quiet.</p>
+            <p class="supporting" data-i18n="optionsSoundBody">Volume follows the browser.</p>
           </div>
           <a class="button-link" href="#shortcut-settings" data-i18n="openShortcutSettings">Notification shortcut settings</a>
           <p id="notification-settings-status" role="status" aria-live="polite"></p>
@@ -127,29 +127,29 @@
               </label>
             </div>
 
-            <section class="rules-section" aria-labelledby="rules-title">
+            <section class="rules-section card" aria-labelledby="rules-title">
               <div class="section-heading">
                 <div>
                   <h2 id="rules-title" data-i18n="shortcutPriorityRules">Priority rules</h2>
-                  <p data-i18n="shortcutPriorityDescription">Rules are checked from top to bottom. Use the move buttons to change priority.</p>
+                  <p data-i18n="shortcutPriorityDescription">Rules are checked from top to bottom.</p>
                 </div>
                 <button id="add-rule" type="button" disabled data-i18n="shortcutAddRule">Add rule</button>
               </div>
               <ol id="rules" class="rules"></ol>
               <p id="empty-rules" class="empty" data-i18n="shortcutNoRules">No priority rules. Other actions remain available after opening the notification.</p>
+              <footer class="form-actions">
+                <button id="save" type="submit" disabled data-i18n="shortcutSave">Save changes</button>
+                <p id="shortcut-status" role="status" aria-live="polite"></p>
+              </footer>
             </section>
 
-            <footer class="form-actions">
-              <button id="save" type="submit" disabled data-i18n="shortcutSave">Save changes</button>
-              <p id="shortcut-status" role="status" aria-live="polite"></p>
-            </footer>
           </form>
 
           <section class="sync-section" aria-labelledby="shortcut-sync-title">
             <div class="section-heading">
               <div>
                 <h2 id="shortcut-sync-title" data-i18n="shortcutSyncTitle">Sync across browsers</h2>
-                <p data-i18n="shortcutSyncDescription">Keep the same rules in every browser of your workspace. Saving here uploads them, and this browser adopts changes made elsewhere when it starts and periodically while it runs. The server stores them sealed and never sees the keywords.</p>
+                <p data-i18n="shortcutSyncDescription">Browsers in the same private service share one set of rules. They are encrypted before upload, so the server cannot read the keywords.</p>
               </div>
               <div class="section-actions">
                 <button id="shortcut-sync-enable" type="button" disabled data-i18n="shortcutSyncEnable">Turn on synchronization</button>
@@ -161,7 +161,7 @@
               <div id="shortcut-sync-enable-fields" hidden>
                 <label for="shortcut-sync-passphrase" data-i18n="shortcutSyncPassphrase">Synchronization passphrase</label>
                 <input id="shortcut-sync-passphrase" type="password" autocomplete="new-password" />
-                <p class="supporting" data-i18n="shortcutSyncPassphraseHint">Use the same passphrase in every browser that should share these rules. The server stores them encrypted, so it cannot read the keywords.</p>
+                <p class="supporting" data-i18n="shortcutSyncPassphraseHint">Enter the same passphrase in every browser that should share these rules.</p>
               </div>
               <div id="shortcut-sync-actions" hidden>
                 <button id="shortcut-sync-disable" class="danger-secondary" type="button" data-i18n="shortcutSyncDisable">Turn off synchronization</button>
@@ -177,9 +177,9 @@
           <h1 id="data-privacy-title" data-i18n="optionsDataPrivacy">Data and privacy</h1>
           <div class="card">
             <h2 data-i18n="optionsLocalDataTitle">Local notification data</h2>
-            <p class="supporting" data-i18n="optionsLocalDataBody">Current mirrored notifications are stored only in this Chrome profile.</p>
+            <p class="supporting" data-i18n="optionsLocalDataBody">Mirrored notifications are stored in this browser only.</p>
             <button id="clear-local-notifications" class="danger-secondary" type="button" data-i18n="optionsClearLocalNotifications">Clear local notification list</button>
-            <p class="supporting" data-i18n="optionsLocalDataBoundary">Clearing affects only this Chrome device. Notifications on your phone and authorized devices are untouched.</p>
+            <p class="supporting" data-i18n="optionsLocalDataBoundary">Clearing affects this browser only; notifications on your phone and the authorised devices are untouched.</p>
           </div>
         </section>
         </div>
@@ -199,8 +199,8 @@
 
     <dialog id="re-enroll-confirmation">
       <form method="dialog">
-        <h2 data-i18n="optionsReEnrollConfirmTitle">Register this Chrome device again?</h2>
-        <p data-i18n="optionsReEnrollConfirmBody">Its previous access has been removed. SevenMirror will clear the old workspace access from this Chrome profile, then return to setup.</p>
+        <h2 data-i18n="optionsReEnrollConfirmTitle">Register this browser again?</h2>
+        <p data-i18n="optionsReEnrollConfirmBody">Its previous access has been removed. SevenMirror will clear the old access data from this browser, then return to setup.</p>
         <div class="dialog-actions">
           <button value="cancel" class="secondary" data-i18n="cancel">Cancel</button>
           <button id="confirm-re-enroll" value="confirm" class="danger" data-i18n="optionsReEnrollConfirmAction">Clear old access</button>
@@ -211,7 +211,7 @@
     <dialog id="clear-confirmation">
       <form method="dialog">
         <h2 data-i18n="optionsClearConfirmTitle">Clear the local notification list?</h2>
-        <p data-i18n="optionsClearConfirmBody">This removes notifications saved in this Chrome profile. New notifications can arrive again.</p>
+        <p data-i18n="optionsClearConfirmBody">This removes the notifications saved in this browser. New notifications will still arrive.</p>
         <div class="dialog-actions">
           <button value="cancel" class="secondary" data-i18n="cancel">Cancel</button>
           <button id="confirm-clear" value="confirm" class="danger" data-i18n="optionsClearConfirmAction">Clear local list</button>
