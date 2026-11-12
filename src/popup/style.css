@@ -147,6 +147,9 @@ h1, h2, p { margin: 0; }
    around the icon, so it is only painted when there is no image. */
 .app:has(.app-icon) { background: transparent; }
 .app-icon { width: 100%; height: 100%; object-fit: cover; }
+/* The detail sheet carries the same icon as the row it was opened from. */
+.detail-app { display: flex; align-items: center; margin-bottom: 0.75rem; }
+.detail-app .app-icon { width: 36px; height: 36px; border-radius: var(--radius); object-fit: cover; }
 .card-body { min-width: 0; }
 .title { font-size: 0.875rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .preview {

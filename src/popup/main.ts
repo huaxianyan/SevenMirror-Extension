@@ -263,6 +263,23 @@ function renderEmpty(): void {
   emptyBody.textContent = message('popupUnreadEmptyBody');
 }
 
+/**
+ * The detail sheet opens on the same icon the row showed, so a notification read in the panel does
+ * not look like it came from nowhere.
+ */
+function prependDetailIcon(entry: HistoryEntry): void {
+  const iconUrl = entry.iconKey === undefined ? undefined : icons[entry.iconKey];
+  if (iconUrl === undefined) return;
+  const header = document.createElement('div');
+  header.className = 'detail-app';
+  const image = document.createElement('img');
+  image.className = 'app-icon';
+  image.src = iconUrl;
+  image.alt = '';
+  header.append(image);
+  detail.prepend(header);
+}
+
 function openDetail(entry: HistoryEntry): void {
   const notification = live.notifications.find((candidate) =>
     candidate.chromeNotificationId === entry.chromeNotificationId);
@@ -283,9 +300,11 @@ function openDetail(entry: HistoryEntry): void {
       updatedAtUnixMs: entry.receivedAtUnixMs,
       actions: [],
     }, { readOnly: true, onBack: showList });
+    prependDetailIcon(entry);
     return;
   }
   mountNotificationDetail(detail, notification, { onBack: showList });
+  prependDetailIcon(entry);
   void markViewed(notification);
 }
 
