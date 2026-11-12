@@ -25,12 +25,12 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; width: 400px; }
-/* The header, the search field and the tabs stay put; only the list between them scrolls, so the
-   scrollbar never takes width away from the full-width header. The height is a plain 600px on
-   purpose: a popup sizes itself to its content, and `100vh` resolves to that very content height
-   while Chrome measures it, so any viewport-relative height collapses the panel and the list with
-   it. 600px is also Chrome's own popup ceiling. */
-body { display: flex; flex-direction: column; height: 600px; overflow: hidden; background: var(--bg); color: var(--ink); font-size: 0.875rem; line-height: 1.5; }
+/* The header, the status line and the search row stay put; only the list below them scrolls, so
+   the scrollbar never runs beside the header. `html, body` take the viewport height instead of a
+   fixed 600px: a popup can be shorter than 600 on a small screen, and a body taller than its
+   viewport hands scrolling back to the document — which is exactly how the header scrolled away. */
+html, body { height: 100%; }
+body { display: flex; flex-direction: column; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); font-size: 0.875rem; line-height: 1.5; }
 .popup { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 #list-view, #detail-view { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
 h1, h2, p { margin: 0; }
@@ -117,7 +117,7 @@ h1, h2, p { margin: 0; }
 /* One card per notification: the layering the list needs to stay readable. */
 .card {
   display: grid; grid-template-columns: 30px minmax(0, 1fr) auto;
-  gap: 0.75rem; align-items: start;
+  gap: 0.75rem; align-items: center;
   width: 100%; padding: 0.75rem; margin-bottom: 0.5rem;
   border: 1px solid var(--line); border-radius: var(--radius-lg);
   background: var(--card); color: var(--ink);
@@ -165,26 +165,23 @@ h1, h2, p { margin: 0; }
 .back-button:hover:not(:disabled) { background: var(--tint-hover); color: var(--ink); }
 .back-button-icon { width: 18px; height: 18px; fill: currentColor; }
 
-/* Bottom tabs switch pages inside the popup; settings lives in the header instead. They sit outside
-   the scrolling list, so a long history never hides them. */
-.tabbar[hidden] { display: none; }
-.tabbar {
-  flex: none;
-  margin-top: auto;
-  display: grid; grid-template-columns: 1fr 1fr;
-  border-top: 1px solid var(--line);
-  background: var(--surface);
+/* Unread and history share the search row: a two-part switch on its right. Nothing sits below the
+   list, so a long history can scroll to the very end without hiding a control. */
+.view-toggle {
+  flex: none; display: flex; height: 40px; padding: 2px;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-lg);
+  background: var(--surface-subtle);
 }
-.tab {
-  display: flex; flex-direction: column; align-items: center; gap: 3px;
-  min-height: 56px; padding: 0.5rem 0;
-  border: 0; border-radius: 0; background: transparent;
-  color: var(--ink-muted); font: inherit; font-size: 0.75rem; font-weight: 500; cursor: pointer;
+.view-toggle[hidden] { display: none; }
+.view-option {
+  min-height: 0; padding: 0 0.7rem;
+  border: 0; border-radius: calc(var(--radius-lg) - 2px); background: transparent;
+  color: var(--ink-muted); font: inherit; font-size: 0.75rem; font-weight: 500;
+  cursor: pointer;
 }
-.tab svg { width: 20px; height: 20px; }
-/* Text and icon darken instead of filling the whole tab block. */
-.tab:hover:not(:disabled) { background: transparent; }
-.tab:not([aria-current="page"]):hover:not(:disabled) { color: var(--ink); }
-.tab[aria-current="page"] { color: var(--action); font-weight: 600; }
+/* The selected part fills instead of colouring its text: at this size a tinted label is
+   hard to read. */
+.view-option[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgb(16 24 40 / 12%); }
+.view-option:not([aria-pressed="true"]):hover:not(:disabled) { color: var(--ink); }
 
 :focus-visible { outline: 2px solid var(--action); outline-offset: 2px; }

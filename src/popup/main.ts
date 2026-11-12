@@ -53,8 +53,8 @@ const openOptions = requireElement<HTMLButtonElement>('open-options');
 const markAllRead = requireElement<HTMLButtonElement>('mark-all-read');
 const clearHistory = requireElement<HTMLButtonElement>('clear-history');
 const tabUnread = requireElement<HTMLButtonElement>('tab-unread');
-const tabbar = requireElement<HTMLElement>('tabbar');
 const tabHistory = requireElement<HTMLButtonElement>('tab-history');
+const viewToggle = requireElement<HTMLElement>('tab-unread').parentElement as HTMLElement;
 
 let live: PopupResponse = { state: 'connecting', notifications: [] };
 let icons: Record<string, string> = {};
@@ -64,8 +64,6 @@ let query = '';
 let listScrollTop = 0;
 
 localizeDocument();
-tabUnread.title = message('popupTabUnread');
-tabHistory.title = message('popupTabHistory');
 openOptions.title = message('popupTabSettings');
 
 openOptions.addEventListener('click', () => chrome.runtime.openOptionsPage());
@@ -105,12 +103,12 @@ async function runAction(type: string): Promise<void> {
 }
 
 async function switchTab(next: Tab): Promise<void> {
-  // The tab bar stays on the detail view's sibling level, so switching tabs has to leave that
-  // view first; otherwise the highlight moves while the detail stays on screen.
+  // Switching views has to close the detail first; otherwise the highlight moves while the
+  // detail stays on screen.
   if (!detailView.hidden) showList();
   tab = next;
-  tabUnread.setAttribute('aria-current', next === 'unread' ? 'page' : 'false');
-  tabHistory.setAttribute('aria-current', next === 'history' ? 'page' : 'false');
+  tabUnread.setAttribute('aria-pressed', next === 'unread' ? 'true' : 'false');
+  tabHistory.setAttribute('aria-pressed', next === 'history' ? 'true' : 'false');
   renderList();
 }
 
@@ -256,11 +254,11 @@ function renderEmpty(): void {
 function openDetail(entry: HistoryEntry): void {
   const notification = live.notifications.find((candidate) =>
     candidate.chromeNotificationId === entry.chromeNotificationId);
-  listScrollTop = document.documentElement.scrollTop;
+  listScrollTop = listView.scrollTop;
   detailView.hidden = false;
   listView.hidden = true;
-  tabbar.hidden = true;
-  document.documentElement.scrollTop = 0;
+  viewToggle.hidden = true;
+  detailView.scrollTop = 0;
   if (notification === undefined) {
     // The phone already dropped this one: show what we stored, without reply or dismiss.
     mountNotificationDetail(detail, {
@@ -282,8 +280,8 @@ function openDetail(entry: HistoryEntry): void {
 function showList(): void {
   detailView.hidden = true;
   listView.hidden = false;
-  tabbar.hidden = false;
-  document.documentElement.scrollTop = listScrollTop;
+  viewToggle.hidden = false;
+  listView.scrollTop = listScrollTop;
   void reload();
 }
 

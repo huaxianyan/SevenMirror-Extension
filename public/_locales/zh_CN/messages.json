@@ -592,6 +592,9 @@
   "popupTabHistory": {
     "message": "历史"
   },
+  "popupViewToggle": {
+    "message": "未读与历史"
+  },
   "popupTabSettings": {
     "message": "设置"
   },

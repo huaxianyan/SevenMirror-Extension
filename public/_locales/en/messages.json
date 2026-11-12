@@ -592,6 +592,9 @@
   "popupTabHistory": {
     "message": "History"
   },
+  "popupViewToggle": {
+    "message": "Unread and history"
+  },
   "popupTabSettings": {
     "message": "Settings"
   },
