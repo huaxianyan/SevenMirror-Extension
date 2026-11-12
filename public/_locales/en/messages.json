@@ -678,5 +678,17 @@
   },
   "statusOnline": {
     "message": "Connected"
+  },
+  "optionsCustomCssTitle": {
+    "message": "Custom styles"
+  },
+  "optionsCustomCssBody": {
+    "message": "CSS applied to this extension's pages, for typography the built-in theme does not cover."
+  },
+  "optionsCustomCssSave": {
+    "message": "Save styles"
+  },
+  "optionsCustomCssSaved": {
+    "message": "Saved"
   }
 }

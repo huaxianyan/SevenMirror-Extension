@@ -2,6 +2,7 @@ import { localizeDocument } from '../shared/i18n';
 import { mountNotificationDetail } from '../shared/notification-detail';
 import { MARK_NOTIFICATIONS_VIEWED, openedNotificationReference } from '../shared/viewed-notifications';
 import { interactionWindowPlacement } from '../background/notification-interaction';
+import { applyCustomCss } from '../shared/custom-css';
 import type {
   NotificationInteractionSummary,
   ScreenWorkArea,
@@ -16,6 +17,7 @@ const empty = requireElement<HTMLElement>('empty');
 const status = requireElement<HTMLParagraphElement>('status');
 
 placeInteractionWindow();
+void applyCustomCss();
 localizeDocument();
 void loadNotification();
 

@@ -4,6 +4,7 @@ import { localizeDocument, message } from '../shared/i18n';
 import { mountNotificationDetail } from '../shared/notification-detail';
 import { formatClockTime } from '../shared/time';
 import { MARK_NOTIFICATIONS_VIEWED, notificationsToMarkViewed } from '../shared/viewed-notifications';
+import { applyCustomCss } from '../shared/custom-css';
 
 interface PopupNotification extends NotificationInteractionSummary {
   sourceKey: string;
@@ -75,6 +76,7 @@ function clampPopupHeight(): void {
 }
 
 clampPopupHeight();
+void applyCustomCss();
 localizeDocument();
 openOptions.title = message('popupTabSettings');
 

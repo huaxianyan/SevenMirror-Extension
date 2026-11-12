@@ -181,6 +181,15 @@
             <button id="clear-local-notifications" class="danger-secondary" type="button" data-i18n="optionsClearLocalNotifications">Clear local notification list</button>
             <p class="supporting" data-i18n="optionsLocalDataBoundary">Clearing affects this browser only; notifications on your phone and the authorised devices are untouched.</p>
           </div>
+          <div class="card">
+            <h2 id="custom-css-title" data-i18n="optionsCustomCssTitle">Custom styles</h2>
+            <p class="supporting" data-i18n="optionsCustomCssBody">CSS applied to this extension's pages, for typography the built-in theme does not cover.</p>
+            <textarea id="custom-css-input" class="custom-css-input" spellcheck="false" aria-labelledby="custom-css-title"></textarea>
+            <div class="form-actions">
+              <button id="save-custom-css" type="button" data-i18n="optionsCustomCssSave">Save styles</button>
+              <p id="custom-css-status" class="supporting" data-i18n="optionsCustomCssSaved" hidden></p>
+            </div>
+          </div>
         </section>
         </div>
 

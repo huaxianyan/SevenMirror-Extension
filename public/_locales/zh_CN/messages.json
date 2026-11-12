@@ -678,5 +678,17 @@
   },
   "statusOnline": {
     "message": "已连接"
+  },
+  "optionsCustomCssTitle": {
+    "message": "自定义样式"
+  },
+  "optionsCustomCssBody": {
+    "message": "这些 CSS 会应用到扩展的页面，用来调整内置主题没有覆盖的排版。"
+  },
+  "optionsCustomCssSave": {
+    "message": "保存样式"
+  },
+  "optionsCustomCssSaved": {
+    "message": "已保存"
   }
 }

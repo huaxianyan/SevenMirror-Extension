@@ -6,6 +6,7 @@ import {
   IndexedDbTransportCredentialStore,
   normalizeServerOrigin,
 } from '../transport/indexeddb-transport-credential-store';
+import { applyCustomCss, loadCustomCss, saveCustomCss } from '../shared/custom-css';
 import { localizeDocument, message } from '../shared/i18n';
 import { PREVIEW_NOTIFICATION_SOUND } from '../shared/notification-sound';
 import { CONNECTION_STATE_STORAGE_KEY } from '../shared/status';
@@ -450,4 +451,25 @@ void render().catch(() => {
 }).finally(() => {
   // The stored switch positions are painted by now, so the capsule transition can play again.
   document.body.removeAttribute('data-hydrating');
+});
+
+const customCssInput = requireElement<HTMLTextAreaElement>('custom-css-input');
+const customCssStatus = requireElement<HTMLElement>('custom-css-status');
+const saveCustomCssButton = requireElement<HTMLButtonElement>('save-custom-css');
+
+void applyCustomCss();
+void loadCustomCss().then((css) => {
+  customCssInput.value = css;
+});
+
+saveCustomCssButton.addEventListener('click', () => {
+  void saveCustomCss(customCssInput.value).then(() => {
+    // The sheet is already live on this page through the storage listener; the line just confirms
+    // the write, so it does not stay there and pretend to be a heading.
+    customCssStatus.textContent = message('optionsCustomCssSaved');
+    customCssStatus.hidden = false;
+    window.setTimeout(() => {
+      customCssStatus.hidden = true;
+    }, 2500);
+  });
 });

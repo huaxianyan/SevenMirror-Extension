@@ -135,3 +135,13 @@ dialog::backdrop { background: rgb(22 32 43 / 45%); }
   .dialog-actions { flex-direction: column-reverse; }
   .dialog-actions button { width: 100%; }
 }
+
+/* The editor is the one place where the page's own typography must not apply: the point of the
+   field is to show the sheet exactly as written. */
+.custom-css-input {
+  width: 100%; min-height: 10rem; padding: .75rem; margin-top: .75rem;
+  border: 1px solid var(--border-strong); border-radius: var(--radius);
+  background: var(--surface); color: var(--text); resize: vertical;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: .8rem; line-height: 1.5;
+}
