@@ -26,10 +26,11 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; width: 400px; }
 /* The header, the search field and the tabs stay put; only the list between them scrolls, so the
-   scrollbar never takes width away from the full-width header. The height is explicit: a popup sizes
-   itself to its content, and a content-sized flex column leaves the list no room at all when the
-   first notification has not arrived yet. Chrome caps a popup at 600px. */
-body { display: flex; flex-direction: column; height: min(600px, 100vh); max-height: 600px; overflow: hidden; background: var(--bg); color: var(--ink); font-size: 0.875rem; line-height: 1.5; }
+   scrollbar never takes width away from the full-width header. The height is a plain 600px on
+   purpose: a popup sizes itself to its content, and `100vh` resolves to that very content height
+   while Chrome measures it, so any viewport-relative height collapses the panel and the list with
+   it. 600px is also Chrome's own popup ceiling. */
+body { display: flex; flex-direction: column; height: 600px; overflow: hidden; background: var(--bg); color: var(--ink); font-size: 0.875rem; line-height: 1.5; }
 .popup { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 #list-view, #detail-view { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
 h1, h2, p { margin: 0; }
