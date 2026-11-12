@@ -159,9 +159,12 @@ h1, h2, p { margin: 0; }
 .back-button:hover:not(:disabled) { background: var(--tint-hover); color: var(--ink); }
 .back-button-icon { width: 18px; height: 18px; fill: currentColor; }
 
-/* Bottom tabs switch pages inside the popup; settings lives in the header instead. */
+/* Bottom tabs switch pages inside the popup; settings lives in the header instead. The bar is
+   sticky so a long list never hides it behind a scroll: it used to sit at the end of the content,
+   which meant scrolling through the whole history to reach it. */
 .tabbar[hidden] { display: none; }
 .tabbar {
+  position: sticky; bottom: 0; z-index: 1;
   margin-top: auto;
   display: grid; grid-template-columns: 1fr 1fr;
   border-top: 1px solid var(--line);
