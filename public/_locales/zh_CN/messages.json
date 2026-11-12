@@ -14,113 +14,14 @@
   "popupCurrentNotifications": {
     "message": "当前通知"
   },
-  "popupFilterSource": {
-    "message": "来源"
-  },
-  "popupAllSources": {
-    "message": "全部来源"
-  },
   "popupBackToNotifications": {
     "message": "返回列表"
-  },
-  "popupNoMatchingNotificationsTitle": {
-    "message": "此来源当前没有通知"
-  },
-  "popupNoMatchingNotificationsBody": {
-    "message": "可选择其他来源查看当前通知。"
-  },
-  "popupNotificationCount": {
-    "message": "$COUNT$ 条",
-    "placeholders": {
-      "count": {
-        "content": "$1"
-      }
-    }
-  },
-  "popupNewNotification": {
-    "message": "新"
   },
   "popupSetupRequiredTitle": {
     "message": "需要完成设置"
   },
   "popupSetupRequiredBody": {
-    "message": "打开设置，将此 Chrome 设备加入你的私有服务。"
-  },
-  "popupConnectionUnavailableTitle": {
-    "message": "暂时无法连接"
-  },
-  "popupConnectionUnavailableBody": {
-    "message": "当前通知仍保留在此浏览器中。请检查私有服务是否正在运行。"
-  },
-  "popupNoNotificationsTitle": {
-    "message": "当前没有通知"
-  },
-  "popupNoNotificationsBody": {
-    "message": "来自已授权 Android 设备的新通知会显示在这里。"
-  },
-  "popupConnectingBody": {
-    "message": "连接完成后，当前通知会显示在这里。"
-  },
-  "popupBoundary": {
-    "message": "完成可信设备批准后，目前只会同步本应用创建的通知。其他应用的通知仍留在 Android 设备上。"
-  },
-  "openSettings": {
-    "message": "打开设置"
-  },
-  "lifecycleTestTitle": {
-    "message": "Phase 0 生命周期测试"
-  },
-  "createTestNotification": {
-    "message": "创建测试通知"
-  },
-  "clearProgrammatically": {
-    "message": "以程序方式关闭"
-  },
-  "workerStartsLoading": {
-    "message": "Worker 启动次数：正在加载……"
-  },
-  "noCloseEvent": {
-    "message": "尚未记录关闭事件。"
-  },
-  "e2eeTestTitle": {
-    "message": "Phase 0 E2EE 持久化测试"
-  },
-  "runE2eeTest": {
-    "message": "运行 E2EE 持久化测试"
-  },
-  "e2eeTestHint": {
-    "message": "重启 Chrome 后再次运行。指纹必须保持一致；重放首次接受，随后作为重复消息拒绝。"
-  },
-  "e2eeNotRun": {
-    "message": "尚未在此浏览器中运行。"
-  },
-  "statusValue": {
-    "message": "状态：$VALUE$",
-    "placeholders": {
-      "value": {
-        "content": "$1"
-      }
-    }
-  },
-  "workerStartsValue": {
-    "message": "已观察到 Worker 启动 $COUNT$ 次",
-    "placeholders": {
-      "count": {
-        "content": "$1"
-      }
-    }
-  },
-  "connectionNotConfigured": {
-    "message": "尚未配置"
-  },
-  "connectionOffline": {
-    "message": "离线"
-  },
-  "connectionConnecting": {
-    "message": "正在连接"
-  },
-  "connectionOnline": {
-    "message": "在线"
+    "message": "打开设置，把这台浏览器加入你的私有服务。"
   },
   "running": {
     "message": "正在运行……"
@@ -139,9 +40,6 @@
       }
     }
   },
-  "registrationBoundary": {
-    "message": "注册只允许访问私有实例，不会建立其他设备的 E2EE 信任。完成可信设备批准和 relay 验证前，不会同步真实通知。"
-  },
   "serverOrigin": {
     "message": "服务器地址"
   },
@@ -149,40 +47,25 @@
     "message": "https://notify.example"
   },
   "oneTimePairingCode": {
-    "message": "一次性配对码"
+    "message": "一次性加入码"
   },
   "deviceName": {
     "message": "设备名称"
   },
-  "registerChromeProfile": {
-    "message": "注册此 Chrome 配置文件"
-  },
   "checkingRegistration": {
     "message": "正在检查注册状态……"
-  },
-  "reconnectTransport": {
-    "message": "重新连接认证传输"
-  },
-  "createOffer": {
-    "message": "在此 Chrome 设备上创建 Offer"
   },
   "safetyCode": {
     "message": "安全码"
   },
-  "profileRegistered": {
-    "message": "此 Chrome 配置文件已注册。可在扩展弹窗中查看连接状态。"
-  },
   "reconnectingTransport": {
-    "message": "正在重新启动认证传输……"
+    "message": "正在重新连接……"
   },
   "reconnectRequested": {
-    "message": "已请求重新启动认证传输。请在扩展弹窗中查看连接状态。"
-  },
-  "reconnectRejected": {
-    "message": "重新启动认证传输的请求未被接受。请检查服务器后重试。"
+    "message": "已发起重新连接。"
   },
   "reconnectFailed": {
-    "message": "重新启动认证传输失败。请检查服务器后重试。"
+    "message": "重新连接没有成功。请检查私有服务是否正在运行。"
   },
   "validatingRegistration": {
     "message": "正在验证注册信息……"
@@ -194,13 +77,10 @@
     "message": "正在注册……"
   },
   "waitingForAdminApproval": {
-    "message": "注册申请已提交，请联系服务器管理员批准此 Chrome 配置文件。"
+    "message": "注册申请已提交，请联系服务器管理员批准这台浏览器。"
   },
   "registrationFailed": {
-    "message": "注册失败。请检查服务器地址、一次性配对码和设备名称。"
-  },
-  "registrationUnreadable": {
-    "message": "无法读取已保存的注册状态。请重新打开此页面；如果问题仍然存在，请重新注册。"
+    "message": "注册失败。请检查服务器地址、一次性加入码和设备名称。"
   },
   "notificationDismissButton": {
     "message": "清除通知"
@@ -213,9 +93,6 @@
   },
   "shortcutSettingsTitle": {
     "message": "通知快捷操作"
-  },
-  "shortcutSettingsDescription": {
-    "message": "选择哪些操作更容易从 Chrome 通知中使用。"
   },
   "optionsShortcuts": {
     "message": "快捷操作"
@@ -230,7 +107,7 @@
     "message": "优先级规则"
   },
   "shortcutPriorityDescription": {
-    "message": "规则按从上到下的顺序匹配。使用移动按钮调整优先级。"
+    "message": "按从上到下的顺序匹配。"
   },
   "shortcutAddRule": {
     "message": "添加规则"
@@ -334,16 +211,16 @@
     "message": "跨浏览器同步"
   },
   "shortcutSyncDescription": {
-    "message": "同一个服务区里的浏览器共用一套规则。在这里保存即上传，本机在浏览器启动时以及之后每隔一段时间自动采用其他浏览器改过的版本。规则加密后才上传，服务端看不到里面的关键字。"
+    "message": "同一私有服务里的浏览器共用一套规则。规则加密后才上传，服务端看不到里面的关键字。"
   },
   "shortcutSyncOff": {
     "message": "规则目前只存在这台浏览器上。"
   },
   "shortcutSyncOn": {
-    "message": "规则与服务区里的其他浏览器共用。"
+    "message": "规则与私有服务里的其他浏览器共用。"
   },
   "shortcutSyncOnWithTime": {
-    "message": "规则与服务区里的其他浏览器共用，最近同步于 $TIME$。",
+    "message": "规则与私有服务里的其他浏览器共用，最近同步于 $TIME$。",
     "placeholders": {
       "time": {
         "content": "$1"
@@ -357,7 +234,7 @@
     "message": "同步口令"
   },
   "shortcutSyncPassphraseHint": {
-    "message": "在想共用规则的每台浏览器里输入同一个口令。只有你的浏览器解得出这些规则，服务端存的是密文。"
+    "message": "在想共用规则的每台浏览器里输入同一个口令。"
   },
   "shortcutSyncEnable": {
     "message": "开启同步"
@@ -375,10 +252,10 @@
     "message": "同步已开启，本机规则已上传。"
   },
   "shortcutSyncAdopted": {
-    "message": "同步已开启，并采用了服务区里已有的规则。"
+    "message": "同步已开启，并采用了私有服务里已有的规则。"
   },
   "shortcutSyncUpdated": {
-    "message": "已从服务区取回最新规则。"
+    "message": "已取回私有服务里的最新规则。"
   },
   "shortcutSyncUpToDate": {
     "message": "规则已是最新，无需更新。"
@@ -393,10 +270,10 @@
     "message": "其他浏览器先改过规则，请先点「立即同步」，再重新保存。"
   },
   "shortcutSyncNotEnrolled": {
-    "message": "这台浏览器还没有加入服务区，无法同步规则。"
+    "message": "这台浏览器还没有加入私有服务，无法同步规则。"
   },
   "shortcutSyncDenied": {
-    "message": "服务区拒绝了这次同步，这台设备可能已被移除。"
+    "message": "私有服务拒绝了这次同步，这台设备可能已被移除。"
   },
   "shortcutSyncFailed": {
     "message": "同步没有成功。"
@@ -404,19 +281,8 @@
   "interactionPageTitle": {
     "message": "SevenMirror"
   },
-  "interactionActionsTitle": {
-    "message": "操作"
-  },
   "interactionLoading": {
     "message": "正在加载通知……"
-  },
-  "interactionSource": {
-    "message": "来自 $DEVICE$",
-    "placeholders": {
-      "device": {
-        "content": "$1"
-      }
-    }
   },
   "interactionUntitledNotification": {
     "message": "通知"
@@ -521,7 +387,7 @@
     "message": "加入你的私有服务"
   },
   "optionsJoinBody": {
-    "message": "请先在 SevenMirror 服务器管理页面生成一次性 Chrome 加入码。"
+    "message": "请先在 SevenMirror 服务器管理页面生成一次性加入码。"
   },
   "submitJoinRequest": {
     "message": "提交加入申请"
@@ -533,7 +399,7 @@
     "message": "暂无信息"
   },
   "optionsState_not_configured": {
-    "message": "设置这台 Chrome 设备"
+    "message": "设置这台浏览器"
   },
   "optionsGuidance_not_configured": {
     "message": "加入你的 SevenMirror 私有服务后即可接收通知。"
@@ -542,10 +408,10 @@
     "message": "等待管理员批准"
   },
   "optionsGuidance_waiting_approval": {
-    "message": "申请已经保存，请让服务器管理员批准这台 Chrome 设备。"
+    "message": "申请已经保存，请让服务器管理员批准。"
   },
   "optionsWaitingApprovalHint": {
-    "message": "管理员批准后本页面会自行更新，这里不需要按任何东西。"
+    "message": "批准后本页会自动更新。"
   },
   "optionsState_connecting": {
     "message": "正在连接"
@@ -557,7 +423,7 @@
     "message": "可以接收通知"
   },
   "optionsGuidance_online": {
-    "message": "这台 Chrome 设备可以接收来自已授权 Android 设备的通知。"
+    "message": "这台浏览器可以接收来自已授权 Android 设备的通知。"
   },
   "optionsState_offline": {
     "message": "无法连接"
@@ -569,16 +435,16 @@
     "message": "访问已移除"
   },
   "optionsGuidance_access_removed": {
-    "message": "服务器管理员已移除这台 Chrome 设备。重新注册前，请先清理旧访问资料。"
+    "message": "服务器管理员已移除这台浏览器。重新注册前，请先清理旧访问资料。"
   },
   "optionsReEnrollDevice": {
     "message": "重新注册此设备"
   },
   "optionsReEnrollConfirmTitle": {
-    "message": "重新注册这台 Chrome 设备？"
+    "message": "重新注册这台浏览器？"
   },
   "optionsReEnrollConfirmBody": {
-    "message": "这台设备以前的访问权限已被移除。SevenMirror 将清理此 Chrome 配置文件中的旧工作区访问资料，然后返回设置流程。"
+    "message": "这台设备以前的访问权限已被移除。SevenMirror 会清理这台浏览器里的旧访问资料，然后返回设置流程。"
   },
   "optionsReEnrollConfirmAction": {
     "message": "清理旧访问资料"
@@ -596,7 +462,7 @@
     "message": "正在完成设备设置"
   },
   "optionsGuidance_resetting": {
-    "message": "旧访问资料仍需清理。请继续操作，让这台 Chrome 设备返回设置流程。"
+    "message": "旧访问资料仍需清理。请继续操作，让这台浏览器返回设置流程。"
   },
   "optionsState_needs_repair": {
     "message": "设置需要处理"
@@ -604,14 +470,11 @@
   "optionsGuidance_needs_repair": {
     "message": "SevenMirror 无法继续使用保存的访问资料。请先让服务器管理员移除此设备，再重新注册。"
   },
-  "optionsDevicesBody": {
-    "message": "已获准使用这个 SevenMirror 工作区的设备。"
-  },
   "optionsDevicesUnavailable": {
     "message": "获得批准后即可查看设备信息。"
   },
   "optionsDeviceAdminBoundary": {
-    "message": "批准、拒绝或移除设备，请前往服务器管理页面。"
+    "message": "批准与移除设备在服务器的管理页面完成。"
   },
   "optionsDeviceCounts": {
     "message": "Android：$ANDROID$ · Chrome：$CHROME$",
@@ -642,62 +505,41 @@
   "optionsBadgeTitle": {
     "message": "新通知角标"
   },
-  "optionsBadgeBody": {
-    "message": "显示尚未点开查看的通知数量。"
-  },
   "optionsSourcesTitle": {
     "message": "Android 来源"
-  },
-  "optionsSourcesBody": {
-    "message": "选择哪些已授权 Android 设备的通知可以在这台 Chrome 设备上显示。"
   },
   "optionsSourcesEmpty": {
     "message": "暂无已授权的 Android 来源。"
   },
   "optionsSourceShown": {
-    "message": "在这台 Chrome 设备上显示"
+    "message": "在这台浏览器上显示"
   },
   "optionsSourceHidden": {
-    "message": "在这台 Chrome 设备上隐藏"
+    "message": "在这台浏览器上隐藏"
   },
   "optionsNativeNotificationsTitle": {
     "message": "浏览器通知"
   },
-  "optionsNativeNotificationsBody": {
-    "message": "在 SevenMirror 窗口之外显示新通知。"
-  },
   "optionsShowBodyTitle": {
     "message": "通知正文"
-  },
-  "optionsShowBodyBody": {
-    "message": "在 SevenMirror 和浏览器通知中显示通知正文。"
   },
   "optionsShowImagesTitle": {
     "message": "应用图标和头像"
   },
-  "optionsShowImagesBody": {
-    "message": "在浏览器通知中使用 Android 提供的图片。"
-  },
   "optionsSilentNotificationsTitle": {
     "message": "静默浏览器通知"
-  },
-  "optionsSilentNotificationsBody": {
-    "message": "开启后，收到通知时保持安静。"
   },
   "optionsPreviewSound": {
     "message": "试听提示音"
   },
   "optionsSoundBody": {
-    "message": "提示音使用浏览器音量。需要安静时，请开启上方的「静默浏览器通知」。"
+    "message": "音量跟随浏览器。"
   },
   "optionsSoundPlayed": {
     "message": "已开始播放，请确认你能听到提示音。"
   },
   "optionsSoundFailed": {
     "message": "提示音未能播放，请重新加载扩展后重试。"
-  },
-  "optionsLocalDisplayBoundary": {
-    "message": "浏览器显示设置只影响这台 Chrome 设备。哪些通知可以离开手机由 Android 决定。"
   },
   "optionsSaving": {
     "message": "正在保存……"
@@ -712,10 +554,10 @@
     "message": "本地通知数据"
   },
   "optionsLocalDataBody": {
-    "message": "当前镜像通知只保存在这个 Chrome 配置文件中。"
+    "message": "镜像通知只保存在这台浏览器里。"
   },
   "optionsLocalDataBoundary": {
-    "message": "清除只影响这台 Chrome 设备，手机上的通知和已授权设备都不受影响。"
+    "message": "清除只影响这台浏览器，手机上的通知和已授权设备不受影响。"
   },
   "optionsClearLocalNotifications": {
     "message": "清除本地通知列表"
@@ -724,7 +566,7 @@
     "message": "清除本地通知列表？"
   },
   "optionsClearConfirmBody": {
-    "message": "这会移除此 Chrome 配置文件中保存的通知。之后收到的新通知仍会显示。"
+    "message": "这会移除此浏览器保存的通知。之后收到的新通知仍会显示。"
   },
   "optionsClearConfirmAction": {
     "message": "清除本地列表"
@@ -820,7 +662,7 @@
     "message": "保留通知历史"
   },
   "optionsKeepHistoryBody": {
-    "message": "保留下来的通知可以在弹窗里搜索。关掉后只清理手机已经移除的那些记录。"
+    "message": "关闭后，手机已经清掉的通知不再保留。"
   },
   "statusNotConfigured": {
     "message": "未完成设置"

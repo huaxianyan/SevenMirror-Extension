@@ -63,7 +63,6 @@
 
         <section id="devices" aria-labelledby="devices-title">
           <h1 id="devices-title" data-i18n="optionsDevices">Devices</h1>
-          <p class="supporting" data-i18n="optionsDevicesBody">Devices authorized to use this SevenMirror workspace.</p>
           <div id="device-counts" class="summary"></div>
           <div id="device-list" class="device-list"></div>
           <p id="devices-empty" class="empty" data-i18n="optionsDevicesUnavailable">Device information will be available after approval.</p>
@@ -76,31 +75,30 @@
           <h1 id="notifications-title" data-i18n="optionsNotifications">Notifications</h1>
           <div class="card">
             <label class="switch-row">
-              <span><strong data-i18n="optionsBadgeTitle">New notification badge</strong><small data-i18n="optionsBadgeBody">Show how many notifications you have not opened yet.</small></span>
+              <span><strong data-i18n="optionsBadgeTitle">New notification badge</strong></span>
               <input id="badge-enabled" type="checkbox" role="switch" />
             </label>
           </div>
           <div class="card">
             <h2 data-i18n="optionsSourcesTitle">Android sources</h2>
-            <p class="supporting" data-i18n="optionsSourcesBody">Choose which authorized Android devices appear on this Chrome device.</p>
             <div id="source-list" class="compact-list"></div>
             <p id="sources-empty" class="supporting" data-i18n="optionsSourcesEmpty">No authorized Android source is available.</p>
           </div>
           <div class="card option-list">
             <label class="switch-row">
-              <span><strong data-i18n="optionsNativeNotificationsTitle">Browser notifications</strong><small data-i18n="optionsNativeNotificationsBody">Show new notifications outside the SevenMirror Popup.</small></span>
+              <span><strong data-i18n="optionsNativeNotificationsTitle">Browser notifications</strong></span>
               <input id="native-notifications-enabled" type="checkbox" role="switch" />
             </label>
             <label class="switch-row">
-              <span><strong data-i18n="optionsShowBodyTitle">Notification text</strong><small data-i18n="optionsShowBodyBody">Show notification text in SevenMirror and browser notifications.</small></span>
+              <span><strong data-i18n="optionsShowBodyTitle">Notification text</strong></span>
               <input id="show-body" type="checkbox" role="switch" />
             </label>
             <label class="switch-row">
-              <span><strong data-i18n="optionsShowImagesTitle">App icons and avatars</strong><small data-i18n="optionsShowImagesBody">Use images supplied by Android in browser notifications.</small></span>
+              <span><strong data-i18n="optionsShowImagesTitle">App icons and avatars</strong></span>
               <input id="show-images" type="checkbox" role="switch" />
             </label>
             <label class="switch-row">
-              <span><strong data-i18n="optionsSilentNotificationsTitle">Silent browser notifications</strong><small data-i18n="optionsSilentNotificationsBody">Show browser notifications without a sound.</small></span>
+              <span><strong data-i18n="optionsSilentNotificationsTitle">Silent browser notifications</strong></span>
               <input id="silent-notifications" type="checkbox" role="switch" />
             </label>
             <label class="switch-row">
@@ -113,7 +111,6 @@
             <p class="supporting" data-i18n="optionsSoundBody">Sound uses the browser's audio volume. Turn on silent notifications when you need quiet.</p>
           </div>
           <a class="button-link" href="#shortcut-settings" data-i18n="openShortcutSettings">Notification shortcut settings</a>
-          <p class="supporting" data-i18n="optionsLocalDisplayBoundary">Browser display settings affect only this Chrome device. Android controls which notifications may leave the phone.</p>
           <p id="notification-settings-status" role="status" aria-live="polite"></p>
         </section>
         </div>
@@ -121,7 +118,6 @@
         <div id="shortcut-settings" class="settings-page" hidden>
         <section aria-labelledby="shortcut-settings-title">
           <h1 id="shortcut-settings-title" data-i18n="shortcutSettingsTitle">Notification shortcuts</h1>
-          <p class="supporting" data-i18n="shortcutSettingsDescription">Choose which actions are easiest to reach from Chrome notifications.</p>
 
           <form id="shortcut-form" novalidate>
             <div class="card">
