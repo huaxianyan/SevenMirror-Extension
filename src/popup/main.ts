@@ -63,6 +63,18 @@ let tab: Tab = 'unread';
 let query = '';
 let listScrollTop = 0;
 
+/**
+ * A popup is sized to its content, so the panel asks for a fixed height in CSS and then clamps it
+ * to the height the window actually got: on a short screen the window caps below the asked-for
+ * height, and a body taller than its viewport is what puts a scrollbar beside the header and hands
+ * scrolling back to the document.
+ */
+function clampPopupHeight(): void {
+  const height = window.innerHeight;
+  if (height > 0) document.documentElement.style.setProperty('--popup-height', `${height}px`);
+}
+
+clampPopupHeight();
 localizeDocument();
 openOptions.title = message('popupTabSettings');
 
