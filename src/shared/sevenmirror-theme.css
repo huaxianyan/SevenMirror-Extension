@@ -97,6 +97,9 @@ input[type="checkbox"][role="switch"] { width: 46px; min-height: 0; margin: 0; p
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--surface) 94%, transparent);
   backdrop-filter: blur(12px);
+  /* One height on every page. The admin console carries a button in this bar and the extension
+     pages do not, so a bar that hugged its contents came out shorter here than there. */
+  min-height: 3.875rem;
 }
 .topbar h1, .topbar p { margin: 0; }
 .topbar form { margin: 0; }
