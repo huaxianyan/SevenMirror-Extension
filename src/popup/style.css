@@ -25,8 +25,11 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; width: 400px; }
-body { display: flex; flex-direction: column; min-height: 100vh; background: var(--bg); color: var(--ink); font-size: 0.875rem; line-height: 1.5; }
-.popup { display: flex; flex-direction: column; flex: 1; }
+/* The header, the search field and the tabs stay put; only the list between them scrolls, so the
+   scrollbar never takes width away from the full-width header. Chrome caps a popup at 600px. */
+body { display: flex; flex-direction: column; max-height: min(600px, 100vh); overflow: hidden; background: var(--bg); color: var(--ink); font-size: 0.875rem; line-height: 1.5; }
+.popup { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+#list-view, #detail-view { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
 h1, h2, p { margin: 0; }
 .visually-hidden {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
@@ -159,12 +162,11 @@ h1, h2, p { margin: 0; }
 .back-button:hover:not(:disabled) { background: var(--tint-hover); color: var(--ink); }
 .back-button-icon { width: 18px; height: 18px; fill: currentColor; }
 
-/* Bottom tabs switch pages inside the popup; settings lives in the header instead. The bar is
-   sticky so a long list never hides it behind a scroll: it used to sit at the end of the content,
-   which meant scrolling through the whole history to reach it. */
+/* Bottom tabs switch pages inside the popup; settings lives in the header instead. They sit outside
+   the scrolling list, so a long history never hides them. */
 .tabbar[hidden] { display: none; }
 .tabbar {
-  position: sticky; bottom: 0; z-index: 1;
+  flex: none;
   margin-top: auto;
   display: grid; grid-template-columns: 1fr 1fr;
   border-top: 1px solid var(--line);

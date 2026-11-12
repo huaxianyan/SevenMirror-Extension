@@ -46,10 +46,6 @@
 }
 
 * { box-sizing: border-box; }
-/* Reserving the scrollbar gutter keeps the page width steady whether or not the content scrolls:
-   without it every list that grows past the viewport also shifts the layout by the scrollbar
-   width, which reads as the whole page jumping sideways. */
-html { scrollbar-gutter: stable; }
 body { margin: 0; background: var(--background); color: var(--text); font-size: 1rem; }
 button, input, select { font: inherit; }
 a { color: var(--primary); }

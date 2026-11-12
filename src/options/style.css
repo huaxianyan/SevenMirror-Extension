@@ -5,10 +5,13 @@
    shared/sevenmirror-theme.css so popup and settings cannot define competing palettes. */
 
 /* Console topbar, sidebar and page shell. The existing markup keeps its class names. */
-/* Tall enough that the sticky sidebar keeps its offset even on a short page; otherwise its
-   containing block ends early and the column jumps up when navigating to a short section. */
-.layout { display: grid; grid-template-columns: minmax(10rem, 14rem) minmax(0, 1fr); align-items: start; gap: clamp(1rem, 3vw, 2rem); width: min(100%, 72rem); min-height: calc(100vh - 4rem); margin: 0 auto; padding: 2rem clamp(1rem, 4vw, 3rem) 4rem; }
-.layout > nav { position: sticky; top: 5.5rem; align-self: start; display: grid; gap: .1rem; }
+/* The topbar stays put and only the page area scrolls. A document scrollbar would reserve its
+   column beside the full-width bar, leaving a strip of empty space to the right of it. */
+body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+.topbar { flex: none; }
+
+.layout { display: grid; grid-template-columns: minmax(10rem, 14rem) minmax(0, 1fr); align-items: start; gap: clamp(1rem, 3vw, 2rem); flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; width: min(100%, 72rem); margin: 0 auto; padding: 2rem clamp(1rem, 4vw, 3rem) 4rem; }
+.layout > nav { position: sticky; top: 0; align-self: start; display: grid; gap: .1rem; }
 .layout > nav a { min-height: 40px; display: flex; align-items: center; padding: .5rem .8rem; border-left: 3px solid transparent; color: var(--text); font-size: 1rem; font-weight: 500; text-decoration: none; }
 .layout > nav a:hover { background: var(--surface-subtle); }
 .layout > nav a[aria-current="page"] { border-left-color: var(--primary); font-weight: 600; }
@@ -16,7 +19,7 @@ main { min-width: 0; }
 /* One rhythm, taken from the console: panels sit 1.25rem apart, a block heading sits
    1.25rem above its content, and stacked helper lines close up to .5rem. Blocks never
    touch, and nothing relies on the UA paragraph margin. */
-.settings-page { display: grid; gap: 1.25rem; scroll-margin-top: 4.5rem; }
+.settings-page { display: grid; gap: 1.25rem; scroll-margin-top: .5rem; }
 .settings-page > section { padding: 0; }
 .settings-page > section + section { padding: 0; border: 0; }
 .settings-page > section > * { margin: 0; }

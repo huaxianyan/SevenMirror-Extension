@@ -1,6 +1,9 @@
 @import "../shared/sevenmirror-theme.css";
 @import "../shared/notification-detail.css";
 
+/* This window is a single page that scrolls as a whole, so the gutter is reserved here instead. */
+html { scrollbar-gutter: stable; }
+
 /* The independent interaction window uses the same panel and typography as the console. */
 main {
   width: min(680px, calc(100% - 32px));
