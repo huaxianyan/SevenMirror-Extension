@@ -26,8 +26,10 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; width: 400px; }
 /* The header, the search field and the tabs stay put; only the list between them scrolls, so the
-   scrollbar never takes width away from the full-width header. Chrome caps a popup at 600px. */
-body { display: flex; flex-direction: column; max-height: min(600px, 100vh); overflow: hidden; background: var(--bg); color: var(--ink); font-size: 0.875rem; line-height: 1.5; }
+   scrollbar never takes width away from the full-width header. The height is explicit: a popup sizes
+   itself to its content, and a content-sized flex column leaves the list no room at all when the
+   first notification has not arrived yet. Chrome caps a popup at 600px. */
+body { display: flex; flex-direction: column; height: min(600px, 100vh); max-height: 600px; overflow: hidden; background: var(--bg); color: var(--ink); font-size: 0.875rem; line-height: 1.5; }
 .popup { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 #list-view, #detail-view { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
 h1, h2, p { margin: 0; }
@@ -44,7 +46,7 @@ h1, h2, p { margin: 0; }
   border-bottom: 1px solid var(--line);
 }
 .popup-header h1 { display: flex; align-items: center; gap: .55rem; font-size: 1.125rem; font-weight: 700; letter-spacing: normal; }
-.header-actions { display: flex; align-items: center; gap: 0.5rem; }
+.header-actions { display: flex; align-items: center; gap: 0.5rem; min-height: 36px; }
 .icon-button {
   display: inline-flex; align-items: center; justify-content: center;
   width: 32px; height: 32px; padding: 0; min-height: 0;
