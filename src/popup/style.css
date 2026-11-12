@@ -26,10 +26,14 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; width: 400px; }
 /* The header, the status line and the search row stay put; only the list below them scrolls, so
-   the scrollbar never runs beside the header. `html, body` take the viewport height instead of a
-   fixed 600px: a popup can be shorter than 600 on a small screen, and a body taller than its
-   viewport hands scrolling back to the document — which is exactly how the header scrolled away. */
-html, body { height: 100%; }
+   the scrollbar never runs beside the header.
+
+   The height is a fixed 520px, and that number is load-bearing. A popup is sized to its content,
+   so `100vh` and `100%` both resolve to whatever small height Chrome is measuring with: the panel
+   collapses to a short slab whenever there is little to show. A plain pixel height is what makes
+   the window the same size with no notifications, one, or fifty; content beyond it scrolls inside
+   the list. 520 fits under Chrome's own 600px ceiling with room for a docked taskbar. */
+html { height: 520px; overflow: hidden; }
 body { display: flex; flex-direction: column; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); font-size: 0.875rem; line-height: 1.5; }
 .popup { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 #list-view, #detail-view { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
@@ -54,7 +58,9 @@ h1, h2, p { margin: 0; }
   border: 1px solid transparent; border-radius: var(--radius-lg);
   background: transparent; color: var(--ink-muted); cursor: pointer;
 }
-.icon-button:hover:not(:disabled) { background: var(--tint-hover); color: var(--ink); }
+/* Hovering an icon or a label changes the glyph, not a fill: a block behind a 20px glyph reads as
+   a pressed button. */
+.icon-button:hover:not(:disabled) { background: transparent; color: var(--ink); }
 .icon-button svg { width: 20px; height: 20px; }
 
 /* Same button shape as the console: 36 tall, 6px corners, one fill. */
@@ -162,7 +168,7 @@ h1, h2, p { margin: 0; }
   border: 1px solid transparent; border-radius: var(--radius-lg);
   background: transparent; color: var(--ink-muted); cursor: pointer;
 }
-.back-button:hover:not(:disabled) { background: var(--tint-hover); color: var(--ink); }
+.back-button:hover:not(:disabled) { background: transparent; color: var(--ink); }
 .back-button-icon { width: 18px; height: 18px; fill: currentColor; }
 
 /* Unread and history share the search row: a two-part switch on its right. Nothing sits below the
@@ -179,9 +185,13 @@ h1, h2, p { margin: 0; }
   color: var(--ink-muted); font: inherit; font-size: 0.75rem; font-weight: 500;
   cursor: pointer;
 }
+/* Same rule as the icon buttons: hover darkens the word, it does not fill the half. */
+.view-option:hover:not(:disabled) { background: transparent; }
+.view-option:disabled { background: transparent; }
 /* The selected part fills instead of colouring its text: at this size a tinted label is
    hard to read. */
 .view-option[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgb(16 24 40 / 12%); }
 .view-option:not([aria-pressed="true"]):hover:not(:disabled) { color: var(--ink); }
+.view-option[aria-pressed="true"]:hover:not(:disabled) { background: var(--surface); }
 
 :focus-visible { outline: 2px solid var(--action); outline-offset: 2px; }
