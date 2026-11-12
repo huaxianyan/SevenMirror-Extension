@@ -73,7 +73,7 @@ const badgeEnabled = requireElement<HTMLInputElement>('badge-enabled');
 const nativeNotificationsEnabled = requireElement<HTMLInputElement>('native-notifications-enabled');
 const showBody = requireElement<HTMLInputElement>('show-body');
 const showImages = requireElement<HTMLInputElement>('show-images');
-const silentNotifications = requireElement<HTMLInputElement>('silent-notifications');
+const notificationSound = requireElement<HTMLInputElement>('notification-sound');
 const keepHistory = requireElement<HTMLInputElement>('keep-history');
 const previewSound = requireElement<HTMLButtonElement>('preview-notification-sound');
 const notificationSettingsStatus = requireElement<HTMLElement>('notification-settings-status');
@@ -147,10 +147,10 @@ showBody.addEventListener('change', () => {
 showImages.addEventListener('change', () => {
   void savePresentationPreferences({ ...savedPreferences, showImages: showImages.checked });
 });
-silentNotifications.addEventListener('change', () => {
+notificationSound.addEventListener('change', () => {
   void savePresentationPreferences({
     ...savedPreferences,
-    silentNotifications: silentNotifications.checked,
+    silentNotifications: !notificationSound.checked,
   });
 });
 keepHistory.addEventListener('change', () => {
@@ -310,7 +310,7 @@ function applyPreferenceInputs(preferences: PresentationPreferences): void {
   nativeNotificationsEnabled.checked = preferences.nativeNotificationsEnabled;
   showBody.checked = preferences.showBody;
   showImages.checked = preferences.showImages;
-  silentNotifications.checked = preferences.silentNotifications;
+  notificationSound.checked = !preferences.silentNotifications;
   keepHistory.checked = preferences.keepReadHistory;
 }
 
@@ -340,7 +340,7 @@ function setPreferenceInputsDisabled(disabled: boolean): void {
     nativeNotificationsEnabled,
     showBody,
     showImages,
-    silentNotifications,
+    notificationSound,
     ...Array.from(sourceList.querySelectorAll<HTMLInputElement>('input')),
   ]) input.disabled = disabled;
 }

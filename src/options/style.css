@@ -65,6 +65,10 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .option-list { padding-block: 4px; }
 .option-list .switch-row { min-height: 68px; padding-block: .9rem; }
 .option-list .switch-row + .switch-row { border-top: 1px solid var(--border); }
+.sound-preview { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: .5rem; }
+.sound-preview .supporting { margin: 0; }
+.inline-link { align-self: start; color: var(--primary); font-weight: 600; }
+.inline-link:hover { text-decoration: underline; }
 .source-toggle { margin: 0; padding: 12px 0; }
 .source-toggle + .source-toggle { border-top: 1px solid var(--border); }
 .button-link { margin-top: 0; }

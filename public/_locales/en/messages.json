@@ -100,14 +100,8 @@
   "shortcutPinClear": {
     "message": "Always show Clear"
   },
-  "shortcutPinClearDescription": {
-    "message": "Keep Clear available for the notification on your phone."
-  },
   "shortcutPriorityRules": {
     "message": "Priority rules"
-  },
-  "shortcutPriorityDescription": {
-    "message": "Rules are checked from top to bottom."
   },
   "shortcutAddRule": {
     "message": "Add rule"
@@ -211,7 +205,7 @@
     "message": "Sync across browsers"
   },
   "shortcutSyncDescription": {
-    "message": "Browsers in the same private service share one set of rules. They are encrypted before upload, so the server cannot read the keywords."
+    "message": "Rules are encrypted with the passphrase before upload."
   },
   "shortcutSyncOff": {
     "message": "Rules are stored in this browser only."
@@ -520,14 +514,23 @@
   "optionsNativeNotificationsTitle": {
     "message": "Browser notifications"
   },
+  "optionsNotificationSoundTitle": {
+    "message": "Notification sound"
+  },
+  "optionsAlertGroupTitle": {
+    "message": "How to alert you"
+  },
+  "optionsContentGroupTitle": {
+    "message": "What it shows"
+  },
   "optionsShowBodyTitle": {
     "message": "Notification text"
   },
+  "optionsShowBodyBody": {
+    "message": "With this off, the list shows titles only."
+  },
   "optionsShowImagesTitle": {
     "message": "App icons and avatars"
-  },
-  "optionsSilentNotificationsTitle": {
-    "message": "Silent browser notifications"
   },
   "optionsPreviewSound": {
     "message": "Preview notification sound"
@@ -667,6 +670,9 @@
   "optionsKeepHistoryBody": {
     "message": "With this off, notifications your phone already cleared are not kept."
   },
+  "optionsSoundTitle": {
+    "message": "Sound"
+  },
   "statusNotConfigured": {
     "message": "Not set up"
   },
@@ -683,7 +689,7 @@
     "message": "Custom styles"
   },
   "optionsCustomCssBody": {
-    "message": "CSS applied to this extension's pages, for typography the built-in theme does not cover."
+    "message": "Applies to this extension's pages in this browser."
   },
   "optionsCustomCssSave": {
     "message": "Save styles"

@@ -74,23 +74,25 @@
         <section aria-labelledby="notifications-title">
           <h1 id="notifications-title" data-i18n="optionsNotifications">Notifications</h1>
           <div class="card">
-            <label class="switch-row">
-              <span><strong data-i18n="optionsBadgeTitle">New notification badge</strong></span>
-              <input id="badge-enabled" type="checkbox" role="switch" />
-            </label>
-          </div>
-          <div class="card">
             <h2 data-i18n="optionsSourcesTitle">Android sources</h2>
             <div id="source-list" class="compact-list"></div>
             <p id="sources-empty" class="supporting" data-i18n="optionsSourcesEmpty">No authorized Android source is available.</p>
           </div>
           <div class="card option-list">
+            <h2 data-i18n="optionsAlertGroupTitle">How to alert you</h2>
+            <label class="switch-row">
+              <span><strong data-i18n="optionsBadgeTitle">New notification badge</strong></span>
+              <input id="badge-enabled" type="checkbox" role="switch" />
+            </label>
             <label class="switch-row">
               <span><strong data-i18n="optionsNativeNotificationsTitle">Browser notifications</strong></span>
               <input id="native-notifications-enabled" type="checkbox" role="switch" />
             </label>
+          </div>
+          <div class="card option-list">
+            <h2 data-i18n="optionsContentGroupTitle">What it shows</h2>
             <label class="switch-row">
-              <span><strong data-i18n="optionsShowBodyTitle">Notification text</strong></span>
+              <span><strong data-i18n="optionsShowBodyTitle">Notification text</strong><small data-i18n="optionsShowBodyBody">With this off, the list shows titles only.</small></span>
               <input id="show-body" type="checkbox" role="switch" />
             </label>
             <label class="switch-row">
@@ -98,19 +100,22 @@
               <input id="show-images" type="checkbox" role="switch" />
             </label>
             <label class="switch-row">
-              <span><strong data-i18n="optionsSilentNotificationsTitle">Silent browser notifications</strong></span>
-              <input id="silent-notifications" type="checkbox" role="switch" />
-            </label>
-            <label class="switch-row">
               <span><strong data-i18n="optionsKeepHistoryTitle">Keep notification history</strong><small data-i18n="optionsKeepHistoryBody">With this off, notifications your phone already cleared are not kept.</small></span>
               <input id="keep-history" type="checkbox" role="switch" />
             </label>
           </div>
           <div class="card">
-            <button id="preview-notification-sound" type="button" data-i18n="optionsPreviewSound">Preview notification sound</button>
-            <p class="supporting" data-i18n="optionsSoundBody">Volume follows the browser.</p>
+            <h2 data-i18n="optionsSoundTitle">Sound</h2>
+            <label class="switch-row">
+              <span><strong data-i18n="optionsNotificationSoundTitle">Notification sound</strong></span>
+              <input id="notification-sound" type="checkbox" role="switch" />
+            </label>
+            <div class="sound-preview">
+              <p class="supporting" data-i18n="optionsSoundBody">Volume follows the browser.</p>
+              <button id="preview-notification-sound" class="secondary" type="button" data-i18n="optionsPreviewSound">Preview notification sound</button>
+            </div>
           </div>
-          <a class="button-link" href="#shortcut-settings" data-i18n="openShortcutSettings">Notification shortcut settings</a>
+          <a class="inline-link" href="#shortcut-settings" data-i18n="openShortcutSettings">Notification shortcut settings</a>
           <p id="notification-settings-status" role="status" aria-live="polite"></p>
         </section>
         </div>
@@ -122,7 +127,7 @@
           <form id="shortcut-form" novalidate>
             <div class="card">
               <label class="switch-row">
-                <span><strong data-i18n="shortcutPinClear">Always show Clear</strong><small data-i18n="shortcutPinClearDescription">Keep Clear available for the notification on your phone.</small></span>
+                <span><strong data-i18n="shortcutPinClear">Always show Clear</strong></span>
                 <input id="pin-dismiss" type="checkbox" role="switch" disabled />
               </label>
             </div>
@@ -131,7 +136,6 @@
               <div class="section-heading">
                 <div>
                   <h2 id="rules-title" data-i18n="shortcutPriorityRules">Priority rules</h2>
-                  <p data-i18n="shortcutPriorityDescription">Rules are checked from top to bottom.</p>
                 </div>
                 <button id="add-rule" class="secondary" type="button" disabled data-i18n="shortcutAddRule">Add rule</button>
               </div>
@@ -149,7 +153,7 @@
             <div class="section-heading">
               <div>
                 <h2 id="shortcut-sync-title" data-i18n="shortcutSyncTitle">Sync across browsers</h2>
-                <p data-i18n="shortcutSyncDescription">Browsers in the same private service share one set of rules. They are encrypted before upload, so the server cannot read the keywords.</p>
+                <p data-i18n="shortcutSyncDescription">Rules are encrypted with the passphrase before upload.</p>
               </div>
               <div class="section-actions">
                 <button id="shortcut-sync-enable" type="button" disabled data-i18n="shortcutSyncEnable">Turn on synchronization</button>
@@ -183,7 +187,7 @@
           </div>
           <div class="card">
             <h2 id="custom-css-title" data-i18n="optionsCustomCssTitle">Custom styles</h2>
-            <p class="supporting" data-i18n="optionsCustomCssBody">CSS applied to this extension's pages, for typography the built-in theme does not cover.</p>
+            <p class="supporting" data-i18n="optionsCustomCssBody">Applies to this extension's pages in this browser.</p>
             <textarea id="custom-css-input" class="custom-css-input" spellcheck="false" aria-labelledby="custom-css-title"></textarea>
             <div class="form-actions">
               <button id="save-custom-css" type="button" data-i18n="optionsCustomCssSave">Save styles</button>
@@ -200,7 +204,7 @@
           <h1 id="about-title" data-i18n="optionsAbout">About</h1>
           <div class="card">
             <p data-i18n="optionsLicense">SevenMirror is provided under the GNU GPLv3 license.</p>
-            <a class="button-link" href="https://github.com/huaxianyan/SevenMirror-Extension" target="_blank" rel="noreferrer" data-i18n="optionsProjectLink">Project documentation</a>
+            <a class="inline-link" href="https://github.com/huaxianyan/SevenMirror-Extension" target="_blank" rel="noreferrer" data-i18n="optionsProjectLink">Project documentation</a>
           </div>
         </section>
         </div>

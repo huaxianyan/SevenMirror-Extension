@@ -100,14 +100,8 @@
   "shortcutPinClear": {
     "message": "始终显示「清除」"
   },
-  "shortcutPinClearDescription": {
-    "message": "在手机通知上保留「清除」操作。"
-  },
   "shortcutPriorityRules": {
     "message": "优先级规则"
-  },
-  "shortcutPriorityDescription": {
-    "message": "按从上到下的顺序匹配。"
   },
   "shortcutAddRule": {
     "message": "添加规则"
@@ -211,7 +205,7 @@
     "message": "跨浏览器同步"
   },
   "shortcutSyncDescription": {
-    "message": "同一私有服务里的浏览器共用一套规则。规则加密后才上传，服务端看不到里面的关键字。"
+    "message": "规则用这个口令加密后再上传。"
   },
   "shortcutSyncOff": {
     "message": "规则目前只存在这台浏览器上。"
@@ -520,14 +514,23 @@
   "optionsNativeNotificationsTitle": {
     "message": "浏览器通知"
   },
+  "optionsNotificationSoundTitle": {
+    "message": "通知提示音"
+  },
+  "optionsAlertGroupTitle": {
+    "message": "提醒方式"
+  },
+  "optionsContentGroupTitle": {
+    "message": "显示内容"
+  },
   "optionsShowBodyTitle": {
     "message": "通知正文"
   },
+  "optionsShowBodyBody": {
+    "message": "关闭后列表只显示标题。"
+  },
   "optionsShowImagesTitle": {
     "message": "应用图标和头像"
-  },
-  "optionsSilentNotificationsTitle": {
-    "message": "静默浏览器通知"
   },
   "optionsPreviewSound": {
     "message": "试听提示音"
@@ -667,6 +670,9 @@
   "optionsKeepHistoryBody": {
     "message": "关闭后，手机已经清掉的通知不再保留。"
   },
+  "optionsSoundTitle": {
+    "message": "提示音"
+  },
   "statusNotConfigured": {
     "message": "未完成设置"
   },
@@ -683,7 +689,7 @@
     "message": "自定义样式"
   },
   "optionsCustomCssBody": {
-    "message": "这些 CSS 会应用到扩展的页面，用来调整内置主题没有覆盖的排版。"
+    "message": "只影响这台浏览器里的扩展页面。"
   },
   "optionsCustomCssSave": {
     "message": "保存样式"
