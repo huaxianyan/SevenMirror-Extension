@@ -3,12 +3,18 @@
 
   # SevenMirror Chrome 扩展
 
-[项目总仓库](https://github.com/huaxianyan/SevenMirror-Project) · [Android 应用](https://github.com/huaxianyan/SevenMirror-Android) · 浏览器扩展 · [服务端](https://github.com/huaxianyan/SevenMirror-Server)
+[项目总仓库](https://github.com/huaxianyan/SevenMirror-Project) · [服务端](https://github.com/huaxianyan/SevenMirror-Server) · Chrome 扩展 · [Android 应用](https://github.com/huaxianyan/SevenMirror-Android)
+
+[简体中文](README.md) | [English](README.en.md)
 </div>
 
 在电脑上接收手机的通知。本扩展是接收端：手机发来的每条通知都以系统通知的形式弹出，你可以直接处理、回复或清除。
 
-> 状态：日常使用已经可用。通知接收与呈现、远程操作与回复、快捷操作规则、跨浏览器规则同步、独立交互窗口都已实现。用户已反馈通过 Chrome Web Store 审核，商店安装与来源尚未独立核验。独立安全评审仍未完成。
+> 状态：日常使用已经可用，并已上架 Chrome 应用商店。通知接收与呈现、远程操作与回复、快捷操作规则、跨浏览器规则同步、独立交互窗口都已实现。商店上架不等于独立安全评审完成，两者分别记录。
+
+<p align="center">
+  <a href="https://chromewebstore.google.com/detail/fibpoeijlejjkokmngpcoahdhbjigcma"><img src="docs/images/chrome-web-store-badge.png" height="56" alt="在 Chrome 应用商店中获取 SevenMirror"></a>
+</p>
 
 ## 能做什么
 
@@ -26,7 +32,7 @@
 
 SevenMirror 是自托管项目，你需要先有一台运行中继服务的服务器。服务器可以自己搭建，搭建方式见服务端仓库。
 
-1. 安装扩展。可以从本仓库的 Releases 下载打包产物，也可以自行构建后加载。
+1. 安装扩展。推荐从 [Chrome 应用商店](https://chromewebstore.google.com/detail/fibpoeijlejjkokmngpcoahdhbjigcma) 一键安装。也可以从本仓库的 Releases 下载打包产物，或自行构建后加载。
 2. 在设置页填入中继服务器地址，再用运维者签发的一次性加入码注册。
 3. 手机第一次连接时在设置页批准它，并比对两端显示的校验码。
 4. 在设置页配置通知呈现方式与快捷操作规则。
@@ -53,7 +59,7 @@ npm run build
 
 推送形如 `v0.1.21` 的标签即触发发布。标签必须等于 `public/manifest.json` 里的版本号，且 `package.json` 必须与它一致。
 
-发布产物是确定性打包的 ZIP，同时也作为 Chrome Web Store 的提交包。发布 ZIP 不等于完成商店上架，商店签名、上架后的产物身份与发布者账号证据仍各自独立。完整规则见 [发布溯源](docs/release-provenance.md)。
+发布产物是确定性打包的 ZIP，也是提交到 Chrome 应用商店的那一份。发布 ZIP 与商店上架仍是两件事：商店版本要单独走审核，商店分发的产物身份与发布者账号证据各自独立。商店条目见 [Chrome 应用商店](https://chromewebstore.google.com/detail/fibpoeijlejjkokmngpcoahdhbjigcma)。完整规则见 [发布溯源](docs/release-provenance.md)。
 
 ## 更多文档
 

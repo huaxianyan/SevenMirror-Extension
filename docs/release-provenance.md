@@ -1,6 +1,6 @@
 # Chrome Extension release provenance and rollback
 
-Status: **protected release-candidate baseline; independent review remains open and Chrome Web Store publication is not yet complete**
+Status: **protected release-candidate baseline; independent review remains open.** The extension is published on the Chrome Web Store under item ID `fibpoeijlejjkokmngpcoahdhbjigcma`; the store-side evidence listed under the store boundary below is only partly recorded.
 
 ## Release authority
 
@@ -99,10 +99,11 @@ release body. `scripts/verify_release_notes.py` enforces that shape, and
 The release title is the tag alone. A product-name prefix turns the Release list
 into a column of identical truncated names and hides which version each entry is.
 
-The ZIP published here is the same artifact prepared for Chrome Web Store
-submission. Publishing it as a Release does **not** close the Chrome Web Store
-boundary above: store publication, the store-served CRX identity and the
-publisher-account evidence remain separate and still open.
+The ZIP published here is the same artifact submitted to the Chrome Web Store.
+Being listed on the store does **not** prove the store side by itself: which
+account uploaded which ZIP, the CRX Google signed and served, and the
+publisher-account evidence remain separate facts and are still unrecorded
+here.
 
 ## Chrome Web Store boundary
 
