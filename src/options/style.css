@@ -13,8 +13,10 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .layout { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; width: 100%; }
 /* The scroller spans the whole window so the scrollbar sits on its right edge; the columns inside
    stay centred at 72rem. */
-.layout-inner { display: grid; grid-template-columns: minmax(10rem, 14rem) minmax(0, 1fr); align-items: start; gap: clamp(1rem, 3vw, 2rem); width: min(100%, 72rem); margin: 0 auto; padding: 2rem clamp(1rem, 4vw, 3rem) 4rem; }
-.layout-inner > nav { position: sticky; top: 1.25rem; align-self: start; display: grid; gap: .1rem; }
+/* The nav sticks at the exact offset it already occupies, so it never drifts while the page
+   starts to scroll; a smaller offset let it travel a dozen pixels first. */
+.layout-inner { --layout-pad-top: 2rem; display: grid; grid-template-columns: minmax(10rem, 14rem) minmax(0, 1fr); align-items: start; gap: clamp(1rem, 3vw, 2rem); width: min(100%, 72rem); margin: 0 auto; padding: var(--layout-pad-top) clamp(1rem, 4vw, 3rem) 4rem; }
+.layout-inner > nav { position: sticky; top: var(--layout-pad-top); align-self: start; display: grid; gap: .1rem; }
 .layout-inner > nav a { min-height: 40px; display: flex; align-items: center; padding: .5rem .8rem; border-left: 3px solid transparent; color: var(--text); font-size: 1rem; font-weight: 500; text-decoration: none; }
 .layout-inner > nav a:hover { background: var(--surface-subtle); }
 .layout-inner > nav a[aria-current="page"] { border-left-color: var(--primary); font-weight: 600; }
