@@ -135,7 +135,7 @@ input[type="checkbox"][role="switch"] { width: 46px; min-height: 0; margin: 0; p
   border-radius: var(--radius-lg);
   background: var(--surface-subtle);
 }
-.card > h2:first-child, .setting-item > h2:first-child { margin: 0 0 .5rem; font-size: 1.1rem; }
+.card > h2:first-child, .setting-item > h2:first-child { margin: 0 0 .85rem; font-size: 1.1rem; }
 .card p, .setting-item p { margin: .5rem 0; line-height: 1.55; }
 .empty { padding: 1.25rem; border: 1px dashed var(--border-strong); border-radius: var(--radius-lg); color: var(--muted); text-align: center; }
 

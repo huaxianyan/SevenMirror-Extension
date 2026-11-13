@@ -49,7 +49,7 @@ dl div { display: grid; grid-template-columns: 150px 1fr; gap: 16px; }
 dt { color: var(--muted); }
 dd { margin: 0; overflow-wrap: anywhere; }
 .summary { color: var(--muted); }
-.device-list, .compact-list { display: grid; gap: 10px; margin-top: 16px; }
+.device-list, .compact-list { display: grid; gap: .85rem; margin-top: 16px; }
 /* An empty list held its own top margin, so the two surrounding lines read as unrelated. */
 .device-list:empty, .compact-list:empty { display: none; }
 .device-meta { color: var(--muted); font-size: .85rem; }
@@ -62,15 +62,16 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .switch-row span { display: grid; gap: 5px; }
 .switch-row small { color: var(--muted); line-height: 1.4; }
 .switch-row input { flex: none; }
-.option-list { padding-block: 4px; }
-.option-list .switch-row { min-height: 68px; padding-block: .9rem; }
-.option-list .switch-row + .switch-row { border-top: 1px solid var(--border); }
+.option-list { display: grid; gap: .85rem; }
+/* The list gap already separates the heading from its switches. */
+.option-list > h2:first-child { margin-bottom: 0; }
+.option-list .switch-row { min-height: 44px; }
 .sound-preview { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: .5rem; }
 .sound-preview .supporting { margin: 0; }
-.inline-link { align-self: start; color: var(--primary); font-weight: 600; }
+.inline-link { display: inline-block; align-self: start; color: var(--primary); font-weight: 600; }
 .inline-link:hover { text-decoration: underline; }
-.source-toggle { margin: 0; padding: 12px 0; }
-.source-toggle + .source-toggle { border-top: 1px solid var(--border); }
+.source-toggle { margin: 0; padding: 0; }
+/* The card's own rhythm separates the switches; a rule per row would double the emphasis. */
 .button-link { margin-top: 0; }
 #registration-status, #notification-settings-status { min-height: 0; }
 /* Shortcut settings render inside this document now, so their controls follow the page's card,
