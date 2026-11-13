@@ -130,8 +130,10 @@ dialog::backdrop { background: rgb(22 32 43 / 45%); }
 
 @media (max-width: 760px) {
   .topbar { padding-inline: 16px; }
-  .layout-inner { grid-template-columns: 1fr; width: min(100% - 32px, 760px); padding-top: 18px; }
-  nav { position: static; grid-template-columns: repeat(5, max-content); overflow-x: auto; padding-bottom: 4px; }
+  /* One column: a sticky grid item can only travel inside its own grid area, so the
+     nav would scroll away with the page. Dropping the grid lets it stick to the top. */
+  .layout-inner { display: block; width: min(100% - 32px, 760px); padding-top: 0; }
+  .layout-inner > nav { position: sticky; top: 0; z-index: 3; grid-template-columns: repeat(5, max-content); overflow-x: auto; padding: .75rem 0; background: var(--surface); }
   .settings-page > section { padding-top: 8px; }
   .section-heading { align-items: stretch; flex-direction: column; }
   .rule-fields { grid-template-columns: 1fr; }
