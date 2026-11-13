@@ -374,6 +374,9 @@
   "optionsAbout": {
     "message": "About"
   },
+  "optionsAboutPurpose": {
+    "message": "Mirrors the notifications from your Android phones into this browser."
+  },
   "optionsCurrentDevice": {
     "message": "Current device"
   },

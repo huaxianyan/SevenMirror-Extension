@@ -374,6 +374,9 @@
   "optionsAbout": {
     "message": "关于"
   },
+  "optionsAboutPurpose": {
+    "message": "把 Android 手机上的通知镜像到这台浏览器。"
+  },
   "optionsCurrentDevice": {
     "message": "当前设备"
   },
