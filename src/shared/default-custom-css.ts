@@ -2,8 +2,7 @@
  * The stylesheet the options page starts with: the body rule plus the local-face aliases that
  * make Microsoft YaHei resolve to Segoe UI here, which is what the console typography depends on.
  */
-export const DEFAULT_CUSTOM_CSS = `
-body,
+export const DEFAULT_CUSTOM_CSS = `body,
 input,
 textarea,
 keygen,
@@ -42,5 +41,4 @@ button {
 @font-face {
   font-family: 'Segoe UI';
   src: local('Segoe UI');
-}
-`;
+}`;
