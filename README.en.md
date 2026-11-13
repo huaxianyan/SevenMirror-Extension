@@ -5,7 +5,7 @@
 
 [Project hub](https://github.com/huaxianyan/SevenMirror-Project) · [Server](https://github.com/huaxianyan/SevenMirror-Server) · Chrome extension · [Android app](https://github.com/huaxianyan/SevenMirror-Android)
 
-English | [简体中文](README.md)
+[简体中文](README.md) | English
 </div>
 
 Receive your phone's notifications on your computer. This extension is the receiving end: every notification your phone sends pops up as a system notification, and you can act on it, reply to it or clear it right there.
