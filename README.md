@@ -5,18 +5,16 @@
 
 [项目总仓库](https://github.com/huaxianyan/SevenMirror-Project) · [服务端](https://github.com/huaxianyan/SevenMirror-Server) · Chrome 扩展 · [Android 应用](https://github.com/huaxianyan/SevenMirror-Android)
 
-[简体中文](README.md) | [English](README.en.md)
+简体中文 | [English](README.en.md)
 </div>
 
 在电脑上接收手机的通知。本扩展是接收端：手机发来的每条通知都以系统通知的形式弹出，你可以直接处理、回复或清除。
-
-> 状态：日常使用已经可用，并已上架 Chrome 应用商店。通知接收与呈现、远程操作与回复、快捷操作规则、跨浏览器规则同步、独立交互窗口都已实现。商店上架不等于独立安全评审完成，两者分别记录。
 
 <p align="center">
   <a href="https://chromewebstore.google.com/detail/fibpoeijlejjkokmngpcoahdhbjigcma"><img src="docs/images/chrome-web-store-badge.png" height="56" alt="在 Chrome 应用商店中获取 SevenMirror"></a>
 </p>
 
-## 能做什么
+## 功能
 
 - **接收手机通知**：手机选中的应用发来的通知会在电脑上弹出，和本机通知一样。
 - **在电脑上处理**：标记完成、发送回复，或清除这条通知。
@@ -28,7 +26,7 @@
 - **规则跨浏览器同步**：用一句口令把规则同步到你工作区里的每台浏览器。规则以密文存放，中继服务器看不到内容。
 - **清除失败会说明原因**：手机拒绝远程清除时会明确告诉你，不会让你干等。
 
-## 怎么用
+## 使用
 
 SevenMirror 是自托管项目，你需要先有一台运行中继服务的服务器。服务器可以自己搭建，搭建方式见服务端仓库。
 

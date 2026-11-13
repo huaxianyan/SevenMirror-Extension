@@ -5,18 +5,16 @@
 
 [Project hub](https://github.com/huaxianyan/SevenMirror-Project) · [Server](https://github.com/huaxianyan/SevenMirror-Server) · Chrome extension · [Android app](https://github.com/huaxianyan/SevenMirror-Android)
 
-[English](README.en.md) | [简体中文](README.md)
+English | [简体中文](README.md)
 </div>
 
 Receive your phone's notifications on your computer. This extension is the receiving end: every notification your phone sends pops up as a system notification, and you can act on it, reply to it or clear it right there.
-
-> Status: usable for everyday use, and listed on the Chrome Web Store. Receiving and presenting notifications, remote actions and replies, shortcut rules, cross-browser rule sync and the standalone interaction window are all implemented. Being listed on the store is not the same as a completed independent security review; the two are recorded separately.
 
 <p align="center">
   <a href="https://chromewebstore.google.com/detail/fibpoeijlejjkokmngpcoahdhbjigcma"><img src="docs/images/chrome-web-store-badge.png" height="56" alt="Get SevenMirror on the Chrome Web Store"></a>
 </p>
 
-## What it does
+## Features
 
 - **Receives phone notifications**: notifications from the apps your phone selected pop up on your computer, just like local ones.
 - **Acts on them from the computer**: mark as done, send a reply, or clear the notification.
@@ -28,7 +26,7 @@ Receive your phone's notifications on your computer. This extension is the recei
 - **Rules sync across browsers**: one passphrase keeps the rules the same in every browser of your workspace. Rules are stored as ciphertext; the relay cannot read them.
 - **Failed clears explain themselves**: when the phone refuses a remote clear, the extension tells you why instead of leaving you waiting.
 
-## Using it
+## Usage
 
 SevenMirror is self-hosted, so you need a server running the relay first. You can host it yourself; see the server repository for how.
 
